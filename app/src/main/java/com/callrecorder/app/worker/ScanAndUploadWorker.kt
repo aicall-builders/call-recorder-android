@@ -4,18 +4,25 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.local.CallCategory
+import com.callrecorder.app.data.local.CallClassifier
 import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.data.local.RecordingStatus
 
 /**
  * 주기적 스캔 워커 - 15분마다 실행되어
- * 1) 새로 생긴 녹음 파일을 DB에 등록
- * 2) PENDING/FAILED 상태의 모든 녹음을 업로드
+ * 1) 새로 생긴 녹음 파일을 DB에 등록 (자동 카테고리 분류)
+ * 2) BUSINESS/UNCLASSIFIED 상태의 PENDING/FAILED 녹음만 업로드
+ *    (PERSONAL은 개인정보 보호를 위해 기본 제외)
  */
 class ScanAndUploadWorker(
     appContext: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
+
+    companion object {
+        private const val TAG = "ScanAndUploadWorker"
+    }
 
     override suspend fun doWork(): Result {
         val app = applicationContext as CallRecorderApp
@@ -30,9 +37,24 @@ class ScanAndUploadWorker(
         // 1) 스캔
         val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
         val found = scanner.scan(sinceMillis = sevenDaysAgo)
+        android.util.Log.i(TAG, "🔍 스캔 완료: ${found.size}개 파일 발견")
 
-        // 2) DB 등록
+        // 2) DB 등록 (자동 카테고리 분류)
         found.forEach { f ->
+            var category = CallClassifier.classify(
+                counterpartNumber = f.counterpartNumber,
+                fileName = f.file.name
+            )
+
+            // 🛡 안전장치: 파일명에 한글/이모지가 있으면 무조건 PERSONAL
+            //    (분류 로직 버그가 있어도 개인정보 노출 차단)
+            val hasNonAscii = f.file.name.any { it.code > 127 }
+            if (hasNonAscii && category != CallCategory.PERSONAL) {
+                android.util.Log.w(TAG,
+                    "⚠️ 안전장치 발동: '${f.file.name}' → PERSONAL (한글/이모지 포함)")
+                category = CallCategory.PERSONAL
+            }
+
             callRepo.registerLocal(
                 RecordingEntity(
                     filePath = f.file.absolutePath,
@@ -43,17 +65,61 @@ class ScanAndUploadWorker(
                     counterpartNumber = f.counterpartNumber,
                     storeId = storeId,
                     status = RecordingStatus.PENDING,
+                    category = category,
                 )
             )
         }
 
-        // 3) 업로드
-        val pending = callRepo.pendingUploads()
-        var allOk = true
-        pending.forEach {
-            val r = callRepo.uploadAndProcess(it)
-            if (r.isFailure) allOk = false
+        // 3) 업로드 (개인 통화 제외 — 기본 정책)
+        // BUSINESS: 손님 통화 (저장 안 된 번호)
+        // UNCLASSIFIED: 분류 불확실 → 일단 업로드 시도
+        // PERSONAL: 연락처 저장된 이름 → 자동 업로드 안 함
+        val allowedCategories = listOf(
+            CallCategory.BUSINESS,
+            CallCategory.UNCLASSIFIED
+        )
+        val pending = callRepo.pendingUploadsByCategory(allowedCategories)
+        android.util.Log.i(TAG, "📋 업로드 큐: ${pending.size}건")
+
+        var successCount = 0
+        var failCount = 0
+
+        pending.forEach { rec ->
+            android.util.Log.i(TAG,
+                "⬆️ 업로드 시작: id=${rec.id}, category=${rec.category}, file=${rec.fileName}")
+
+            try {
+                // 파일이 폰에서 삭제됐는지 확인 (가장 흔한 실패 원인)
+                val file = java.io.File(rec.filePath)
+                if (!file.exists()) {
+                    android.util.Log.w(TAG,
+                        "⚠️ 파일 없음, 건너뜀: id=${rec.id}, path=${rec.filePath}")
+                    callRepo.markAsFailed(rec.id, "파일이 폰에서 삭제됨")
+                    failCount++
+                    return@forEach
+                }
+
+                val r = callRepo.uploadAndProcess(rec)
+                if (r.isSuccess) {
+                    successCount++
+                    android.util.Log.i(TAG, "✅ 업로드 성공: id=${rec.id}")
+                } else {
+                    failCount++
+                    android.util.Log.w(TAG,
+                        "❌ 업로드 실패: id=${rec.id}, 에러=${r.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                failCount++
+                android.util.Log.e(TAG,
+                    "💥 예외 발생: id=${rec.id}, 에러=${e.message}", e)
+            }
         }
-        return if (allOk) Result.success() else Result.retry()
+
+        android.util.Log.i(TAG,
+            "🏁 워커 완료: 성공 ${successCount}건, 실패 ${failCount}건")
+
+        // 무한 RETRY 루프 방지 — 항상 SUCCESS 반환
+        // 실패한 건은 DB에 FAILED로 기록되어 다음 사이클(15분 후)에 재시도됨
+        return Result.success()
     }
 }

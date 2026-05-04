@@ -70,6 +70,13 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- ✨ 추가: WorkManager 내부 ForegroundService - Android 14+ 요구사항 충족 -->
+        <!-- UploadWorker가 setForeground() 호출 시 사용하는 시스템 서비스 -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <!-- FCM 수신 서비스 -->
         <service
             android:name=".service.FcmService"
