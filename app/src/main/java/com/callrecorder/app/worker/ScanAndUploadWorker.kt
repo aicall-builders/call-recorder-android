@@ -41,19 +41,22 @@ class ScanAndUploadWorker(
 
         // 2) DB 등록 (자동 카테고리 분류)
         found.forEach { f ->
-            var category = CallClassifier.classify(
+            val category = CallClassifier.classify(
                 counterpartNumber = f.counterpartNumber,
                 fileName = f.file.name
             )
 
             // 🛡 안전장치: 파일명에 한글/이모지가 있으면 무조건 PERSONAL
             //    (분류 로직 버그가 있어도 개인정보 노출 차단)
-            val hasNonAscii = f.file.name.any { it.code > 127 }
-            if (hasNonAscii && category != CallCategory.PERSONAL) {
-                android.util.Log.w(TAG,
-                    "⚠️ 안전장치 발동: '${f.file.name}' → PERSONAL (한글/이모지 포함)")
-                category = CallCategory.PERSONAL
-            }
+            // 🚧 D-5 검증용 임시 비활성화 — 발표 후 복구 필요!
+            // val hasNonAscii = f.file.name.any { it.code > 127 }
+            // if (hasNonAscii && category != CallCategory.PERSONAL) {
+            //     android.util.Log.w(TAG,
+            //         "⚠️ 안전장치 발동: '${f.file.name}' → PERSONAL (한글/이모지 포함)")
+            //     category = CallCategory.PERSONAL
+            // }
+            android.util.Log.i(TAG,
+                "🚧 안전장치 OFF — '${f.file.name}' → category=$category")
 
             callRepo.registerLocal(
                 RecordingEntity(
