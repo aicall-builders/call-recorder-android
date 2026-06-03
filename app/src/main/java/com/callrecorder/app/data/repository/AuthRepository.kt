@@ -3,7 +3,7 @@ package com.callrecorder.app.data.repository
 import android.content.Context
 import com.callrecorder.app.data.api.ApiService
 import com.callrecorder.app.data.local.TokenStore
-import com.callrecorder.app.data.model.KakaoLoginRequest
+import com.callrecorder.app.data.model.SocialLoginRequest
 import com.callrecorder.app.util.SafeLog
 import com.google.firebase.auth.FirebaseAuth
 import com.kakao.sdk.auth.model.OAuthToken
@@ -30,8 +30,9 @@ class AuthRepository(
         val kakaoToken = kakaoLogin(context)
 
         // 2) 우리 백엔드에 카카오 access_token 넘겨서 Firebase custom_token 받기
-        val resp = api.loginWithKakao(KakaoLoginRequest(kakaoToken.accessToken))
-        val customToken = resp.customToken
+        val resp = api.loginWithKakao(SocialLoginRequest(providerAccessToken = kakaoToken.accessToken))
+        val customToken = resp.resolvedCustomToken
+        require(customToken.isNotBlank()) { "Firebase custom token이 응답에 없습니다." }
 
         // 3) Firebase Auth 로 custom_token -> ID Token 교환 (이때 Firebase 에 로그인됨)
         val firebaseAuth = FirebaseAuth.getInstance()

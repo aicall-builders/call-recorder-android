@@ -8,7 +8,7 @@ import retrofit2.http.*
 interface ApiService {
     // ===== Auth =====
     @POST("auth/kakao")
-    suspend fun loginWithKakao(@Body body: KakaoLoginRequest): AuthResponse
+    suspend fun loginWithKakao(@Body body: SocialLoginRequest): AuthResponse
 
     // ===== Stores =====
     @POST("stores")

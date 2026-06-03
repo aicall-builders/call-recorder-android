@@ -6,19 +6,25 @@ import kotlinx.serialization.json.Json
 
 // ===== Auth =====
 @Serializable
-data class KakaoLoginRequest(
-    @SerialName("access_token") val accessToken: String
+data class SocialLoginRequest(
+    val provider: String = "kakao",
+    @SerialName("provider_access_token") val providerAccessToken: String
 )
 
 @Serializable
 data class AuthResponse(
-    @SerialName("custom_token") val customToken: String,
-    @SerialName("access_token") val accessToken: String? = null,   // 호환용 (서버가 같은 값을 또 줌)
+    @SerialName("firebase_custom_token") val firebaseCustomToken: String? = null,
+    @SerialName("custom_token") val customToken: String? = null,     // 기존 호환용
+    @SerialName("access_token") val accessToken: String? = null,     // 구버전 서버 호환용
     @SerialName("refresh_token") val refreshToken: String? = null,
+    @SerialName("firebase_uid") val firebaseUid: String? = null,
     val uid: String? = null,
     val nickname: String? = null,
     val user: User
-)
+) {
+    val resolvedCustomToken: String
+        get() = firebaseCustomToken ?: customToken ?: accessToken ?: ""
+}
 
 @Serializable
 data class User(
