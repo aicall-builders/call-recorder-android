@@ -1,8 +1,7 @@
 package com.callrecorder.app.onboarding
 
-import android.content.Context
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -23,13 +22,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,27 +37,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────
-// 첫 실행 1회 게이트
-// ─────────────────────────────────────────────────────────────
-private const val ONB_PREFS = "onboarding_prefs"
-private const val KEY_ONB_SEEN = "onboarding_seen"
-
-fun Context.shouldShowOnboarding(): Boolean =
-    !getSharedPreferences(ONB_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_ONB_SEEN, false)
-
-fun Context.markOnboardingSeen() {
-    getSharedPreferences(ONB_PREFS, Context.MODE_PRIVATE)
-        .edit()
-        .putBoolean(KEY_ONB_SEEN, true)
-        .apply()
-}
-
-// ─────────────────────────────────────────────────────────────
-// 팔레트 (피그마 토큰)
+// 팔레트
 // ─────────────────────────────────────────────────────────────
 private val Bg          = Color(0xFFE5ECF6)
 private val Primary     = Color(0xFF474B6B)
@@ -71,16 +51,14 @@ private val Blue        = Color(0xFF2867E5)
 private val AiBg        = Color(0xFFE8F2FF)
 private val AiText      = Color(0xFF1C6BD4)
 private val GrayText    = Color(0xFF99A1AF)
-private val BizUnsel    = Color(0xFF8C93A1)
 private val DotInactive = Color(0xFFFFFFFF)
 
-private const val PAGE_COUNT = 6
+private const val PAGE_COUNT = 5
 
 private data class OnbPage(val pill: String, val title: String, val desc: String)
 
+// 업종 선택은 별도 화면(BusinessTypeScreen)으로 분리 → 여기는 기능 소개 5장
 private val pages = listOf(
-    OnbPage("통화비서에게 알려주세요!", "어떤 일을 하시나요?",
-        "업종에 맞춰 통화 키워드와 분석 기준을\n미리 맞춰드려요. 나중에 바꿀 수 있어요."),
     OnbPage("메인 화면", "통화 업무관리 프로세스",
         "통화를 분석하고 일정을 등록하고 고객을\n관리하는 자동 프로세스를 경험해보세요."),
     OnbPage("통화 관리 · 분석 완료", "통화 자동 분석",
@@ -94,87 +72,83 @@ private val pages = listOf(
 )
 
 // ─────────────────────────────────────────────────────────────
-// 메인
+// 메인 — 한 화면 안에서 step 만 바뀜 (스와이프 X, 버튼으로만)
 // ─────────────────────────────────────────────────────────────
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
-    val pagerState = rememberPagerState(pageCount = { PAGE_COUNT })
-    val scope = rememberCoroutineScope()
+    var step by remember { mutableIntStateOf(0) }
 
     fun next() {
-        val cur = pagerState.currentPage
-        if (cur >= PAGE_COUNT - 1) onFinish()
-        else scope.launch { pagerState.animateScrollToPage(cur + 1) }
+        if (step >= PAGE_COUNT - 1) onFinish() else step++
     }
 
     Box(Modifier.fillMaxSize().background(Bg)) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            Column(Modifier.fillMaxSize()) {
-                // ── 스크롤 가능한 상단(작은 화면 대비) ──
+        Column(Modifier.fillMaxSize()) {
+
+            Crossfade(
+                targetState = step,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                label = "onbStep",
+            ) { s ->
                 Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(24.dp))
-                    Pill(pages[page].pill)
+                    Pill(pages[s].pill)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        pages[page].title,
+                        pages[s].title,
                         style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = TitleColor),
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        pages[page].desc,
+                        pages[s].desc,
                         style = TextStyle(fontSize = 16.sp, color = DescColor, lineHeight = 24.sp),
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.height(28.dp))
-                    // ── 화면별 목업 ──
-                    when (page) {
-                        0 -> BizSelectMockup()
-                        1 -> HomeMockup()
-                        2 -> CallListMockup()
-                        3 -> SummaryMockup()
-                        4 -> CalendarMockup()
-                        5 -> CustomerMockup()
+                    when (s) {
+                        0 -> HomeMockup()
+                        1 -> CallListMockup()
+                        2 -> SummaryMockup()
+                        3 -> CalendarMockup()
+                        4 -> CustomerMockup()
                     }
                     Spacer(Modifier.height(20.dp))
                 }
+            }
 
-                // ── 하단 고정: 점 + 버튼 + 건너뛰기 ──
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Dots(current = step)
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Primary)
+                        .clickable { next() },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Dots(current = pagerState.currentPage)
-                    Spacer(Modifier.height(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(Primary)
-                            .clickable { next() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            if (page == PAGE_COUNT - 1) "시작하기" else "다음",
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White),
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .padding(vertical = 12.dp)
-                            .noRippleClickable { onFinish() },
-                    ) {
-                        Text("건너뛰기", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Primary))
-                    }
+                    Text(
+                        if (step == PAGE_COUNT - 1) "시작하기" else "다음",
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .noRippleClickable { onFinish() },
+                ) {
+                    Text("건너뛰기", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Primary))
                 }
             }
         }
@@ -213,7 +187,6 @@ private fun Dots(current: Int) {
     }
 }
 
-// 기기(폰) 목업 프레임
 @Composable
 private fun DeviceFrame(content: @Composable () -> Unit) {
     Box(
@@ -225,7 +198,6 @@ private fun DeviceFrame(content: @Composable () -> Unit) {
             .background(Device),
     ) {
         Column(Modifier.fillMaxSize()) {
-            // 기기 헤더
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,7 +228,6 @@ private fun MiniChip(text: String, filled: Boolean) {
     }
 }
 
-// 흰 카드 + 통화 한 줄
 @Composable
 private fun CallRow(name: String, sub: String, time: String, badge: String? = null) {
     Row(
@@ -283,56 +254,7 @@ private fun CallRow(name: String, sub: String, time: String, badge: String? = nu
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 1. 업종 선택
-// ─────────────────────────────────────────────────────────────
-@Composable
-private fun BizSelectMockup() {
-    val items = listOf(
-        "🏠" to "부동산업",
-        "✏️" to "교육사업",
-        "🛡️" to "보험설계업",
-        "🛠️" to "시공업",
-        "🛒" to "판매업",
-    )
-    Column(
-        modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items.forEachIndexed { idx, (icon, label) ->
-            val selected = idx == 0
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .then(
-                        if (selected) Modifier.background(Color.White).border(2.dp, Primary, RoundedCornerShape(15.dp))
-                        else Modifier.background(Color.White.copy(alpha = 0.5f))
-                    )
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(icon, style = TextStyle(fontSize = 18.sp))
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    label,
-                    modifier = Modifier.weight(1f),
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selected) Primary else BizUnsel,
-                    ),
-                )
-                if (selected) Text("✓", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Primary))
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// 2. 홈 대시보드
-// ─────────────────────────────────────────────────────────────
+// ── 1. 홈 대시보드 ──
 @Composable
 private fun HomeMockup() {
     DeviceFrame {
@@ -364,9 +286,7 @@ private fun HomeMockup() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 3. 통화 관리(분석 완료)
-// ─────────────────────────────────────────────────────────────
+// ── 2. 통화 관리 ──
 @Composable
 private fun CallListMockup() {
     DeviceFrame {
@@ -399,9 +319,7 @@ private fun CallListMockup() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 4. 통화 상세 / AI 요약 카드
-// ─────────────────────────────────────────────────────────────
+// ── 3. AI 요약 카드 ──
 @Composable
 private fun SummaryMockup() {
     DeviceFrame {
@@ -438,9 +356,7 @@ private fun SummaryLine(k: String, v: String) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 5. 일정 자동 등록 (미니 캘린더)
-// ─────────────────────────────────────────────────────────────
+// ── 4. 미니 캘린더 ──
 @Composable
 private fun CalendarMockup() {
     DeviceFrame {
@@ -457,9 +373,7 @@ private fun CalendarMockup() {
                 }
             }
             Spacer(Modifier.height(4.dp))
-            // 1~30 (6월 1일 = 월요일 가정, 앞 1칸 비움)
-            val cells = (1..30).toList()
-            val padded = List(1) { 0 } + cells
+            val padded = List(1) { 0 } + (1..30).toList()
             padded.chunked(7).forEach { week ->
                 Row(Modifier.fillMaxWidth()) {
                     for (i in 0 until 7) {
@@ -500,9 +414,7 @@ private fun CalendarMockup() {
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-// 6. 고객 관리 DB
-// ─────────────────────────────────────────────────────────────
+// ── 5. 고객 DB ──
 @Composable
 private fun CustomerMockup() {
     DeviceFrame {
@@ -552,7 +464,6 @@ private fun CustomerRow(name: String, tag: String, sub: String) {
     }
 }
 
-// 물결 없는 클릭
 @Composable
 private fun Modifier.noRippleClickable(onClick: () -> Unit): Modifier {
     val interaction = remember { MutableInteractionSource() }

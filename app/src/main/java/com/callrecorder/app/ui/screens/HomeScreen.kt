@@ -3,25 +3,29 @@ package com.callrecorder.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UploadFile
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,10 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.callrecorder.app.data.model.Call
-import com.callrecorder.app.data.model.CallCategoryLabel
-import com.callrecorder.app.data.model.CallStatus
 import com.callrecorder.app.data.model.CalendarEvent
-import com.callrecorder.app.data.model.DtoJson
+import com.callrecorder.app.data.model.CallStatus
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.internalKeywordsMap
 import com.callrecorder.app.onboarding.FeatureTourController
@@ -55,46 +57,24 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/* ─────────────────────────────────────────────
- * 색상 팔레트
- * ───────────────────────────────────────────── */
-private val DarkNavy        = Color(0xFF3D4D6B)
-private val DarkNavyBtn     = Color(0xFFFFFFFF)
-private val DarkNavyBtnIcon = Color(0xFF3D4D6B)
+/* 색상 (피그마 2026-06-23 파운데이션) */
+private val ScreenBg    = Color(0xFF5F6071)
+private val ContentBg   = Color(0xFFFFFFFF)
+private val SectionAltBg = Color(0xFFEEEEEE)
+private val Navy        = Color(0xFF343659)
+private val OnDark      = Color(0xFFFFFFFF)
+private val OnDarkSub   = Color(0xFFB9BECB)
+private val TimeBlue    = Color(0xFF2867E5)
+private val SchedTimeHi = Color(0xFF1C6BD4)
+private val SchedTimeSm = Color(0xFF767676)
+private val SchedMeta   = Color(0xFF757575)
+private val Connector   = Color(0xFFD6D9E5)
+private val AvatarBg    = Color(0xFFF1F1F1)
+private val AvatarText  = Color(0xFF5F5F5F)
+private val AccentBlue  = Color(0xFF3B7DD8)
+private val UploadBlue  = Color(0xFF005ABE)
+private val UploadBlueBg = Color(0xFFEAF2FF)
 
-private val LightBg         = Color(0xFFF0F2F5)
-private val UploadBlue      = Color(0xFF005ABE)
-private val UploadBlueBg    = Color(0xFFEAF2FF)
-private val UploadBlueTrack = Color(0xFFCFE0FF)
-private val WhiteCard       = Color(0xFFFFFFFF)
-private val AccentBlue      = Color(0xFF3B7DD8)
-
-private val OnDarkPrimary   = Color(0xFFFFFFFF)
-private val OnDarkSub       = Color(0xFFC5D0E0)
-private val OnLightPrimary  = Color(0xFF1F2A3D)
-private val OnLightSub      = Color(0xFF6B7889)
-private val OnLightMuted    = Color(0xFF9AA5B5)
-
-private val BadgeResBg = Color(0xFFE3EEFB); private val BadgeResFg = Color(0xFF2563B5)
-private val BadgeCnlBg = Color(0xFFFBE3E3); private val BadgeCnlFg = Color(0xFFC23B3B)
-private val BadgeCmpBg = Color(0xFFFBF0E0); private val BadgeCmpFg = Color(0xFFC07818)
-private val BadgeInqBg = Color(0xFFEBE9FB); private val BadgeInqFg = Color(0xFF5B4FC2)
-private val BadgeNeuBg = Color(0xFFE8EBF0); private val BadgeNeuFg = Color(0xFF6B7889)
-private val BadgeInBg  = Color(0xFF3B7DD8); private val BadgeInFg  = Color(0xFFFFFFFF)
-private val BadgeOutBg = Color(0xFFE8EBF0); private val BadgeOutFg = Color(0xFF6B7889)
-private val NewBadgeBg = Color(0xFFE53E3E)
-
-private val AvatarColors = listOf(
-    Color(0xFFD4A03C) to Color(0xFFFFFFFF),
-    Color(0xFF5B7FB5) to Color(0xFFFFFFFF),
-    Color(0xFF5BA876) to Color(0xFFFFFFFF),
-    Color(0xFFB56B8A) to Color(0xFFFFFFFF),
-    Color(0xFF7B6BC2) to Color(0xFFFFFFFF),
-)
-
-/* ─────────────────────────────────────────────
- * HomeScreen
- * ───────────────────────────────────────────── */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -104,481 +84,350 @@ fun HomeScreen(
     onUploadClick: () -> Unit = {},
     onSeeAllCalls: () -> Unit = {},
     onSeeAllSchedules: () -> Unit = {},
+    onSeeAllCustomers: () -> Unit = {},
     tourController: FeatureTourController,
     vm: HomeViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
     var showUploadSheet by remember { mutableStateOf(false) }
 
-    Scaffold(containerColor = LightBg) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(LightBg)
-                .padding(
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding()
-                ),
-            contentPadding = PaddingValues(0.dp),
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(ScreenBg)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // ── 히어로 (그레이) ──
+        Hero(
+            pendingCount = state.pendingApprovalCount,
+            autoSummaryOn = state.autoSummaryEnabled,
+            importantFilterOn = state.importantFilterEnabled,
+            uploadingCount = state.uploadingCount,
+            onAutoSummaryChange = { vm.setAutoSummary(it) },
+            onImportantFilterChange = { vm.setImportantFilter(it) },
+            onApprovalClick = onApprovalClick,
+            onUploadClick = onUploadClick,
+            onRefresh = { vm.refresh() },
+            onUploadingClick = { showUploadSheet = true },
+            tourController = tourController,
+        )
+
+        // ── 흰색 컨텐츠 (그레이 위로 라운드) ──
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(ContentBg),
         ) {
-            // 상단 다크 헤더
-            item {
-                DarkHeader(
-                    pendingCount = state.pendingApprovalCount,
-                    autoSummaryOn = state.autoSummaryEnabled,
-                    importantFilterOn = state.importantFilterEnabled,
-                    onAutoSummaryChange = { vm.setAutoSummary(it) },
-                    onImportantFilterChange = { vm.setImportantFilter(it) },
-                    onApprovalClick = onApprovalClick,
-                    onUploadClick = onUploadClick,
-                    onRefresh = { vm.refresh() },
-                    tourController = tourController,
-                )
-            }
-
-            // 업로드 상태 칩 (진행 중일 때만, 탭하면 목록 시트)
-            if (state.uploadingCount > 0) {
-                item {
-                    UploadStatusRow(
-                        count = state.uploadingCount,
-                        onClick = { showUploadSheet = true },
-                    )
+            // 주요 분석 통화
+            Column(Modifier.tourTarget(tourController, TourKeys.RECENT_CALLS)) {
+                SectionHeader("주요 분석 통화", onSeeAll = onSeeAllCalls)
+                when {
+                    state.loading && state.recentCalls.isEmpty() ->
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = AccentBlue)
+                        }
+                    state.recentCalls.isEmpty() -> EmptyBox("아직 분석된 통화가 없어요")
+                    else -> state.recentCalls.distinctBy { it.id }.take(3).forEach { call ->
+                        CallRow(call = call, onClick = { onCallClick(call.id) })
+                    }
                 }
             }
+            Spacer(Modifier.height(8.dp))
 
-            // 주요 통화 분석 헤더
-            item {
-                Spacer(Modifier.height(20.dp))
-                Box(Modifier.tourTarget(tourController, TourKeys.RECENT_CALLS)) {
-                    SectionHeader(title = "주요 통화 분석", onSeeAll = onSeeAllCalls)
-                }
-            }
-
-            // 통화 카드 (최대 3건)
-            if (state.loading && state.recentCalls.isEmpty()) {
-                item {
-                    Box(
-                        Modifier.fillMaxWidth().padding(40.dp),
-                        contentAlignment = Alignment.Center
+            // ── 주요 관리 고객 (#EEE, 흰색 위로 라운드) ──
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(SectionAltBg),
+            ) {
+                SectionHeader("주요 관리 고객", onSeeAll = onSeeAllCustomers)
+                val customers = state.recentCalls.distinctBy { customerName(it) }.take(3)
+                if (customers.isEmpty()) {
+                    EmptyBox("관리 중인 고객이 없어요")
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        CircularProgressIndicator(color = AccentBlue)
+                        customers.forEach { call ->
+                            CustomerCard(call, Modifier.weight(1f)) { onCallClick(call.id) }
+                        }
+                        repeat(3 - customers.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-            } else if (state.recentCalls.isEmpty()) {
-                item { EmptyRecentCalls() }
-            } else {
-                val uniqueCalls = state.recentCalls.distinctBy { it.id }.take(3)
-                items(uniqueCalls, key = { it.id }) { call ->
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
-                        CallCard(call = call, onClick = { onCallClick(call.id) })
+                Spacer(Modifier.height(8.dp))
+
+                // ── 다가오는 일정 (흰색, #EEE 위로 라운드) ──
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(ContentBg),
+                ) {
+                    SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
+                    if (state.schedules.isEmpty()) {
+                        EmptyBox("예정된 일정이 없어요")
+                    } else {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            state.schedules.forEachIndexed { idx, ev ->
+                                ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
+                            }
+                        }
                     }
+                    Spacer(Modifier.height(24.dp))
                 }
             }
-
-            // 주요 일정 헤더
-            item {
-                Spacer(Modifier.height(16.dp))
-                SectionHeader(title = "주요 일정", onSeeAll = onSeeAllSchedules)
-            }
-
-            // 일정 카드
-            if (state.schedules.isEmpty()) {
-                item {
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
-                        EmptySchedules()
-                    }
-                }
-            } else {
-                items(state.schedules, key = { it.id }) { schedule ->
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
-                        ScheduleCard(schedule)
-                    }
-                }
-            }
-
-            item { Spacer(Modifier.height(20.dp)) }
         }
+    }
 
-        if (showUploadSheet) {
-            UploadSheet(
-                items = state.activeUploads,
-                onDismiss = { showUploadSheet = false },
-                onDelete = { id -> vm.deleteUpload(id) },
-                onDeleteAll = { vm.deleteAllUploads() },
-            )
-        }
+    if (showUploadSheet) {
+        UploadSheet(
+            items = state.activeUploads,
+            onDismiss = { showUploadSheet = false },
+            onDelete = { id -> vm.deleteUpload(id) },
+            onDeleteAll = { vm.deleteAllUploads() },
+        )
     }
 }
 
-/* ─────────────────────────────────────────────
- * 상단 다크 헤더
- * ───────────────────────────────────────────── */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DarkHeader(
+private fun Hero(
     pendingCount: Int,
     autoSummaryOn: Boolean,
     importantFilterOn: Boolean,
+    uploadingCount: Int,
     onAutoSummaryChange: (Boolean) -> Unit,
     onImportantFilterChange: (Boolean) -> Unit,
     onApprovalClick: () -> Unit,
     onUploadClick: () -> Unit,
     onRefresh: () -> Unit,
+    onUploadingClick: () -> Unit,
     tourController: FeatureTourController,
 ) {
     val today = remember { todayFullDateLabel() }
-
-    Surface(color = DarkNavy, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 18.dp)) {
-
-            // 앱바
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(
-                        Icons.Filled.PhoneAndroid, null,
-                        tint = OnDarkPrimary, modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "AI 통화 비서",
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = OnDarkPrimary)
-                    )
-                }
-                androidx.compose.material3.Icon(
-                    Icons.Filled.NotificationsNone, "알림",
-                    tint = OnDarkPrimary, modifier = Modifier.size(22.dp)
-                )
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.PhoneAndroid, null, tint = OnDark, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("AI 통화 비서", style = TextStyle(fontSize = 18.sp, color = OnDark))
             }
+            Icon(Icons.Filled.NotificationsNone, "알림", tint = OnDark, modifier = Modifier.size(20.dp))
+        }
 
-            Spacer(Modifier.height(8.dp))
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
+            Text(today, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnDark))
+            Spacer(Modifier.height(16.dp))
 
-            // 날짜
-            Text(today, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary))
-
-            Spacer(Modifier.height(14.dp))
-
-            // 분석 대기 버튼 + 업로드 버튼
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     onClick = onApprovalClick,
-                    color = DarkNavyBtn,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.weight(1f),
+                    color = Color.White,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier.weight(1f).height(64.dp),
                 ) {
-                    Row(
-                        Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 새로고침 아이콘 — 별도 클릭 영역
-                        IconButton(
-                            onClick = onRefresh,
-                            modifier = Modifier.size(28.dp),
-                        ) {
-                            androidx.compose.material3.Icon(
-                                Icons.Filled.Refresh, "새로고침",
-                                tint = OnLightPrimary, modifier = Modifier.size(18.dp)
-                            )
+                    Row(Modifier.padding(start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Filled.Refresh, "새로고침", tint = Navy, modifier = Modifier.size(20.dp))
                         }
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            "통화 분석 대기 ${pendingCount}건",
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary),
-                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("통화 분석 대기 ${pendingCount}건",
+                            style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy))
                     }
                 }
-
                 Spacer(Modifier.width(10.dp))
-
-                // 업로드 버튼
                 Surface(
                     onClick = onUploadClick,
-                    color = DarkNavyBtnIcon,
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, OnDarkSub.copy(alpha = 0.3f)),
-                    modifier = Modifier.tourTarget(tourController, TourKeys.UPLOAD),
+                    color = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(64.dp).tourTarget(tourController, TourKeys.UPLOAD),
                 ) {
-                    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                        androidx.compose.material3.Icon(
-                            Icons.Filled.UploadFile, "파일 업로드",
-                            tint = OnDarkPrimary, modifier = Modifier.size(22.dp)
-                        )
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Filled.NoteAdd, "파일 업로드", tint = Navy, modifier = Modifier.size(24.dp))
                     }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            if (uploadingCount > 0) {
+                Spacer(Modifier.height(10.dp))
+                Surface(onClick = onUploadingClick, color = UploadBlueBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = UploadBlue)
+                        Spacer(Modifier.width(10.dp))
+                        Text("녹음 ${uploadingCount}건 업로드·분석 중",
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = UploadBlue),
+                            modifier = Modifier.weight(1f))
+                        Icon(Icons.Filled.ChevronRight, null, tint = UploadBlue, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
 
-            // 토글 행
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                ToggleItem(
-                    checked = autoSummaryOn,
-                    label = "통화 자동 분석 ${if (autoSummaryOn) "ON" else "OFF"}",
-                    onChange = onAutoSummaryChange,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                ToggleItem(
-                    checked = importantFilterOn,
-                    label = "중요 통화 필터링 ${if (importantFilterOn) "ON" else "OFF"}",
-                    onChange = onImportantFilterChange,
-                    modifier = Modifier
-                        .weight(1f)
-                        .tourTarget(tourController, TourKeys.IMPORTANT_FILTER),
-                )
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth()) {
+                ToggleButton(autoSummaryOn, "통화 자동 요약 ${if (autoSummaryOn) "ON" else "OFF"}",
+                    { onAutoSummaryChange(!autoSummaryOn) }, Modifier.weight(1f))
+                ToggleButton(importantFilterOn, "중요 통화 필터링 ${if (importantFilterOn) "ON" else "OFF"}",
+                    { onImportantFilterChange(!importantFilterOn) },
+                    Modifier.weight(1f).tourTarget(tourController, TourKeys.IMPORTANT_FILTER), important = true)
             }
         }
     }
 }
 
 @Composable
-private fun ToggleItem(checked: Boolean, label: String, onChange: (Boolean) -> Unit, modifier: Modifier) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onChange,
-            modifier = Modifier.size(20.dp),
-            colors = CheckboxDefaults.colors(
-                checkedColor = AccentBlue,
-                uncheckedColor = OnDarkSub,
-                checkmarkColor = Color.White,
-            ),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            label,
-            style = TextStyle(
-                fontSize = 12.sp,
-                color = OnDarkPrimary,
-                fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
-            ),
-        )
+private fun ToggleButton(on: Boolean, label: String, onToggle: () -> Unit, modifier: Modifier = Modifier, important: Boolean = false) {
+    Row(
+        modifier = modifier.clip(RoundedCornerShape(999.dp)).clickable { onToggle() }.padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val icon = when {
+            important && on -> Icons.Filled.Star
+            important -> Icons.Filled.StarBorder
+            on -> Icons.Filled.CheckCircle
+            else -> Icons.Filled.RadioButtonUnchecked
+        }
+        Icon(icon, null, tint = if (on) OnDark else OnDarkSub, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (on) OnDark else OnDarkSub), maxLines = 1)
     }
 }
 
-/* ─────────────────────────────────────────────
- * 섹션 헤더
- * ───────────────────────────────────────────── */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SectionHeader(title: String, onSeeAll: () -> Unit) {
+private fun SectionHeader(title: String, onSeeAll: () -> Unit, emphasis: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary))
-        Surface(onClick = onSeeAll, color = Color.Transparent, shape = RoundedCornerShape(20.dp)) {
-            Text(
-                "전체보기 →",
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                style = TextStyle(fontSize = 12.sp, color = OnLightSub),
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(20.dp).clip(CircleShape).background(Navy), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(14.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(title, style = TextStyle(fontSize = 16.sp, fontWeight = if (emphasis) FontWeight.ExtraBold else FontWeight.Bold, color = Navy))
+        }
+        Surface(onClick = onSeeAll, color = Color.Transparent) {
+            Text("전체보기 →", modifier = Modifier.padding(4.dp), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy))
         }
     }
 }
 
-/* ─────────────────────────────────────────────
- * 통화 카드
- * ───────────────────────────────────────────── */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CallCard(call: Call, onClick: () -> Unit) {
-    val info = call.extractedInfoOrNull()
-    val displayName = info?.customerName?.takeIf { it.isNotBlank() }
+private fun CallRow(call: Call, onClick: () -> Unit) {
+    val name = customerName(call)
+    Surface(onClick = onClick, color = Color.Transparent) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(name, 36.dp)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Navy), maxLines = 1)
+                // 이름이 진짜 이름일 때만 번호 한 줄 더
+                if (hasRealName(call)) {
+                    phoneOf(call)?.let {
+                        Spacer(Modifier.height(2.dp))
+                        Text(it, style = TextStyle(fontSize = 11.sp, color = SchedMeta), maxLines = 1)
+                    }
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(callSubtitle(call), style = TextStyle(fontSize = 13.sp, color = Navy), maxLines = 1)
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(callTimeLabel(call.createdAt), style = TextStyle(fontSize = 14.sp, color = TimeBlue))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerCard(call: Call, modifier: Modifier, onClick: () -> Unit) {
+    val name = customerName(call)
+    Surface(onClick = onClick, color = Color.White, shape = RoundedCornerShape(4.dp), modifier = modifier) {
+        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Avatar(name, 34.dp)
+            Column {
+                Text(name, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Navy), maxLines = 1)
+                if (hasRealName(call)) {
+                    phoneOf(call)?.let {
+                        Text(it, style = TextStyle(fontSize = 10.sp, color = SchedMeta), maxLines = 1)
+                    }
+                }
+                Text(callSubtitle(call), style = TextStyle(fontSize = 11.sp, color = Navy), maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
+    val isPhone = name.firstOrNull()?.isDigit() == true || name == "발신번호 없음"
+    Box(Modifier.size(size).clip(CircleShape).background(AvatarBg), contentAlignment = Alignment.Center) {
+        if (isPhone) {
+            Icon(Icons.Filled.Phone, null, tint = AvatarText, modifier = Modifier.size(size * 0.45f))
+        } else {
+            Text(name.first().toString(), style = TextStyle(fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.Bold, color = AvatarText))
+        }
+    }
+}
+
+@Composable
+private fun ScheduleTimelineItem(event: CalendarEvent, isFirst: Boolean, isLast: Boolean) {
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Column(Modifier.width(20.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(if (isFirst) 14.dp else 12.dp).clip(CircleShape).background(if (isFirst) SchedTimeHi else Connector))
+            if (!isLast) Box(Modifier.width(2.dp).weight(1f).background(Connector))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f).padding(bottom = if (isLast) 4.dp else 20.dp)) {
+            Text(event.time, style = TextStyle(fontSize = if (isFirst) 14.sp else 12.sp, fontWeight = FontWeight.Bold, color = if (isFirst) SchedTimeHi else SchedTimeSm))
+            Spacer(Modifier.height(6.dp))
+            Text(event.title, style = TextStyle(fontSize = if (isFirst) 14.sp else 12.sp, fontWeight = FontWeight.Bold, color = Navy, lineHeight = (if (isFirst) 18 else 16).sp))
+            Spacer(Modifier.height(4.dp))
+            Text(event.description.takeIf { it.isNotBlank() } ?: "통화 자동 등록", style = TextStyle(fontSize = 10.sp, color = SchedMeta))
+        }
+    }
+}
+
+@Composable
+private fun EmptyBox(text: String) {
+    Box(Modifier.fillMaxWidth().padding(vertical = 28.dp), contentAlignment = Alignment.Center) {
+        Text(text, style = TextStyle(fontSize = 13.sp, color = SchedMeta))
+    }
+}
+
+/* 데이터 헬퍼 */
+private fun customerName(call: Call): String =
+    call.extractedInfoOrNull()?.customerName?.takeIf { it.isNotBlank() }
+        ?: call.callerName?.takeIf { it.isNotBlank() }
         ?: call.callerNumber
         ?: "발신번호 없음"
 
-    val initial = displayName.firstOrNull()?.takeIf { !it.isDigit() }?.toString() ?: "📞"
-    val isPhone = initial == "📞"
-    val avatarColorPair = AvatarColors[(displayName.hashCode().absoluteValue) % AvatarColors.size]
-
-    val isOutgoing = false
-    val dirLabel = if (isOutgoing) "발신" else "수신"
-    val dirBg = if (isOutgoing) BadgeOutBg else BadgeInBg
-    val dirFg = if (isOutgoing) BadgeOutFg else BadgeInFg
-
-    val callTime = callTimeLabel(call.createdAt)
-
-    val internalKw: Map<String, String> = call.internalKeywordsMap()
-
-    val briefDesc = info?.let { i ->
-        listOfNotNull(
-            i.customerName?.takeIf { it.isNotBlank() },
-            i.time?.takeIf { it.isNotBlank() },
-            i.partySize?.let { "${it}명" },
-        ).joinToString(" · ")
-    } ?: internalKw.entries.take(2).joinToString(" · ") { (_, v) -> v }
-
-    Surface(
-        onClick = onClick,
-        color = WhiteCard,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape)
-                    .background(if (isPhone) BadgeNeuBg else avatarColorPair.first),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    initial,
-                    style = TextStyle(
-                        fontSize = if (isPhone) 16.sp else 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isPhone) OnLightSub else avatarColorPair.second,
-                    ),
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(displayName, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary))
-                    if (call.isRead == 0) {
-                        Spacer(Modifier.width(6.dp))
-                        NewBadge()
-                    }
-                }
-                Spacer(Modifier.height(5.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    CategoryBadge(call.category)
-                    DirBadge(dirLabel, dirBg, dirFg)
-                }
-                val summary = call.summary
-                val descText = when {
-                    !summary.isNullOrBlank() -> summary
-                    briefDesc.isNotBlank() -> briefDesc
-                    call.status.equals(CallStatus.PROCESSING, true) ||
-                            call.status.equals(CallStatus.UPLOADED, true) -> "분석 중…"
-                    else -> null
-                }
-                if (descText != null) {
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        descText,
-                        style = TextStyle(fontSize = 12.sp, color = OnLightSub, lineHeight = 17.sp),
-                        maxLines = 1
-                    )
-                }
-            }
-
-            Text(callTime, style = TextStyle(fontSize = 12.sp, color = OnLightMuted), modifier = Modifier.padding(top = 2.dp))
-        }
-    }
+/** 표시 이름이 전화번호가 아니라 진짜 이름인지 */
+private fun hasRealName(call: Call): Boolean {
+    val n = customerName(call)
+    return n != call.callerNumber && n != "발신번호 없음"
 }
 
-/* ─────────────────────────────────────────────
- * 일정 카드
- * ───────────────────────────────────────────── */
-private fun providerDotColor(provider: String) = when (provider) {
-    "kakao"  -> Color(0xFFFBC02D)
-    "naver"  -> Color(0xFF03C75A)
-    "google" -> Color(0xFF4285F4)
-    else     -> AccentBlue
+private fun phoneOf(call: Call): String? = call.callerNumber?.takeIf { it.isNotBlank() }
+
+private fun callSubtitle(call: Call): String {
+    call.summary?.takeIf { it.isNotBlank() }?.let { return it }
+    val info = call.extractedInfoOrNull()
+    val brief = info?.let { i -> listOfNotNull(i.time?.takeIf { it.isNotBlank() }, i.partySize?.let { "${it}명" }).joinToString(" · ") }.orEmpty()
+    if (brief.isNotBlank()) return brief
+    val kw = call.internalKeywordsMap().entries.take(2).joinToString(" · ") { it.value }
+    if (kw.isNotBlank()) return kw
+    return if (call.status.equals(CallStatus.PROCESSING, true) || call.status.equals(CallStatus.UPLOADED, true)) "분석 중…" else "—"
 }
 
-@Composable
-private fun ScheduleCard(schedule: CalendarEvent) {
-    Surface(color = WhiteCard, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(providerDotColor(schedule.provider)))
-            Spacer(Modifier.width(12.dp))
-            Text(
-                schedule.time,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AccentBlue),
-                modifier = Modifier.width(44.dp),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(schedule.title, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = OnLightPrimary))
-                if (schedule.description.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(schedule.description, style = TextStyle(fontSize = 12.sp, color = OnLightSub))
-                }
-            }
-        }
-    }
-}
-
-/* ─────────────────────────────────────────────
- * 배지
- * ───────────────────────────────────────────── */
-@Composable
-private fun CategoryBadge(category: String?) {
-    val (label, bg, fg) = when (category) {
-        CallCategoryLabel.RESERVATION -> Triple("예약", BadgeResBg, BadgeResFg)
-        CallCategoryLabel.CANCEL      -> Triple("취소", BadgeCnlBg, BadgeCnlFg)
-        CallCategoryLabel.COMPLAINT   -> Triple("불만", BadgeCmpBg, BadgeCmpFg)
-        CallCategoryLabel.INQUIRY     -> Triple("문의", BadgeInqBg, BadgeInqFg)
-        else                          -> Triple("기타", BadgeNeuBg, BadgeNeuFg)
-    }
-    Surface(color = bg, shape = RoundedCornerShape(5.dp)) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = fg)
-        )
-    }
-}
-
-@Composable
-private fun DirBadge(label: String, bg: Color, fg: Color) {
-    Surface(color = bg, shape = RoundedCornerShape(5.dp)) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = fg)
-        )
-    }
-}
-
-@Composable
-private fun NewBadge() {
-    Surface(color = NewBadgeBg, shape = RoundedCornerShape(5.dp)) {
-        Text(
-            "NEW",
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
-        )
-    }
-}
-
-/* ─────────────────────────────────────────────
- * 빈 상태
- * ───────────────────────────────────────────── */
-@Composable
-private fun EmptySchedules() {
-    Surface(color = WhiteCard, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
-            Text("오늘 등록된 일정이 없어요", style = TextStyle(fontSize = 13.sp, color = OnLightMuted))
-        }
-    }
-}
-
-@Composable
-private fun EmptyRecentCalls() {
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("📞", style = TextStyle(fontSize = 36.sp))
-        Spacer(Modifier.height(12.dp))
-        Text("아직 분석된 통화가 없어요", style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = OnLightPrimary))
-        Spacer(Modifier.height(4.dp))
-        Text("통화 후 잠시만 기다려 주세요.", style = TextStyle(fontSize = 12.sp, color = OnLightSub))
-    }
-}
-
-/* ─────────────────────────────────────────────
- * 유틸
- * ───────────────────────────────────────────── */
 private val Weekdays = arrayOf("일", "월", "화", "수", "목", "금", "토")
-
 private fun todayFullDateLabel(): String {
     val cal = java.util.Calendar.getInstance()
     val dow = Weekdays[cal.get(java.util.Calendar.DAY_OF_WEEK) - 1]
@@ -589,169 +438,58 @@ private fun callTimeLabel(serverTime: String?): String {
     if (serverTime.isNullOrBlank()) return ""
     val date = parseServerTime(serverTime) ?: return ""
     val diffMs = System.currentTimeMillis() - date.time
-    return if (diffMs < 86_400_000L)
-        SimpleDateFormat("HH:mm", Locale.KOREAN).format(date)
-    else
-        SimpleDateFormat("M/d", Locale.KOREAN).format(date)
+    return if (diffMs < 86_400_000L) SimpleDateFormat("HH:mm", Locale.KOREAN).format(date)
+    else SimpleDateFormat("M/d", Locale.KOREAN).format(date)
 }
 
 private fun parseServerTime(s: String): Date? {
-    val fmts = listOf(
-        "yyyy-MM-dd HH:mm:ss",
-        "yyyy-MM-dd'T'HH:mm:ss",
-        "yyyy-MM-dd'T'HH:mm:ss'Z'",
-        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
-    )
-    for (fmt in fmts) {
-        try {
-            return SimpleDateFormat(fmt, Locale.US)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .parse(s) ?: continue
-        } catch (_: Exception) {}
+    for (fmt in listOf("yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")) {
+        try { return SimpleDateFormat(fmt, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.parse(s) ?: continue } catch (_: Exception) {}
     }
     return null
 }
 
-private val Int.absoluteValue get() = if (this < 0) -this else this
-
-@Composable
-private fun UploadStatusRow(count: Int, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        color = UploadBlueBg,
-    ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = UploadBlue,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = "녹음 ${count}건 업로드·분석 중",
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = UploadBlue),
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "보기",
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = UploadBlue),
-            )
-            androidx.compose.material3.Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = null,
-                tint = UploadBlue,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-    }
-}
-
+/* 업로드 시트 (기존 유지) */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UploadSheet(
-    items: List<com.callrecorder.app.ui.screens.UploadItem>,
-    onDismiss: () -> Unit,
-    onDelete: (Long) -> Unit,
-    onDeleteAll: () -> Unit,
-) {
+private fun UploadSheet(items: List<com.callrecorder.app.ui.screens.UploadItem>, onDismiss: () -> Unit, onDelete: (Long) -> Unit, onDeleteAll: () -> Unit) {
     val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp)
-        ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        "업로드 진행 중",
-                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B1C23)),
-                    )
+                    Text("업로드 진행 중", style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B1C23)))
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${items.size}건 처리 중",
-                        style = TextStyle(fontSize = 13.sp, color = Color(0xFF8A8B94)),
-                    )
+                    Text("${items.size}건 처리 중", style = TextStyle(fontSize = 13.sp, color = Color(0xFF8A8B94)))
                 }
                 if (items.isNotEmpty()) {
                     TextButton(onClick = onDeleteAll) {
-                        Text(
-                            "모두 삭제",
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFEF4444)),
-                        )
+                        Text("모두 삭제", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFEF4444)))
                     }
                 }
             }
             Spacer(Modifier.height(16.dp))
             if (items.isEmpty()) {
-                Text(
-                    "진행 중인 업로드가 없습니다.",
-                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF8A8B94)),
-                )
+                Text("진행 중인 업로드가 없습니다.", style = TextStyle(fontSize = 14.sp, color = Color(0xFF8A8B94)))
             } else {
-                items.forEach { u ->
-                    UploadSheetItem(u, onDelete = onDelete)
-                    Spacer(Modifier.height(12.dp))
-                }
+                items.forEach { u -> UploadSheetItem(u, onDelete); Spacer(Modifier.height(12.dp)) }
             }
         }
     }
 }
 
 @Composable
-private fun UploadSheetItem(
-    u: com.callrecorder.app.ui.screens.UploadItem,
-    onDelete: (Long) -> Unit,
-) {
+private fun UploadSheetItem(u: com.callrecorder.app.ui.screens.UploadItem, onDelete: (Long) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (u.phase != "대기중") {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = UploadBlue,
-            )
-        } else {
-            androidx.compose.material3.Icon(
-                imageVector = Icons.Filled.UploadFile,
-                contentDescription = null,
-                tint = Color(0xFFB0B5C0),
-                modifier = Modifier.size(16.dp),
-            )
-        }
+        if (u.phase != "대기중") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = UploadBlue)
+        else Icon(Icons.Filled.UploadFile, null, tint = Color(0xFFB0B5C0), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
-        Text(
-            text = u.name,
-            style = TextStyle(fontSize = 14.sp, color = Color(0xFF1B1C23)),
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
+        Text(u.name, style = TextStyle(fontSize = 14.sp, color = Color(0xFF1B1C23)), modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         Spacer(Modifier.width(8.dp))
-        Text(
-            text = u.phase,
-            style = TextStyle(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (u.phase != "대기중") UploadBlue else Color(0xFF8A8B94),
-            ),
-        )
+        Text(u.phase, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (u.phase != "대기중") UploadBlue else Color(0xFF8A8B94)))
         Spacer(Modifier.width(4.dp))
         IconButton(onClick = { onDelete(u.id) }, modifier = Modifier.size(32.dp)) {
-            androidx.compose.material3.Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = "삭제",
-                tint = Color(0xFFC44545),
-                modifier = Modifier.size(18.dp),
-            )
+            Icon(Icons.Filled.Delete, "삭제", tint = Color(0xFFC44545), modifier = Modifier.size(18.dp))
         }
     }
 }

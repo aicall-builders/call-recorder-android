@@ -80,6 +80,20 @@ class CallRepository(
         //    → 백엔드 전송용 파일명은 sanitize, 원본은 DB에만 보관.
         val mime = guessMime(file.extension)
         val safeFileName = sanitizeFileName(rec.fileName, rec.id)
+
+        // caller_number에는 '진짜 전화번호'만 넣는다.
+        //  - 1순위: CallLog 매칭 번호(resolvedNumber)
+        //  - 2순위: 파일명 파싱값(rec.counterpartNumber)이 번호 형식일 때만
+        //  - 둘 다 아니면 비움(빈 문자열) → 이름이 번호 자리에 들어가 고객이 쪼개지는 것 방지
+        val phoneNumber = normalizedPhoneOrNull(resolvedNumber)
+            ?: normalizedPhoneOrNull(rec.counterpartNumber)
+            ?: ""
+
+        // 이름: CallLog 이름 1순위, 없으면 파일명 파싱값이 '번호가 아닐 때'만 이름으로 사용
+        val callerName = resolvedName?.takeIf { it.isNotBlank() }
+            ?: rec.counterpartNumber?.takeIf { it.isNotBlank() && normalizedPhoneOrNull(it) == null }
+            ?: ""
+
         val urlResp = api.requestUploadUrl(
             UploadUrlRequest(
                 storeId = rec.storeId,
@@ -88,8 +102,8 @@ class CallRepository(
                 mimeType = mime,
                 callStartedAt = isoFormat(rec.callStartedAtMillis),
                 durationSeconds = rec.durationSeconds,
-                counterpartNumber = resolvedNumber ?: rec.counterpartNumber,
-                callerCategory = rec.category,                    // ← 추가: 안드 분류 정보 전송
+                counterpartNumber = phoneNumber,                  // ← 번호 형식만
+                callerCategory = rec.category,
             )
         )
 
@@ -107,13 +121,13 @@ class CallRepository(
         dao.setServerCallId(rec.id, urlResp.callId, RecordingStatus.UPLOADED)
 
         // 2.5) 통화기록 기반 발신자 번호/이름 보강 → 서버 저장 (폰·웹 양쪽 반영)
-        if (!resolvedNumber.isNullOrBlank() || !resolvedName.isNullOrBlank()) {
+        if (phoneNumber.isNotBlank() || callerName.isNotBlank()) {
             runCatching {
                 api.updateCall(
                     urlResp.callId,
                     UpdateCallRequest(
-                        callerNumber = resolvedNumber ?: rec.counterpartNumber ?: "",
-                        callerName = resolvedName ?: "",
+                        callerNumber = phoneNumber,
+                        callerName = callerName,
                     ),
                 )
             }.onFailure { SafeLog.w("CallRepo", "발신자 정보 보강 실패", it) }
@@ -183,5 +197,19 @@ class CallRepository(
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
         sdf.timeZone = TimeZone.getTimeZone("UTC")
         return sdf.format(Date(millis))
+    }
+
+    /**
+     * 전화번호 형식인 값만 통과시킨다.
+     * 파일명에서 파싱된 값(예: "형_260617", "💕내애기💕")이 caller_number에
+     * 들어가 같은 고객이 쪼개지는 문제를 막기 위함.
+     * 숫자/하이픈/공백/+ 만으로 이뤄지고 숫자가 7자리 이상이면 번호로 본다.
+     */
+    private fun normalizedPhoneOrNull(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val digits = raw.filter { it.isDigit() }
+        if (digits.length < 7) return null                 // 번호로 보기엔 숫자가 너무 적음
+        if (raw.any { !(it.isDigit() || it in "-+. ()") }) return null  // 한글/이모지 등 섞이면 번호 아님
+        return digits                                      // 하이픈 등 제거한 순수 숫자로 정규화
     }
 }

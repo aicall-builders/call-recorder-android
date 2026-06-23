@@ -122,13 +122,30 @@ data class UpdateCallRequest(
     @SerialName("caller_name") val callerName: String,
 )
 
-/** 통화 상태 상수 (백엔드 소문자 응답에 맞춤) */
+/** 통화 상태 상수 (백엔드 소문자 응답에 맞춤)
+ *
+ * 실제 백엔드(call_handler.py) 흐름:
+ *   uploaded → transcribed → completed   (실패는 error)
+ * SUMMARIZED("summarized")는 구버전 호환용.
+ */
 object CallStatus {
     const val UPLOADED = "uploaded"
     const val PROCESSING = "processing"
+    const val TRANSCRIBED = "transcribed"
+    const val COMPLETED = "completed"
     const val SUMMARIZED = "summarized"
     const val FAILED = "failed"
+    const val ERROR = "error"
     const val UNKNOWN = "unknown"
+}
+
+/** 분석(요약)이 끝난 통화인지 판정.
+ *  status가 completed/summarized 거나, 요약 텍스트가 있으면 완료로 본다(안전망). */
+fun Call.isAnalyzed(): Boolean {
+    val s = status.lowercase()
+    return s == CallStatus.COMPLETED ||
+            s == CallStatus.SUMMARIZED ||
+            !summary.isNullOrBlank()
 }
 
 /** 카테고리 코드 (extracted_info.category_code) */
@@ -336,4 +353,41 @@ data class NaverLoginRequest(
 data class GoogleLoginRequest(
     @SerialName("provider_access_token")
     val providerAccessToken: String,
+)
+// ===== Customer (고객 프로필 + AI 분석) =====
+
+/** 고객 편집 필드 (GET /customers/{phone} 의 profile) */
+@Serializable
+data class CustomerProfile(
+    val email: String? = null,
+    val tendency: String? = null,          // 고객성향
+    val medical: String? = null,           // 병력
+    @SerialName("special_notes") val specialNotes: String? = null,  // 특이사항
+    @SerialName("custom_fields") val customFields: JsonElement? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+)
+
+/** 고객 AI 분석 (GET /customers/{phone} 의 analysis) */
+@Serializable
+data class CustomerAnalysis(
+    val analysis: String? = null,
+    @SerialName("call_count") val callCount: Int? = null,
+    @SerialName("generated_at") val generatedAt: String? = null,
+)
+
+/** GET /customers/{phone} 응답 */
+@Serializable
+data class CustomerProfileResponse(
+    val profile: CustomerProfile? = null,
+    val analysis: CustomerAnalysis? = null,
+)
+
+/** PATCH /customers/{phone} 요청 */
+@Serializable
+data class UpdateCustomerRequest(
+    val email: String? = null,
+    val tendency: String? = null,
+    val medical: String? = null,
+    @SerialName("special_notes") val specialNotes: String? = null,
+    @SerialName("custom_fields") val customFields: Map<String, String>? = null,
 )

@@ -36,7 +36,9 @@ import com.callrecorder.app.ui.screens.PermissionScreen
 import com.callrecorder.app.ui.screens.StoreViewModel
 import com.callrecorder.app.ui.screens.StoresScreen
 import com.callrecorder.app.di.CalendarOAuthResult
+import com.callrecorder.app.onboarding.BusinessTypeScreen
 import com.callrecorder.app.onboarding.OnboardingScreen
+import com.callrecorder.app.onboarding.hasSelectedDomain
 import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.callrecorder.app.util.SafeLog
 import com.kakao.sdk.common.util.Utility
@@ -87,7 +89,6 @@ private fun AppRoot() {
     val state by auth.state.collectAsState()
 
     // 콜드 스타트: 로그인 안 됐으면 INTRO, 로그인됐으면 권한 게이트(PERMISSION) → 자동 통과 시 바로 메인
-    // (온보딩은 "로그인 흐름"에서만 보여줌 → 재로그인할 때마다 다시 뜸)
     val start = if (token.isNullOrBlank()) Routes.INTRO else Routes.PERMISSION
 
     NavHost(navController = nav, startDestination = start) {
@@ -100,7 +101,6 @@ private fun AppRoot() {
         composable(Routes.LOGIN) {
             LoginScreen(
                 onLoggedIn = { loginType ->
-                    // 로그인 흐름에서는 권한 화면을 항상 보여준다 (PERMISSION_SETUP)
                     val destination = if (loginType == LoginType.KAKAO) Routes.KAKAO_LINKED else Routes.PERMISSION_SETUP
                     nav.navigate(destination) { popUpTo(Routes.LOGIN) { inclusive = true } }
                 },
@@ -112,15 +112,25 @@ private fun AppRoot() {
                 onCancel = { nav.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } } },
             )
         }
-        // 콜드 스타트용 권한 게이트: 권한 통과한 사용자는 화면 없이 바로 메인 (온보딩 X)
+        // 콜드 스타트용 권한 게이트: 권한 통과한 사용자는 바로 메인 (업종/온보딩 X)
         composable(Routes.PERMISSION) {
             PermissionRoute(nav = nav, route = Routes.PERMISSION, force = false)
         }
-        // 로그인 흐름용 권한 화면: 항상 표시 → 통과 후 온보딩으로
+        // 로그인 흐름용 권한 화면: 항상 표시 → 통과 후 업종선택(처음만) 또는 온보딩
         composable(Routes.PERMISSION_SETUP) {
             PermissionRoute(nav = nav, route = Routes.PERMISSION_SETUP, force = true)
         }
-        // 온보딩 6장: 로그인+권한 직후에만 진입 → 끝나면 메인
+        // 업종 선택 (처음 한 번만): 저장 후 온보딩으로
+        composable(Routes.BUSINESS_TYPE) {
+            BusinessTypeScreen(
+                onDone = {
+                    nav.navigate(Routes.ONBOARDING) {
+                        popUpTo(Routes.BUSINESS_TYPE) { inclusive = true }
+                    }
+                },
+            )
+        }
+        // 온보딩 5장 (매 로그인): 끝나면 메인
         composable(Routes.ONBOARDING) {
             OnboardingScreen(
                 onFinish = {
@@ -136,9 +146,8 @@ private fun AppRoot() {
             )
         }
         composable(Routes.MAIN) {
-            // onCallClick은 MainScreen 내부에서 처리
             MainScreen(
-                onCallClick = { },  // 더 이상 사용 안 함 (MainScreen 내부에서 처리)
+                onCallClick = { },
                 onLoggedOut = { nav.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } } },
                 onChangeStore = { nav.navigate(Routes.STORES) },
             )
@@ -148,8 +157,8 @@ private fun AppRoot() {
 
 /**
  * 권한 화면 공통 진입부.
- * - force = false (콜드 스타트): 권한을 마쳤으면 화면 없이 바로 MAIN
- * - force = true  (로그인 흐름): 항상 권한 화면을 보여주고, 통과 후 ONBOARDING으로
+ * - force = false (콜드 스타트): 권한을 마쳤으면 바로 MAIN
+ * - force = true  (로그인 흐름): 권한 후 → 업종 미선택이면 BUSINESS_TYPE, 선택했으면 ONBOARDING
  */
 @Composable
 private fun PermissionRoute(nav: NavHostController, route: String, force: Boolean) {
@@ -157,8 +166,14 @@ private fun PermissionRoute(nav: NavHostController, route: String, force: Boolea
     val storeVm: StoreViewModel = viewModel()
     val skipPermission = remember { !force && context.hasCompletedPermissionOnboarding() }
 
-    // 로그인 흐름이면 권한 후 온보딩, 콜드 스타트면 바로 메인
-    val next = if (force) Routes.ONBOARDING else Routes.MAIN
+    // 다음 목적지 (진입 시 1회 결정)
+    val next = remember {
+        when {
+            !force -> Routes.MAIN
+            context.hasSelectedDomain() -> Routes.ONBOARDING   // 이미 업종 고름 → 온보딩만
+            else -> Routes.BUSINESS_TYPE                       // 처음 → 업종 선택부터
+        }
+    }
 
     fun goNext() {
         storeVm.ensureActiveStore {
@@ -168,7 +183,6 @@ private fun PermissionRoute(nav: NavHostController, route: String, force: Boolea
 
     if (skipPermission) {
         LaunchedEffect(Unit) { goNext() }
-        // ensureActiveStore 완료 전까지 잠깐 로딩 (빈 화면 깜빡임 방지)
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -183,14 +197,11 @@ private fun PermissionRoute(nav: NavHostController, route: String, force: Boolea
 }
 
 /* ─────────────────────────────────────────────────────
- * 권한 관련 공통 유틸 (런치 분기 + 설정 권한 화면에서 공용)
+ * 권한 관련 공통 유틸
  * ───────────────────────────────────────────────────── */
 private const val APP_PREFS = "app_prefs"
 private const val KEY_PERMISSION_ONBOARDING_DONE = "permission_onboarding_done"
 
-/**
- * 앱이 요구하는 권한 목록. (설정 → 권한 화면에서 토글로 노출)
- */
 val REQUIRED_PERMISSIONS: List<String> = buildList {
     add(Manifest.permission.RECORD_AUDIO)
     add(Manifest.permission.READ_PHONE_STATE)
@@ -206,11 +217,6 @@ fun Context.hasAllRequiredPermissions(): Boolean =
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
     }
 
-/**
- * 권한 온보딩 완료 여부.
- * - 권한 화면을 한 번이라도 통과하면 true 로 저장
- * - 기존 사용자(이미 녹음 권한 허용)는 완료한 것으로 간주
- */
 fun Context.hasCompletedPermissionOnboarding(): Boolean {
     val prefs = getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
     if (prefs.getBoolean(KEY_PERMISSION_ONBOARDING_DONE, false)) return true
@@ -227,12 +233,13 @@ fun Context.markPermissionOnboardingDone() {
 }
 
 object Routes {
-    const val ONBOARDING = "onboarding"             // 로그인+권한 직후 온보딩 6장
     const val INTRO = "intro"
     const val LOGIN = "login"
     const val KAKAO_LINKED = "kakao_linked"
     const val PERMISSION = "permission"             // 콜드 스타트용 (자동 통과 가능)
     const val PERMISSION_SETUP = "permission_setup" // 로그인 흐름용 (항상 표시)
+    const val BUSINESS_TYPE = "business_type"       // 업종 선택 (처음 한 번만)
+    const val ONBOARDING = "onboarding"             // 기능 소개 5장 (매 로그인)
     const val STORES = "stores"
     const val MAIN = "main"
     const val CALL_DETAIL = "call_detail"

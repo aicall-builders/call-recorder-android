@@ -6,6 +6,13 @@ import retrofit2.Response
 import retrofit2.http.*
 
 interface ApiService {
+    // ===== Me (유저 도메인) =====
+    @GET("me")
+    suspend fun getMe(): MeResponse
+
+    @PATCH("me")
+    suspend fun updateDomain(@Body body: UpdateDomainRequest): Response<Unit>
+
     // ===== Auth =====
     @POST("auth/kakao")
     suspend fun loginWithKakao(@Body body: KakaoLoginRequest): AuthResponse
@@ -162,5 +169,16 @@ interface ApiService {
     suspend fun deleteKeyword(
         @Path("storeId") storeId: String,
         @Path("keywordId") keywordId: String,
+    ): Response<Unit>
+
+    // ── 고객 프로필 + AI 분석 ──
+    // phone에 한글/이모지가 들어올 수 있어 @Path 자동 인코딩에 의존.
+    @GET("customers/{phone}")
+    suspend fun getCustomer(@Path("phone") phone: String): CustomerProfileResponse
+
+    @PATCH("customers/{phone}")
+    suspend fun updateCustomer(
+        @Path("phone") phone: String,
+        @Body body: UpdateCustomerRequest,
     ): Response<Unit>
 }
