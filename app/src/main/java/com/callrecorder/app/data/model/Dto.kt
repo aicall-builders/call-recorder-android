@@ -3,13 +3,18 @@ package com.callrecorder.app.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 
 // ===== Auth =====
 @Serializable
 data class KakaoLoginRequest(
-    @SerialName("access_token") val accessToken: String
+    @SerialName("provider_access_token")
+    val providerAccessToken: String
 )
-
 @Serializable
 data class AuthResponse(
     @SerialName("custom_token") val customToken: String,
@@ -17,7 +22,8 @@ data class AuthResponse(
     @SerialName("refresh_token") val refreshToken: String? = null,
     val uid: String? = null,
     val nickname: String? = null,
-    val user: User
+    val name: String? = null,
+    val user: User? = null
 )
 
 @Serializable
@@ -90,6 +96,7 @@ data class Call(
     @SerialName("store_id") val storeId: String? = null,
     @SerialName("user_id") val userId: String? = null,
     @SerialName("caller_number") val callerNumber: String? = null,
+    @SerialName("caller_name") val callerName: String? = null,
     @SerialName("caller_category") val callerCategory: String? = null,
     @SerialName("s3_key") val s3Key: String? = null,
     @SerialName("clova_job_id") val clovaJobId: String? = null,
@@ -103,8 +110,16 @@ data class Call(
     val sentiment: String? = null,                 // "positive" / "negative" / "neutral"
     @SerialName("action_required") val actionRequired: Int? = null,
     @SerialName("is_read") val isRead: Int? = null,
-    val keywords: String? = null,                  // JSON 문자열: "[\"a\", \"b\"]"
-    @SerialName("extracted_info") val extractedInfoRaw: String? = null,  // JSON 문자열
+    val keywords: JsonElement? = null,                  // 문자열 또는 배열 둘 다 허용
+    @SerialName("extracted_info") val extractedInfoRaw: JsonElement? = null,  // 문자열 또는 객체
+    @SerialName("internal_keywords") val internalKeywordsRaw: JsonElement? = null, // 문자열 또는 객체
+)
+
+/** 발신자 정보 수정 요청 (PATCH /calls/{id}) */
+@Serializable
+data class UpdateCallRequest(
+    @SerialName("caller_number") val callerNumber: String,
+    @SerialName("caller_name") val callerName: String,
 )
 
 /** 통화 상태 상수 (백엔드 소문자 응답에 맞춤) */
@@ -149,21 +164,76 @@ data class ExtractedInfo(
     @SerialName("category_code") val categoryCode: String? = null,
 )
 
+/** JsonElement를 문자열로 안전하게 변환 */
+fun JsonElement?.toStringOrNull(): String? {
+    if (this == null) return null
+    return when (this) {
+        is JsonPrimitive -> content
+        else -> toString()
+    }
+}
+
+/** JsonElement를 Map<String,String>으로 안전하게 변환 */
+fun JsonElement?.toStringMap(): Map<String, String> {
+    if (this == null) return emptyMap()
+    return runCatching {
+        when (this) {
+            // 이미 객체면 바로 변환
+            is JsonObject -> this.entries
+                .filter { !it.key.startsWith("_") }  // _로 시작하는 내부 키 제거
+                .mapNotNull { (k, v) ->
+                    val strVal = when (v) {
+                        is JsonPrimitive -> v.content
+                        else -> null  // 객체/배열 값은 제외
+                    }
+                    if (strVal != null) k to strVal else null
+                }.toMap()
+            // 문자열이면 JSON 파싱
+            is JsonPrimitive -> {
+                val parsed = DtoJson.parseToJsonElement(content)
+                if (parsed is JsonObject) {
+                    parsed.entries
+                        .filter { !it.key.startsWith("_") }
+                        .mapNotNull { (k, v) ->
+                            val strVal = (v as? JsonPrimitive)?.content
+                            if (strVal != null) k to strVal else null
+                        }.toMap()
+                } else emptyMap()
+            }
+            else -> emptyMap()
+        }
+    }.getOrDefault(emptyMap())
+}
+
 /** 안전하게 키워드 배열로 변환 (실패 시 빈 리스트) */
 fun Call.keywordsList(): List<String> {
-    val raw = keywords ?: return emptyList()
+    val element = keywords ?: return emptyList()
     return runCatching {
-        DtoJson.decodeFromString<List<String>>(raw)
+        when (element) {
+            is JsonArray -> element.mapNotNull { (it as? JsonPrimitive)?.content }
+            is JsonPrimitive -> DtoJson.decodeFromString<List<String>>(element.content)
+            else -> emptyList()
+        }
     }.getOrDefault(emptyList())
 }
 
-/** extracted_info JSON 문자열을 파싱. 실패 시 null. */
+/** extracted_info를 파싱. 실패 시 null. */
 fun Call.extractedInfoOrNull(): ExtractedInfo? {
-    val raw = extractedInfoRaw ?: return null
+    val element = extractedInfoRaw ?: return null
     return runCatching {
-        DtoJson.decodeFromString<ExtractedInfo>(raw)
+        when (element) {
+            is JsonPrimitive -> DtoJson.decodeFromString<ExtractedInfo>(element.content)
+            is JsonObject -> DtoJson.decodeFromJsonElement(ExtractedInfo.serializer(), element)
+            else -> null
+        }
     }.getOrNull()
 }
+
+/** internal_keywords를 Map<String,String>으로 변환 */
+fun Call.internalKeywordsMap(): Map<String, String> = internalKeywordsRaw.toStringMap()
+
+/** internal_keywords를 JSON 문자열로 변환 (기존 코드 호환용) */
+fun Call.internalKeywordsString(): String? = internalKeywordsRaw.toStringOrNull()
 
 /** Dto 내부 JSON 파서 (느슨한 설정) */
 internal val DtoJson = Json {
@@ -195,6 +265,51 @@ data class AudioUrlResponse(
     val resolved: String? get() = url ?: audioUrl
 }
 
+// ===== Calendar =====
+@Serializable
+data class CalendarConnection(
+    val id: String,
+    val provider: String,
+    @SerialName("calendar_name") val calendarName: String? = null,
+    @SerialName("is_default") val isDefault: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null
+)
+
+@Serializable
+data class CalendarConnectionList(
+    val connections: List<CalendarConnection>
+)
+
+@Serializable
+data class CalendarOAuthUrlResponse(
+    @SerialName("authorize_url") val authUrl: String
+)
+
+@Serializable
+data class CalendarEventResponse(
+    val success: Boolean = false,
+    val provider: String? = null,
+    val title: String? = null,
+    @SerialName("event_url") val eventUrl: String? = null,
+    @SerialName("demo_fallback") val demoFallback: Boolean = false,
+    val message: String? = null,
+)
+
+// 앱이 직접 OAuth 코드를 완료할 때 사용 (POST /calendar/connections/oauth-code)
+@Serializable
+data class CalendarOAuthCodeRequest(
+    val provider: String,
+    @SerialName("authorization_code") val authorizationCode: String,
+    @SerialName("redirect_uri") val redirectUri: String,
+    val state: String = "",
+)
+
+@Serializable
+data class CalendarConnectionWrapper(
+    val connection: CalendarConnection? = null,
+)
+
+
 /**
  * 구버전 Summary 스키마 - 일부 엔드포인트(/summaries/{id})에서 여전히 사용될 수 있어 유지.
  * 새 화면에서는 Call.summary(평문) + Call.extractedInfoOrNull() 조합을 우선 사용 권장.
@@ -209,4 +324,16 @@ data class Summary(
     @SerialName("key_points") val keyPoints: List<String> = emptyList(),
     val sentiment: String? = null,
     @SerialName("created_at") val createdAt: String? = null
+)
+// ===== Naver Login =====
+@Serializable
+data class NaverLoginRequest(
+    @SerialName("provider_access_token")
+    val providerAccessToken: String,
+)
+// ===== 구글 로그인 요청 =====
+@Serializable
+data class GoogleLoginRequest(
+    @SerialName("provider_access_token")
+    val providerAccessToken: String,
 )

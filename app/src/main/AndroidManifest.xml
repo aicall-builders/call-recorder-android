@@ -15,6 +15,7 @@
 
     <!-- 연락처 접근 (수신자 이름 자동 매칭용) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!-- 포그라운드 서비스 (업로드 진행 중) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -23,6 +24,9 @@
 
     <!-- 부팅 시 옵저버 재시작 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 카메라 촬영 (통화 메모 사진 첨부용) -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- 카카오 로그인 (브라우저 폴백 시 필요) -->
     <queries>
@@ -56,10 +60,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.CallRecorder">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 외부 캘린더 OAuth 콜백 딥링크 (callrecorder://oauth/{provider}) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="callrecorder" android:host="oauth" />
             </intent-filter>
         </activity>
 
@@ -110,6 +122,18 @@
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+
+        <!-- 카메라 촬영 임시 파일 공유용 FileProvider -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 </manifest>

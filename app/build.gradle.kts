@@ -25,9 +25,11 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        // 카카오 SDK 매니페스트 placeholder
+        // 카카오 SDK 매니페스트 placeholder , 네이버
         manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoKey
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoKey\"")
+        buildConfigField("String", "NAVER_CLIENT_ID", "\"${gradleProps.getProperty("NAVER_CLIENT_ID", "")}\"")
+        buildConfigField("String", "NAVER_CLIENT_SECRET", "\"${gradleProps.getProperty("NAVER_CLIENT_SECRET", "")}\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
@@ -107,8 +109,18 @@ dependencies {
     // Kakao Login
     implementation("com.kakao.sdk:v2-user:2.20.1")
 
+    // Google Login
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
+
+    // Naver Login
+    implementation("com.navercorp.nid:oauth:5.9.1")
+
+
     // Coil (이미지)
     implementation("io.coil-kt:coil-compose:2.5.0")
+    
+     // EXIF (사진 회전 보정)
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     // Media3 ExoPlayer (음성 재생용)
     implementation("androidx.media3:media3-exoplayer:1.2.1")

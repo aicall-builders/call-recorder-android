@@ -1,6 +1,7 @@
 package com.callrecorder.app.data.local
 
 import androidx.room.*
+
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -32,11 +33,13 @@ data class RecordingEntity(
 
 object RecordingStatus {
     const val PENDING = "PENDING"
+    const val AWAITING_APPROVAL = "AWAITING_APPROVAL"
     const val UPLOADING = "UPLOADING"
     const val UPLOADED = "UPLOADED"
     const val PROCESSING = "PROCESSING"
     const val DONE = "DONE"
     const val FAILED = "FAILED"
+    const val CANCELED = "CANCELED"   // 사용자가 업로드 큐에서 제거 (재스캔돼도 재업로드 안 함)
 }
 
 object CallCategory {
@@ -138,6 +141,45 @@ interface RecordingDao {
     // ===== 카테고리 변경 (사용자 수동) =====
     @Query("UPDATE recordings SET category = :category, updatedAt = :now WHERE id = :id")
     suspend fun updateCategory(id: Long, category: String, now: Long = System.currentTimeMillis())
+
+    @Query("SELECT COUNT(*) FROM recordings WHERE status = :status")
+    suspend fun countByStatus(status: String): Int
+
+    /** 진행 중(대기/업로드/서버분석) 개수 실시간 관찰 — 홈 진행 칩용 */
+    @Query("SELECT COUNT(*) FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING')")
+    fun observeActiveUploadCount(): Flow<Int>
+
+    /** 진행 중 목록 실시간 관찰 — 홈 진행 시트용 */
+    @Query("SELECT * FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING') ORDER BY createdAt ASC")
+    fun observeActiveUploads(): Flow<List<RecordingEntity>>
+
+    /** 서버 처리 중(업로드 완료~분석)인 로컬 녹음 — 완료 동기화용 */
+    @Query("SELECT * FROM recordings WHERE status IN ('UPLOADED','PROCESSING') AND serverCallId IS NOT NULL")
+    suspend fun getServerProcessing(): List<RecordingEntity>
+
+    /** 서버 요약 완료 시 로컬 상태를 DONE으로 정리 (진행 칩에서 제거) */
+    @Query("UPDATE recordings SET status='DONE', updatedAt=:now WHERE serverCallId = :callId")
+    suspend fun markDoneByServerCallId(callId: String, now: Long = System.currentTimeMillis())
+
+    /** 안전장치: 일정 시간 넘게 분석중(UPLOADED/PROCESSING)인 건을 강제로 DONE 처리해 진행 칩에서 내림 */
+    @Query("UPDATE recordings SET status='DONE', updatedAt=:now WHERE status IN ('UPLOADED','PROCESSING') AND updatedAt < :threshold")
+    suspend fun markStaleProcessingDone(threshold: Long, now: Long = System.currentTimeMillis())
+
+    /** 진행 중(대기/업로드/분석) 전체를 일괄 취소 */
+    @Query("UPDATE recordings SET status='CANCELED', updatedAt=:now WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING')")
+    suspend fun cancelAllActive(now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE recordings SET status = 'PENDING', updatedAt = :now WHERE status = 'AWAITING_APPROVAL'")
+    suspend fun approveAll(now: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM recordings WHERE status = 'AWAITING_APPROVAL' ORDER BY createdAt DESC")
+    suspend fun getAwaitingApproval(): List<RecordingEntity>
+
+    @Query("UPDATE recordings SET status = 'PENDING', updatedAt = :now WHERE id = :id")
+    suspend fun approveOne(id: Long, now: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM recordings WHERE id = :id")
+    suspend fun deleteOne(id: Long)
 }
 
 // version 2 → 3 (스키마 변경: category 컬럼 추가)

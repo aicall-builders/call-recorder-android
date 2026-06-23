@@ -1,0 +1,65 @@
+package com.callrecorder.app.ui.screens
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.local.RecordingEntity
+import com.callrecorder.app.worker.ScanAndUploadWorker
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class PendingApprovalUiState(
+    val recordings: List<RecordingEntity> = emptyList(),
+    val loading: Boolean = false,
+)
+
+class PendingApprovalViewModel : ViewModel() {
+    private val recordingDao = CallRecorderApp.instance.container.recordingDao
+
+    private val _state = MutableStateFlow(PendingApprovalUiState())
+    val state: StateFlow<PendingApprovalUiState> = _state.asStateFlow()
+
+    init { load() }
+
+    fun load() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(loading = true)
+            val recordings = recordingDao.getAwaitingApproval()
+            _state.value = PendingApprovalUiState(recordings = recordings, loading = false)
+        }
+    }
+
+    fun approveOne(id: Long) {
+        viewModelScope.launch {
+            recordingDao.approveOne(id)
+            triggerUpload()
+            load()
+        }
+    }
+
+    fun rejectOne(id: Long) {
+        viewModelScope.launch {
+            recordingDao.deleteOne(id)
+            load()
+        }
+    }
+
+    fun approveAll() {
+        viewModelScope.launch {
+            recordingDao.approveAll()
+            triggerUpload()
+            load()
+        }
+    }
+
+    private fun triggerUpload() {
+        val workRequest = OneTimeWorkRequestBuilder<ScanAndUploadWorker>().build()
+        WorkManager.getInstance(
+            CallRecorderApp.instance.applicationContext
+        ).enqueue(workRequest)
+    }
+}

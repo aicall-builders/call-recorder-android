@@ -46,8 +46,8 @@ object SttParser {
             if (text.isBlank()) continue
 
             val speaker = when (speakerNum) {
-                1 -> SttSpeaker.CUSTOMER
-                2 -> SttSpeaker.BOT
+                1 -> SttSpeaker.BOT       // 화자1 = 수신자(사장님)
+                2 -> SttSpeaker.CUSTOMER
                 else -> SttSpeaker.UNKNOWN
             }
             result += SttMessage(speaker, text)

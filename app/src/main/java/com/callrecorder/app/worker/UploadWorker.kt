@@ -10,6 +10,12 @@ import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.MainActivity
 import com.callrecorder.app.R
 import com.callrecorder.app.data.local.RecordingStatus
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.TimeUnit
 
 /**
@@ -22,23 +28,39 @@ class UploadWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = coroutineScope {
         val app = applicationContext as CallRecorderApp
         val repo = app.container.callRepo
 
-        setForeground(buildForegroundInfo("녹음 업로드 중..."))
-
         // 모든 카테고리 업로드 (마스킹 정책으로 프라이버시 보호)
         val pending = repo.pendingUploads()
-        if (pending.isEmpty()) return Result.success()
+        if (pending.isEmpty()) return@coroutineScope Result.success()
 
-        var allOk = true
-        pending.forEachIndexed { idx, rec ->
-            setForeground(buildForegroundInfo("업로드 중 (${idx + 1}/${pending.size})"))
-            val r = repo.uploadAndProcess(rec)
-            if (r.isFailure) allOk = false
-        }
-        return if (allOk) Result.success() else Result.retry()
+        val total = pending.size
+        val done = AtomicInteger(0)
+        setForeground(buildForegroundInfo("녹음 업로드 중... (0/$total)"))
+
+        // 동시 업로드 (소형 통화 녹음 다수일 때 체감 속도 개선). 약한 망 고려해 3개로 제한.
+        val semaphore = Semaphore(MAX_CONCURRENT)
+        val results = pending.map { rec ->
+            async {
+                semaphore.withPermit {
+                    val info = com.callrecorder.app.util.CallLogHelper.lookup(
+                        applicationContext, rec.callStartedAtMillis, rec.durationSeconds,
+                    )
+                    val r = repo.uploadAndProcess(
+                        rec,
+                        resolvedNumber = info?.number,
+                        resolvedName = info?.name,
+                    )
+                    val finished = done.incrementAndGet()
+                    runCatching { setForeground(buildForegroundInfo("업로드 중 ($finished/$total)")) }
+                    r.isSuccess
+                }
+            }
+        }.awaitAll()
+
+        if (results.all { it }) Result.success() else Result.retry()
     }
 
     private fun buildForegroundInfo(text: String): ForegroundInfo {
@@ -63,6 +85,7 @@ class UploadWorker(
 
     companion object {
         private const val NOTIF_ID = 4001
+        private const val MAX_CONCURRENT = 3
         const val UNIQUE_NAME = "upload_recordings"
 
         /** 즉시 1회 업로드 시도 (감지 직후 호출) */

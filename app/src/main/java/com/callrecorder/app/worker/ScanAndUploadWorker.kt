@@ -8,6 +8,12 @@ import com.callrecorder.app.data.local.CallCategory
 import com.callrecorder.app.data.local.CallClassifier
 import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.data.local.RecordingStatus
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 주기적 스캔 워커 - 15분마다 실행되어
@@ -33,6 +39,10 @@ class ScanAndUploadWorker(
         // 로그인되어 있고 활성 가게가 있을 때만 동작
         val storeId = tokenStore.getActiveStore() ?: return Result.success()
         if (tokenStore.getAccessToken().isNullOrBlank()) return Result.success()
+
+        // 자동 업로드 설정 (false=수동 승인). 신규 파일 등록 상태를 결정한다.
+        val autoUpload = app.isAutoUploadEnabled()
+        val newStatus = if (autoUpload) RecordingStatus.PENDING else RecordingStatus.AWAITING_APPROVAL
 
         // 1) 스캔
         val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
@@ -67,7 +77,7 @@ class ScanAndUploadWorker(
                     callStartedAtMillis = f.callStartedAtMillis,
                     counterpartNumber = f.counterpartNumber,
                     storeId = storeId,
-                    status = RecordingStatus.PENDING,
+                    status = newStatus,
                     category = category,
                 )
             )
@@ -84,42 +94,55 @@ class ScanAndUploadWorker(
         val pending = callRepo.pendingUploadsByCategory(allowedCategories)
         android.util.Log.i(TAG, "📋 업로드 큐: ${pending.size}건")
 
-        var successCount = 0
-        var failCount = 0
+        val successCount = AtomicInteger(0)
+        val failCount = AtomicInteger(0)
+        val maxConcurrent = 3
 
-        pending.forEach { rec ->
-            android.util.Log.i(TAG,
-                "⬆️ 업로드 시작: id=${rec.id}, category=${rec.category}, file=${rec.fileName}")
-
-            try {
-                // 파일이 폰에서 삭제됐는지 확인 (가장 흔한 실패 원인)
-                val file = java.io.File(rec.filePath)
-                if (!file.exists()) {
-                    android.util.Log.w(TAG,
-                        "⚠️ 파일 없음, 건너뜀: id=${rec.id}, path=${rec.filePath}")
-                    callRepo.markAsFailed(rec.id, "파일이 폰에서 삭제됨")
-                    failCount++
-                    return@forEach
+        // 동시 업로드 (3개 제한) — 백그라운드 큐 처리 속도 개선
+        coroutineScope {
+            val semaphore = Semaphore(maxConcurrent)
+            pending.map { rec ->
+                async {
+                    semaphore.withPermit {
+                        android.util.Log.i(TAG,
+                            "⬆️ 업로드 시작: id=${rec.id}, category=${rec.category}, file=${rec.fileName}")
+                        try {
+                            val file = java.io.File(rec.filePath)
+                            if (!file.exists()) {
+                                android.util.Log.w(TAG,
+                                    "⚠️ 파일 없음, 건너뜀: id=${rec.id}, path=${rec.filePath}")
+                                callRepo.markAsFailed(rec.id, "파일이 폰에서 삭제됨")
+                                failCount.incrementAndGet()
+                                return@withPermit
+                            }
+                            val info = com.callrecorder.app.util.CallLogHelper.lookup(
+                                applicationContext, rec.callStartedAtMillis, rec.durationSeconds,
+                            )
+                            val r = callRepo.uploadAndProcess(
+                                rec,
+                                resolvedNumber = info?.number,
+                                resolvedName = info?.name,
+                            )
+                            if (r.isSuccess) {
+                                successCount.incrementAndGet()
+                                android.util.Log.i(TAG, "✅ 업로드 성공: id=${rec.id}")
+                            } else {
+                                failCount.incrementAndGet()
+                                android.util.Log.w(TAG,
+                                    "❌ 업로드 실패: id=${rec.id}, 에러=${r.exceptionOrNull()?.message}")
+                            }
+                        } catch (e: Exception) {
+                            failCount.incrementAndGet()
+                            android.util.Log.e(TAG,
+                                "💥 예외 발생: id=${rec.id}, 에러=${e.message}", e)
+                        }
+                    }
                 }
-
-                val r = callRepo.uploadAndProcess(rec)
-                if (r.isSuccess) {
-                    successCount++
-                    android.util.Log.i(TAG, "✅ 업로드 성공: id=${rec.id}")
-                } else {
-                    failCount++
-                    android.util.Log.w(TAG,
-                        "❌ 업로드 실패: id=${rec.id}, 에러=${r.exceptionOrNull()?.message}")
-                }
-            } catch (e: Exception) {
-                failCount++
-                android.util.Log.e(TAG,
-                    "💥 예외 발생: id=${rec.id}, 에러=${e.message}", e)
-            }
+            }.awaitAll()
         }
 
         android.util.Log.i(TAG,
-            "🏁 워커 완료: 성공 ${successCount}건, 실패 ${failCount}건")
+            "🏁 워커 완료: 성공 ${successCount.get()}건, 실패 ${failCount.get()}건")
 
         // 무한 RETRY 루프 방지 — 항상 SUCCESS 반환
         // 실패한 건은 DB에 FAILED로 기록되어 다음 사이클(15분 후)에 재시도됨

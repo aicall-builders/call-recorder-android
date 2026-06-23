@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -79,6 +80,9 @@ fun PermissionScreen(onGranted: () -> Unit) {
 
     // 2) 연락처
     val contactsPerm = rememberPermissionState(Manifest.permission.READ_CONTACTS)
+
+    // 2-1) 통화 기록 (녹음 시각으로 정확한 발신 번호/이름 매칭)
+    val callLogPerm = rememberPermissionState(Manifest.permission.READ_CALL_LOG)
 
     // 3) 알림 (카카오 알림톡 수신용으로 매핑)
     //    Android 13(API 33) 미만에선 별도 권한 불필요 -> 이미 ON 상태로 표시
@@ -182,6 +186,16 @@ fun PermissionScreen(onGranted: () -> Unit) {
                 desc = "고객에게 전화가 왔을 때 기본 고객 정보를 자동으로 미리 표시합니다.",
                 checked = contactsPerm.status.isGranted,
                 onToggle = { handlePermissionToggle(context, contactsPerm) },
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            PermissionCard(
+                icon = Icons.Filled.Call,
+                title = "통화 기록 접근",
+                desc = "녹음된 통화의 실제 발신 번호와 연락처 이름을 자동으로 채워 정확하게 표시합니다.",
+                checked = callLogPerm.status.isGranted,
+                onToggle = { handlePermissionToggle(context, callLogPerm) },
             )
 
             Spacer(Modifier.height(12.dp))

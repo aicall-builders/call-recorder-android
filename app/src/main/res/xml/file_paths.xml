@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 카메라 촬영 임시 사진 저장 경로 (앱 전용 캐시) -->
+    <cache-path
+        name="camera_photos"
+        path="camera_photos/" />
+    <external-cache-path
+        name="external_camera_photos"
+        path="camera_photos/" />
+</paths>
+ 

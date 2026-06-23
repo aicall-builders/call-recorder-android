@@ -20,10 +20,51 @@ class CallRecorderApp : Application(), Configuration.Provider {
         // 카카오 SDK 초기화
         KakaoSdk.init(this, BuildConfig.KAKAO_NATIVE_APP_KEY)
 
+        // 네이버 SDK 초기화
+        com.navercorp.nid.NaverIdLoginSDK.initialize(
+            this,
+            BuildConfig.NAVER_CLIENT_ID,
+            BuildConfig.NAVER_CLIENT_SECRET,
+            "AI 통화 비서"
+        )
+
         // DI 컨테이너 (수동 DI - Hilt 없이 가벼움 유지)
         container = AppContainer(this)
 
         createNotificationChannels()
+    }
+
+    /**
+     * 자동 업로드(자동 분석) 설정. 기본값 false = 수동 승인 후 업로드.
+     * true 면 녹음 감지 시 바로 업로드 큐(PENDING)로 등록된다.
+     */
+    fun isAutoUploadEnabled(): Boolean =
+        getSharedPreferences("app_settings", MODE_PRIVATE).getBoolean("auto_analyze", false)
+
+    /** 통화 분석 완료 시 상단(상태바) 로컬 알림. */
+    fun notifyAnalysisDone(count: Int) {
+        if (count <= 0) return
+        val intent = android.content.Intent(this, MainActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                    android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = android.app.PendingIntent.getActivity(
+            this, 0, intent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val text = if (count == 1) "통화 1건 분석이 완료됐어요" else "통화 ${count}건 분석이 완료됐어요"
+        val n = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_SUMMARY)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("통화 분석 완료")
+            .setContentText(text)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this).notify(5001, n)
+        }
     }
 
     private fun createNotificationChannels() {

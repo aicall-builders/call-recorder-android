@@ -22,6 +22,10 @@ data class CallSummaryDetailUiState(
     val detail: CallDetail? = null,
     val audioUrl: String? = null,
     val error: String? = null,
+    val calendarMessage: String? = null,
+    val calendarLoading: Boolean = false,
+    val connectedCalendars: List<String> = emptyList(),
+    val showCalendarPicker: Boolean = false,
 )
 
 class CallSummaryDetailViewModel : ViewModel() {
@@ -32,6 +36,7 @@ class CallSummaryDetailViewModel : ViewModel() {
     val state: StateFlow<CallSummaryDetailUiState> = _state.asStateFlow()
 
     fun load(callId: String) {
+        loadCalendars()
         viewModelScope.launch {
             _state.value = CallSummaryDetailUiState(loading = true)
 
@@ -54,4 +59,50 @@ class CallSummaryDetailViewModel : ViewModel() {
             )
         }
     }
+    fun addToCalendar(callId: String, provider: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
+            runCatching {
+                CallRecorderApp.instance.container.api.addCalendarEvent(
+                    callId,
+                    mapOf("provider" to provider)
+                )
+            }
+                .fold(
+                onSuccess = { resp ->
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        calendarMessage = if (resp.success) "✅ 캘린더에 추가됐어요!" else "❌ 추가 실패"
+                    )
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        calendarMessage = "❌ ${it.message}"
+                    )
+                }
+            )
+        }
+    }
+
+    fun loadCalendars() {
+        viewModelScope.launch {
+            CallRecorderApp.instance.container.calendarRepo.getConnections().fold(
+                onSuccess = { connections ->
+                    _state.value = _state.value.copy(
+                        connectedCalendars = connections.map { it.provider }
+                    )
+                },
+                onFailure = {}
+            )
+        }
+    }
+
+    fun toggleCalendarPicker() {
+        _state.value = _state.value.copy(
+            showCalendarPicker = !_state.value.showCalendarPicker
+        )
+    }
+
+
 }

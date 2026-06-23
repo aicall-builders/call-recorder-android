@@ -36,9 +36,26 @@ class CallRepository(
     suspend fun updateCategory(id: Long, category: String) =
         dao.updateCategory(id, category)
 
+    /** 발신자 번호/이름 서버에 저장 (PATCH /calls/{id}) */
+    suspend fun updateCaller(callId: String, number: String, name: String): Result<Unit> =
+        runCatching {
+            api.updateCall(callId, UpdateCallRequest(callerNumber = number, callerName = name))
+            Unit
+        }
+
     /** 외부에서 명시적으로 FAILED 마킹 (예: 파일 삭제됨) */
     suspend fun markAsFailed(id: Long, reason: String) {
         dao.setError(id, RecordingStatus.FAILED, reason)
+    }
+
+    /** 업로드 큐에서 제거 (CANCELED). 폰 녹음 파일은 그대로 두고, 재스캔돼도 재업로드 안 함. */
+    suspend fun cancelUpload(id: Long) {
+        dao.updateStatus(id, RecordingStatus.CANCELED)
+    }
+
+    /** 진행 중인 업로드 전체 일괄 취소. */
+    suspend fun cancelAllUploads() {
+        dao.cancelAllActive()
     }
 
     fun observeAll() = dao.observeAll()
@@ -48,7 +65,11 @@ class CallRepository(
     fun observeCountByCategory(category: String) = dao.observeCountByCategory(category)
 
     /** 한 건 업로드 → 서버 처리 트리거까지. 반환값은 서버 callId(String, UUID). */
-    suspend fun uploadAndProcess(rec: RecordingEntity): Result<String> = runCatching {
+    suspend fun uploadAndProcess(
+        rec: RecordingEntity,
+        resolvedNumber: String? = null,
+        resolvedName: String? = null,
+    ): Result<String> = runCatching {
         val file = File(rec.filePath)
         require(file.exists()) { "파일이 사라졌습니다: ${rec.filePath}" }
 
@@ -67,7 +88,7 @@ class CallRepository(
                 mimeType = mime,
                 callStartedAt = isoFormat(rec.callStartedAtMillis),
                 durationSeconds = rec.durationSeconds,
-                counterpartNumber = rec.counterpartNumber,
+                counterpartNumber = resolvedNumber ?: rec.counterpartNumber,
                 callerCategory = rec.category,                    // ← 추가: 안드 분류 정보 전송
             )
         )
@@ -85,6 +106,19 @@ class CallRepository(
 
         dao.setServerCallId(rec.id, urlResp.callId, RecordingStatus.UPLOADED)
 
+        // 2.5) 통화기록 기반 발신자 번호/이름 보강 → 서버 저장 (폰·웹 양쪽 반영)
+        if (!resolvedNumber.isNullOrBlank() || !resolvedName.isNullOrBlank()) {
+            runCatching {
+                api.updateCall(
+                    urlResp.callId,
+                    UpdateCallRequest(
+                        callerNumber = resolvedNumber ?: rec.counterpartNumber ?: "",
+                        callerName = resolvedName ?: "",
+                    ),
+                )
+            }.onFailure { SafeLog.w("CallRepo", "발신자 정보 보강 실패", it) }
+        }
+
         // 3) STT/요약 처리 트리거
         val procResp = api.processCall(urlResp.callId)
         if (!procResp.isSuccessful) {
@@ -95,6 +129,10 @@ class CallRepository(
         urlResp.callId
     }.onFailure { e ->
         dao.setError(rec.id, RecordingStatus.FAILED, e.message)
+    }
+
+    suspend fun deleteCall(callId: String): Result<Unit> = runCatching {
+        api.deleteCall(callId)
     }
 
     suspend fun listCalls(storeId: String?): Result<List<Call>> = runCatching {

@@ -8,6 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +41,8 @@ fun CallsScreen(
     val unclassifiedCount by vm.unclassifiedCount.collectAsState()
     val businessCount by vm.businessCount.collectAsState()
     val personalCount by vm.personalCount.collectAsState()
+    val searchQuery by vm.searchQuery.collectAsState()
+    val filteredCalls by vm.filteredCalls.collectAsState()
 
     Scaffold(
         topBar = {
@@ -53,53 +57,100 @@ fun CallsScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ===== 카테고리 탭 =====
-            CategoryTabs(
-                selected = selectedCategory,
-                unclassifiedCount = unclassifiedCount,
-                businessCount = businessCount,
-                personalCount = personalCount,
-                onSelect = vm::selectCategory,
-            )
+            CallSearchBar(query = searchQuery, onChange = vm::setSearch)
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                // ===== 카테고리별 로컬 녹음 =====
-                if (categorized.isEmpty()) {
-                    item { CategoryEmptyState(selectedCategory) }
-                } else {
-                    items(categorized, key = { "cat-${it.id}" }) { rec ->
-                        ClassifiableRow(
-                            rec = rec,
-                            onClassify = { cat -> vm.classifyAs(rec.id, cat) },
-                        )
-                    }
-                }
-
-                // ===== 서버 완료 통화 (BUSINESS 탭일 때만) =====
-                if (selectedCategory == CallCategory.BUSINESS) {
-                    item { Spacer(Modifier.height(8.dp)) }
-                    item {
-                        SectionHeader("최근 분석 완료", if (state.calls.isEmpty()) "" else "${state.calls.size}건")
-                    }
-                    if (state.loading && state.calls.isEmpty()) {
+            if (searchQuery.isNotBlank()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    item { SectionHeader("검색 결과", "${filteredCalls.size}건") }
+                    if (filteredCalls.isEmpty()) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                                Text("검색 결과가 없어요", color = Color(0xFF8A8B94))
                             }
                         }
                     } else {
-                        items(state.calls, key = { it.id }) {
+                        items(filteredCalls, key = { it.id }) {
                             CallRow(it, onClick = { onCallClick(it.id) })
+                        }
+                    }
+                }
+            } else {
+
+                // ===== 카테고리 탭 =====
+                CategoryTabs(
+                    selected = selectedCategory,
+                    unclassifiedCount = unclassifiedCount,
+                    businessCount = businessCount,
+                    personalCount = personalCount,
+                    onSelect = vm::selectCategory,
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // ===== 카테고리별 로컬 녹음 =====
+                    if (categorized.isEmpty()) {
+                        item { CategoryEmptyState(selectedCategory) }
+                    } else {
+                        items(categorized, key = { "cat-${it.id}" }) { rec ->
+                            ClassifiableRow(
+                                rec = rec,
+                                onClassify = { cat -> vm.classifyAs(rec.id, cat) },
+                            )
+                        }
+                    }
+
+                    // ===== 서버 완료 통화 (BUSINESS 탭일 때만) =====
+                    if (selectedCategory == CallCategory.BUSINESS) {
+                        item { Spacer(Modifier.height(8.dp)) }
+                        item {
+                            SectionHeader("최근 분석 완료", if (state.calls.isEmpty()) "" else "${state.calls.size}건")
+                        }
+                        if (state.loading && state.calls.isEmpty()) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+                        } else {
+                            items(state.calls, key = { it.id }) {
+                                CallRow(it, onClick = { onCallClick(it.id) })
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CallSearchBar(query: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        placeholder = { Text("번호 · 요약 · 분류 검색", fontSize = 14.sp) },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "검색") },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "지우기")
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+    )
 }
 
 @Composable

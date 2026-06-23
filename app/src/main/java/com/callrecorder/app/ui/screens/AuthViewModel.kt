@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class LoginType { KAKAO, GOOGLE, NAVER, NONE }
+
 class AuthViewModel : ViewModel() {
 
     private val container = CallRecorderApp.instance.container
@@ -21,13 +23,42 @@ class AuthViewModel : ViewModel() {
 
     fun loginWithKakao(context: Context) {
         if (_state.value.loading) return
-        _state.value = _state.value.copy(loading = true, error = null)
+        _state.value = _state.value.copy(loading = true, error = null, loginType = LoginType.KAKAO)
         viewModelScope.launch {
             repo.loginWithKakao(context).fold(
-                onSuccess = { _state.value = AuthUiState(loading = false, success = true) },
+                onSuccess = { _state.value = AuthUiState(loading = false, success = true, loginType = LoginType.KAKAO) },
                 onFailure = { _state.value = AuthUiState(loading = false, error = it.message) },
             )
         }
+    }
+
+    fun setLoading(type: LoginType) {
+        _state.value = _state.value.copy(loading = true, error = null, loginType = type)
+    }
+
+    // idToken만 받도록 단순화
+    fun handleGoogleSignInResult(idToken: String) {
+        viewModelScope.launch {
+            repo.loginWithGoogle(idToken).fold(
+                onSuccess = { _state.value = AuthUiState(loading = false, success = true, loginType = LoginType.GOOGLE) },
+                onFailure = { _state.value = AuthUiState(loading = false, error = it.message) },
+            )
+        }
+    }
+
+    fun loginWithNaver(context: Context) {
+        if (_state.value.loading) return
+        _state.value = _state.value.copy(loading = true, error = null, loginType = LoginType.NAVER)
+        viewModelScope.launch {
+            repo.loginWithNaver(context).fold(
+                onSuccess = { _state.value = AuthUiState(loading = false, success = true, loginType = LoginType.NAVER) },
+                onFailure = { _state.value = AuthUiState(loading = false, error = it.message) },
+            )
+        }
+    }
+
+    fun setError(message: String?) {
+        _state.value = _state.value.copy(loading = false, error = message, loginType = LoginType.NONE)
     }
 
     fun logout() {
@@ -39,4 +70,5 @@ data class AuthUiState(
     val loading: Boolean = false,
     val success: Boolean = false,
     val error: String? = null,
+    val loginType: LoginType = LoginType.NONE,
 )

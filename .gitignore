@@ -13,3 +13,5 @@ google-services.json
 *.jks
 gradle.properties
 build/
+/app/release/
+*.apk

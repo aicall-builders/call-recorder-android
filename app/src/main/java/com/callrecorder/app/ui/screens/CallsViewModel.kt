@@ -24,6 +24,24 @@ class CallsViewModel : ViewModel() {
     private val _selectedCategory = MutableStateFlow(CallCategory.UNCLASSIFIED)
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
+    /** 검색어 */
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /** 검색어로 필터된 분석 완료 통화 (번호·요약·분류 매칭) */
+    val filteredCalls: StateFlow<List<Call>> =
+        combine(_state, _searchQuery) { st, q ->
+            if (q.isBlank()) st.calls
+            else {
+                val query = q.trim().lowercase()
+                st.calls.filter { c ->
+                    (c.callerNumber?.lowercase()?.contains(query) == true) ||
+                            (c.summary?.lowercase()?.contains(query) == true) ||
+                            (c.category?.lowercase()?.contains(query) == true)
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** 전체 로컬 녹음 (서버 업로드 진행 표시용) */
     val localRecordings: StateFlow<List<RecordingEntity>> =
         callRepo.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -53,6 +71,11 @@ class CallsViewModel : ViewModel() {
     /** 탭 전환 */
     fun selectCategory(category: String) {
         _selectedCategory.value = category
+    }
+
+    /** 검색어 변경 */
+    fun setSearch(q: String) {
+        _searchQuery.value = q
     }
 
     /** 사용자가 통화를 수동으로 분류 변경 */

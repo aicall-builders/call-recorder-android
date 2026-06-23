@@ -3,11 +3,16 @@ package com.callrecorder.app.data.repository
 import android.content.Context
 import com.callrecorder.app.data.api.ApiService
 import com.callrecorder.app.data.local.TokenStore
+import com.callrecorder.app.data.model.GoogleLoginRequest
 import com.callrecorder.app.data.model.KakaoLoginRequest
+import com.callrecorder.app.data.model.NaverLoginRequest
 import com.callrecorder.app.util.SafeLog
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.kakao.sdk.auth.model.OAuthToken
 import com.kakao.sdk.user.UserApiClient
+import com.navercorp.nid.NaverIdLoginSDK
+import com.navercorp.nid.oauth.OAuthLoginCallback
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
@@ -17,39 +22,121 @@ class AuthRepository(
     private val api: ApiService,
     private val tokenStore: TokenStore,
 ) {
-    /**
-     * 카카오 로그인 -> 우리 서버에 access_token 전달 -> 서버가 Firebase custom_token 발급
-     * -> Firebase Auth.signInWithCustomToken 으로 ID 토큰 획득 가능 상태로 만듦
-     * -> TokenStore 에는 사용자 식별 정보만 저장 (실제 ID 토큰은 매 요청마다 Firebase에서 가져옴)
-     *
-     * 주의: 백엔드의 access_token 필드는 사실 Firebase **custom_token**임 (audience가 identitytoolkit).
-     *      이 값을 그대로 Authorization 헤더에 넣으면 401이 나므로 반드시 ID 토큰으로 교환해야 한다.
-     */
+
+    // ═══════════════════════════════════════════════
+    // 카카오 로그인 (기존 유지)
+    // ═══════════════════════════════════════════════
     suspend fun loginWithKakao(context: Context): Result<Unit> = runCatching {
-        // 1) 카카오 SDK 로 OAuth 토큰 획득
         val kakaoToken = kakaoLogin(context)
 
-        // 2) 우리 백엔드에 카카오 access_token 넘겨서 Firebase custom_token 받기
-        val resp = api.loginWithKakao(KakaoLoginRequest(kakaoToken.accessToken))
+        suspendCancellableCoroutine<com.kakao.sdk.user.model.User> { cont ->
+            UserApiClient.instance.me { user, error ->
+                if (error != null) cont.resumeWithException(error)
+                else if (user != null) cont.resume(user)
+                else cont.resumeWithException(IllegalStateException("kakao user null"))
+            }
+        }
+
+        val resp = api.loginWithKakao(KakaoLoginRequest(
+            providerAccessToken = kakaoToken.accessToken,
+        ))
         val customToken = resp.customToken
 
-        // 3) Firebase Auth 로 custom_token -> ID Token 교환 (이때 Firebase 에 로그인됨)
         val firebaseAuth = FirebaseAuth.getInstance()
         firebaseAuth.signInWithCustomToken(customToken).await()
-        val uid = firebaseAuth.currentUser?.uid
-        SafeLog.i("AuthRepo", "Firebase signed in. uid=$uid")
+        SafeLog.i("AuthRepo", "Kakao Firebase signed in. uid=${firebaseAuth.currentUser?.uid}")
 
-        // 4) 식별 정보 저장 (ID 토큰 자체는 매 요청마다 getIdToken() 으로 가져옴)
-        //    access_token 필드에는 임시로 customToken 을 넣어두지만 실제 API 호출엔 사용 X.
-        //    토큰 존재 여부 = "로그인 됨" 신호로만 사용.
         tokenStore.saveTokens(
             access = customToken,
             refresh = resp.refreshToken,
-            userId = resp.user.id,
-            nickname = resp.user.nickname,
+            userId = resp.user?.id ?: resp.uid ?: "",
+            nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
         )
     }
 
+    // ═══════════════════════════════════════════════
+    // 구글 로그인
+    //
+    // 흐름:
+    // 1) LoginScreen에서 Google Sign-In → idToken 획득
+    // 2) Firebase에 Google credential로 로그인
+    // 3) Firebase에서 최신 access_token 가져오기
+    // 4) access_token을 백엔드 /auth/google 에 전달
+    // 5) 백엔드가 Firebase custom_token 발급
+    // 6) Firebase signInWithCustomToken
+    // ═══════════════════════════════════════════════
+    suspend fun loginWithGoogle(idToken: String): Result<Unit> = runCatching {
+        // 1) Firebase에 Google credential로 로그인
+        val credential = GoogleAuthProvider.getCredential(idToken, null)
+        val firebaseAuth = FirebaseAuth.getInstance()
+        firebaseAuth.signInWithCredential(credential).await()
+        SafeLog.i("AuthRepo", "Google Firebase credential sign-in ok")
+
+        // idToken을 그대로 백엔드에 전달
+        // 백엔드의 _fetch_profile("google", token)은
+        // openidconnect userinfo 엔드포인트를 호출하는데
+        // idToken도 Bearer로 사용 가능함
+        SafeLog.i("AuthRepo", "Google idToken → backend /auth/google 호출")
+
+        val resp = api.loginWithGoogle(GoogleLoginRequest(
+            providerAccessToken = idToken,
+        ))
+        val customToken = resp.customToken
+        SafeLog.i("AuthRepo", "Google backend login ok uid=${resp.uid}")
+
+        // 3) Firebase custom_token으로 재로그인 (백엔드 uid 동기화)
+        firebaseAuth.signInWithCustomToken(customToken).await()
+        SafeLog.i("AuthRepo", "Google Firebase custom token sign-in ok uid=${firebaseAuth.currentUser?.uid}")
+
+        // 4) TokenStore 저장
+        tokenStore.saveTokens(
+            access = customToken,
+            refresh = resp.refreshToken,
+            userId = resp.user?.id ?: resp.uid ?: "",
+            nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
+        )
+    }
+
+    // ═══════════════════════════════════════════════
+    // 네이버 로그인
+    // ═══════════════════════════════════════════════
+    suspend fun loginWithNaver(context: Context): Result<Unit> = runCatching {
+        val naverToken = suspendCancellableCoroutine<String> { cont ->
+            NaverIdLoginSDK.authenticate(context, object : OAuthLoginCallback {
+                override fun onSuccess() {
+                    val token = NaverIdLoginSDK.getAccessToken()
+                    if (token != null) cont.resume(token)
+                    else cont.resumeWithException(IllegalStateException("Naver token null"))
+                }
+                override fun onFailure(httpStatus: Int, message: String) {
+                    cont.resumeWithException(IllegalStateException("Naver 로그인 실패: $message"))
+                }
+                override fun onError(errorCode: Int, message: String) {
+                    cont.resumeWithException(IllegalStateException("Naver 로그인 오류: $message"))
+                }
+            })
+        }
+
+        SafeLog.i("AuthRepo", "Naver accessToken 획득 완료")
+
+        val resp = api.loginWithNaver(NaverLoginRequest(providerAccessToken = naverToken))
+        val customToken = resp.customToken
+
+        val firebaseAuth = FirebaseAuth.getInstance()
+        firebaseAuth.signInWithCustomToken(customToken).await()
+        SafeLog.i("AuthRepo", "Naver Firebase signed in. uid=${firebaseAuth.currentUser?.uid}")
+
+        tokenStore.saveTokens(
+            access = customToken,
+            refresh = resp.refreshToken,
+            userId = resp.user?.id ?: resp.uid ?: "",
+            nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
+        )
+    }
+
+    // ═══════════════════════════════════════════════
+    // 카카오 로그인 헬퍼
+    // ═══════════════════════════════════════════════
     private suspend fun kakaoLogin(context: Context): OAuthToken =
         suspendCancellableCoroutine { cont ->
             val callback: (OAuthToken?, Throwable?) -> Unit = { token, error ->
@@ -60,25 +147,25 @@ class AuthRepository(
             val client = UserApiClient.instance
             if (client.isKakaoTalkLoginAvailable(context)) {
                 client.loginWithKakaoTalk(context) { token, error ->
-                    if (error != null) {
-                        // 카카오톡 로그인 실패 시 카카오계정으로 폴백
-                        client.loginWithKakaoAccount(context, callback = callback)
-                    } else callback(token, null)
+                    if (error != null) client.loginWithKakaoAccount(context, callback = callback)
+                    else callback(token, null)
                 }
             } else {
                 client.loginWithKakaoAccount(context, callback = callback)
             }
         }
 
+    // ═══════════════════════════════════════════════
+    // 로그아웃
+    // ═══════════════════════════════════════════════
     suspend fun logout() {
-        // Firebase 로그아웃
         runCatching { FirebaseAuth.getInstance().signOut() }
-        // 카카오 로그아웃
         runCatching {
             suspendCancellableCoroutine<Unit> { cont ->
                 UserApiClient.instance.logout { _ -> cont.resume(Unit) }
             }
         }
+        runCatching { NaverIdLoginSDK.logout() }
         tokenStore.clear()
     }
 }

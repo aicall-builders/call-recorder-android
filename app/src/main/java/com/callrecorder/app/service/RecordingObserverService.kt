@@ -80,6 +80,10 @@ class RecordingObserverService : Service() {
             val found = app.container.scanner.scan(sinceMillis = oneHourAgo)
             if (found.isEmpty()) return@launch
 
+            // 자동 업로드 설정 (false=수동 승인 후 업로드)
+            val autoUpload = app.isAutoUploadEnabled()
+            val newStatus = if (autoUpload) RecordingStatus.PENDING else RecordingStatus.AWAITING_APPROVAL
+
             var newCount = 0
             found.forEach { f ->
                 val id = app.container.callRepo.registerLocal(
@@ -91,13 +95,16 @@ class RecordingObserverService : Service() {
                         callStartedAtMillis = f.callStartedAtMillis,
                         counterpartNumber = f.counterpartNumber,
                         storeId = storeId,
-                        status = RecordingStatus.PENDING,
+                        status = newStatus,
                     )
                 )
                 if (id > 0) newCount++
             }
-            SafeLog.i(TAG, "Detected ${found.size} files (new=$newCount), enqueuing upload")
-            UploadWorker.enqueueOneShot(applicationContext)
+            // 자동 모드일 때만 즉시 업로드 트리거. 수동 모드면 승인 화면에서 사용자가 올린다.
+            if (autoUpload && newCount > 0) {
+                UploadWorker.enqueueOneShot(applicationContext)
+            }
+            SafeLog.i(TAG, "Detected ${found.size} files (new=$newCount), auto=$autoUpload")
         }
     }
 
