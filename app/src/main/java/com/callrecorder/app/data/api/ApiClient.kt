@@ -1,5 +1,6 @@
 package com.callrecorder.app.data.api
 
+import android.util.Log
 import com.callrecorder.app.BuildConfig
 import com.callrecorder.app.data.local.TokenStore
 import com.callrecorder.app.util.SafeLog
@@ -79,6 +80,7 @@ object ApiClient {
             .build()
 
         val contentType = "application/json".toMediaType()
+        Log.d("API_URL", "Base URL = ${BuildConfig.API_BASE_URL}")
         return Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)

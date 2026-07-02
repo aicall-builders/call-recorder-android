@@ -75,7 +75,7 @@ fun IntroScreen(
 
             // ===== 서비스 명 =====
             Text(
-                text = "AI 통화 비서",
+                text = "통화비서 FIANO",
                 style = TextStyle(
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,

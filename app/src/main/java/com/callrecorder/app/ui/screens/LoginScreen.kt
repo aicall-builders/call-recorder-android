@@ -89,7 +89,7 @@ fun LoginScreen(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = "AI 통화 비서",
+                text = "통화비서 FIANO",
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary),
             )
 
@@ -153,7 +153,7 @@ fun LoginScreen(
                 onClick = {
                     // requestServerAuthCode 없이 idToken만 요청
                     val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken("213295926741-kchpjbvh6qhlovld5njcvnrnlh9v13mc.apps.googleusercontent.com")
+                        .requestIdToken("637616780815-1jqnk92f4l0icuma1gqabfr6a7tq4fce.apps.googleusercontent.com")
                         .requestEmail()
                         .build()
                     val signInIntent = GoogleSignIn.getClient(context, gso).signInIntent
