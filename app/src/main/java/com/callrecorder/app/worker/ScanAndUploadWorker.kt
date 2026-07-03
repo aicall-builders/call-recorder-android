@@ -40,9 +40,9 @@ class ScanAndUploadWorker(
         val storeId = tokenStore.getActiveStore() ?: return Result.success()
         if (tokenStore.getAccessToken().isNullOrBlank()) return Result.success()
 
-        // 자동 업로드 설정 (false=수동 승인). 신규 파일 등록 상태를 결정한다.
-        val autoUpload = app.isAutoUploadEnabled()
-        val newStatus = if (autoUpload) RecordingStatus.PENDING else RecordingStatus.AWAITING_APPROVAL
+        // 테스트/데모 안정화: 새 녹음파일은 수동 승인 대기 없이 즉시 업로드 큐에 넣는다.
+        // 기존 자동 업로드 설정이 꺼져 있으면 AWAITING_APPROVAL에 머물러 /calls/upload가 호출되지 않는 문제가 있었다.
+        val newStatus = RecordingStatus.PENDING
 
         // 1) 스캔
         val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
