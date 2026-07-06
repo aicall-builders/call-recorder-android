@@ -9,6 +9,10 @@ data class CalendarEvent(
     val provider: String,
     val title: String,
     val time: String,                                    // "14:00"
+    @SerialName("call_id") val callId: String? = null,
+    @SerialName("caller_name") val callerName: String? = null,
+    @SerialName("caller_number") val callerNumber: String? = null,
+    val category: String? = null,
     @SerialName("end_time") val endTime: String = "",
     val description: String = "",
     @SerialName("event_url") val eventUrl: String? = null,

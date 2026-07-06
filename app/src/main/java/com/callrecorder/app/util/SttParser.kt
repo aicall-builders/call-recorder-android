@@ -20,7 +20,7 @@ data class SttMessage(
 
 enum class SttSpeaker {
     CUSTOMER,   // [화자1] - 좌측 회색 말풍선
-    BOT,        // [화자2] - 우측 파란 말풍선 (AI 통화 비서/업주)
+    BOT,        // [화자2] - 우측 파란 말풍선 (FIANO/업주)
     UNKNOWN,    // 라벨 없는 경우
 }
 

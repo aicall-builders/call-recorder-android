@@ -2,6 +2,8 @@ package com.callrecorder.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -28,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,11 +41,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.callrecorder.app.R
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CallCategoryLabel
 import com.callrecorder.app.data.model.ExtractedInfo
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.internalKeywordsString
+import com.callrecorder.app.ui.theme.AppColors
 import com.callrecorder.app.util.SttMessage
 import com.callrecorder.app.util.SttParser
 import com.callrecorder.app.util.SttSpeaker
@@ -51,18 +56,19 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-/* ── 색상: 통화 상세 시안 기준 ── */
-private val ScreenBg   = Color(0xFF5F6071)   // 상단 다크 영역
+/* ── 색상: FIANO 0705 디자인 시스템 ── */
+private val ScreenBg   = AppColors.DeepBrown900
 private val SheetBg    = Color(0xFFFFFFFF)   // 본문 흰 시트
-private val TabOffBg   = Color(0xFFEEEEEE)   // 비활성 탭
-private val Ink        = Color(0xFF343659)   // 진한 남보라
-private val SummaryBoxBg = Color(0xFFF3F4F6) // AI 요약 카드 배경
-private val LabelGray  = Color(0xFF99A1B0)   // 요약 라벨
-private val LabelGrayActive = Color(0xFF6C6C6C)
-private val BubbleBot  = Color(0xFF5F6071)   // 수신자(우측) 말풍선
-private val BubbleCustomer = Color(0xFFF2F4F7) // 발신자(좌측) 말풍선
-private val SpeakerLabel = Color(0xFF5B6E93)
-private val TrackEmpty  = Color(0xFFB5B5B5)
+private val TabOffBg   = AppColors.DeepBrown50
+private val Ink        = AppColors.DeepBrown950
+private val SummaryBoxBg = AppColors.DeepBrown50
+private val LabelGray  = AppColors.DeepBrown400
+private val LabelGrayActive = AppColors.DeepBrown600
+private val BubbleBot  = AppColors.DeepBrown700
+private val BubbleCustomer = AppColors.DeepBrown50
+private val SpeakerLabel = AppColors.DeepBrown600
+private val TrackEmpty  = AppColors.DeepBrown300
+private val DetailStroke = Color(0xFF343659)
 
 private enum class DetailTab { ANALYSIS, TRANSCRIPT }
 
@@ -127,8 +133,7 @@ private fun DetailBody(
     Column(Modifier.fillMaxSize()) {
         // ═══ 상단 다크 영역 (헤더 + 발신자 + 플레이어) — 고정 ═══
         DetailTopBar(onBack = onBack)
-        ContactBlock(call = call, info = info)
-        AudioPlayerDark(audioUrl = audioUrl)
+        DetailHero(call = call, info = info, audioUrl = audioUrl)
 
         // ═══ 탭 (시트 상단 라운드) ═══
         Row(
@@ -143,11 +148,12 @@ private fun DetailBody(
         // ═══ 본문 (흰 시트, 스크롤) ═══
         Column(
             Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .weight(1f)
                 .background(SheetBg)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
-                .padding(top = 16.dp, bottom = 80.dp),
+                .padding(top = 16.dp, bottom = 84.dp),
         ) {
             when (tab) {
                 DetailTab.ANALYSIS -> AnalysisTabContent(
@@ -172,20 +178,39 @@ private fun DetailTopBar(onBack: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
+            .height(52.dp)
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack, "뒤로",
-                tint = Color.White,
+            Image(
+                painter = painterResource(R.drawable.detail_icon_back),
+                contentDescription = "뒤로",
                 modifier = Modifier.size(24.dp).clickable { onBack() },
             )
             Spacer(Modifier.width(8.dp))
             Text("통화 상세", style = TextStyle(fontSize = 18.sp, color = Color.White))
         }
-        Icon(Icons.Filled.NotificationsNone, "알림", tint = Color.White, modifier = Modifier.size(20.dp))
+        Image(
+            painter = painterResource(R.drawable.call_icon_alarm),
+            contentDescription = "알림",
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun DetailHero(call: Call, info: ExtractedInfo?, audioUrl: String?) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(124.dp)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        ContactBlock(call = call, info = info)
+        AudioPlayerDark(audioUrl = audioUrl)
     }
 }
 
@@ -200,20 +225,14 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .height(46.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 원형 통화 아이콘 (방향 데이터 없어 통일)
-        Surface(
-            color = Color.White.copy(alpha = 0.15f),
-            shape = CircleShape,
+        Image(
+            painter = painterResource(R.drawable.call_icon_type_default),
+            contentDescription = null,
             modifier = Modifier.size(36.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(18.dp))
-            }
-        }
+        )
         Column(Modifier.weight(1f)) {
             Text(displayPhone, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
             Spacer(Modifier.height(2.dp))
@@ -225,6 +244,11 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
                 }
             }
         }
+        Image(
+            painter = painterResource(R.drawable.detail_icon_download),
+            contentDescription = "다운로드",
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
 
@@ -266,8 +290,7 @@ private fun AudioPlayerDark(audioUrl: String?) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 8.dp)
-            .padding(bottom = 16.dp),
+            .height(38.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -358,10 +381,15 @@ private fun DarkSeekBar(progress: Float, enabled: Boolean, onSeek: (Float) -> Un
 private fun DetailTabButton(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Surface(
         color = if (selected) SheetBg else TabOffBg,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         modifier = modifier.clickable { onClick() },
     ) {
-        Box(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .padding(top = 16.dp, bottom = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
         }
     }
@@ -406,11 +434,8 @@ private fun AnalysisTabContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("✦ AI 요약", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // SMS (현재 동작 미연결 — 자리만)
-                    ActionCircle(icon = Icons.Filled.Sms) { }
-                    // 캘린더
-                    ActionCircle(icon = Icons.Filled.CalendarMonth, loading = calendarLoading) { onToggleCalendarPicker() }
+                ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
+                    onToggleCalendarPicker()
                 }
             }
 
@@ -423,9 +448,9 @@ private fun AnalysisTabContent(
                 ) {
                     Column(Modifier.padding(4.dp)) {
                         val labels = mapOf(
-                            "google" to "📅 Google 캘린더",
-                            "kakao" to "💛 카카오 캘린더",
-                            "naver" to "💚 네이버 캘린더",
+                            "google" to "Google 캘린더",
+                            "kakao" to "카카오 캘린더",
+                            "naver" to "네이버 캘린더",
                         )
                         connectedCalendars.forEach { provider ->
                             Text(
@@ -484,7 +509,7 @@ private fun AnalysisTabContent(
 
 @Composable
 private fun ActionCircle(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconRes: Int,
     loading: Boolean = false,
     onClick: () -> Unit,
 ) {
@@ -495,7 +520,7 @@ private fun ActionCircle(
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
         } else {
-            Icon(icon, null, tint = Color.White, modifier = Modifier.size(22.dp))
+            Image(painter = painterResource(iconRes), contentDescription = null, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -505,29 +530,47 @@ private fun ActionCircle(
 private fun TranscriptTabContent(messages: List<SttMessage>, fullText: String?) {
     val clipboard = LocalClipboardManager.current
 
-    Column(Modifier.fillMaxWidth()) {
-        // 복사 버튼 (우측)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Box(
-                modifier = Modifier.size(34.dp).clip(CircleShape)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.detail_icon_copy),
+                contentDescription = "복사",
+                modifier = Modifier
+                    .size(24.dp)
                     .clickable { if (!fullText.isNullOrBlank()) clipboard.setText(AnnotatedString(fullText)) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.ContentCopy, "복사", tint = Ink, modifier = Modifier.size(20.dp))
-            }
+            )
         }
 
-        if (messages.isEmpty()) {
-            Text(
-                "통화 원문이 아직 준비되지 않았습니다.",
-                style = TextStyle(fontSize = 13.sp, color = LabelGray),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(24.dp),
-            )
-        } else {
-            messages.forEachIndexed { idx, msg ->
-                if (idx > 0) Spacer(Modifier.height(12.dp))
-                MessageBubble(msg)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.Transparent,
+            border = BorderStroke(1.dp, DetailStroke),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (messages.isEmpty()) {
+                    Text(
+                        "통화 원문이 아직 준비되지 않았습니다.",
+                        style = TextStyle(fontSize = 13.sp, color = LabelGray),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    )
+                } else {
+                    messages.forEach { msg ->
+                        MessageBubble(msg)
+                    }
+                }
             }
         }
     }

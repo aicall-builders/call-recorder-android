@@ -1,37 +1,34 @@
 package com.callrecorder.app.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.ContactsContract
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.NotificationsNone
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -39,39 +36,41 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.callrecorder.app.R
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CallCategoryLabel
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.internalKeywordsMap
 import com.callrecorder.app.data.model.isAnalyzed
+import com.callrecorder.app.ui.theme.AppColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/* ── 색상: 시안(통화 관리) 기준 ── */
-private val ScreenBg       = Color(0xFF5F6071)   // 화면 전체 배경(헤더/검색 영역)
+/* ── 색상: FIANO 0705 디자인 시스템 ── */
+private val ScreenBg       = AppColors.DeepBrown900
 private val SheetBg        = Color(0xFFFFFFFF)   // 본문 흰 시트
-private val TabInactiveBg  = Color(0xFFEEEEEE)   // 비활성 탭
-private val Ink            = Color(0xFF343659)   // 진한 남보라 (타이틀/선택 칩)
-private val SubInk         = Color(0xFF5A5D86)   // 보조 남보라
-private val AccentBlue     = Color(0xFF2867E5)   // 시간/포인트 블루
+private val TabInactiveBg  = AppColors.DeepBrown50
+private val Ink            = AppColors.DeepBrown950
+private val SubInk         = AppColors.DeepBrown700
+private val AccentBlue     = AppColors.SignalRed500
 private val OnDarkPrimary  = Color(0xFFFFFFFF)
-private val PlaceholderGray = Color(0xFF99A1AF)
-private val LabelGray      = Color(0xFF99A1AF)
-private val GroupGray      = Color(0xFF737373)
-private val SearchBorder   = Color(0xFFE8ECF2)
+private val PlaceholderGray = AppColors.DeepBrown400
+private val LabelGray      = AppColors.DeepBrown400
+private val GroupGray      = AppColors.DeepBrown600
+private val SearchBorder   = AppColors.DeepBrown100
 
 // 캘린더 등록 안내 박스
-private val CalBoxBg = Color(0xFFE8F2FF)
-private val CalBoxFg = Color(0xFF1C6BD4)
+private val CalBoxBg = AppColors.SignalRed50
+private val CalBoxFg = AppColors.SignalRed700
 
 // 배지 (시안: 예약=Ink, 문의=SubInk, 기타=연회색)
 private val BadgeResBg = Ink;             private val BadgeResFg = Color(0xFFFFFFFF)
 private val BadgeInqBg = SubInk;          private val BadgeInqFg = Color(0xFFFFFFFF)
-private val BadgeCnlBg = Color(0xFFC23B3B); private val BadgeCnlFg = Color(0xFFFFFFFF)
-private val BadgeCmpBg = Color(0xFFC07818); private val BadgeCmpFg = Color(0xFFFFFFFF)
-private val BadgeNeuBg = Color(0xFFECEEF6); private val BadgeNeuFg = SubInk
+private val BadgeCnlBg = AppColors.SignalRed700; private val BadgeCnlFg = Color(0xFFFFFFFF)
+private val BadgeCmpBg = AppColors.DeepBrown600; private val BadgeCmpFg = Color(0xFFFFFFFF)
+private val BadgeNeuBg = AppColors.DeepBrown100; private val BadgeNeuFg = SubInk
 
 private enum class CallFilter { ALL, RESERVATION, INQUIRY, OTHER }
 private enum class AnalysisTab { PENDING, DONE }
@@ -82,6 +81,7 @@ fun CallSummaryListScreen(
     onCallClick: (String) -> Unit,
     vm: HomeViewModel = viewModel(),
 ) {
+    val context = LocalContext.current
     val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CallFilter.ALL) }
@@ -148,21 +148,29 @@ fun CallSummaryListScreen(
         ) {
             // ═══ 헤더 (ScreenBg 위) ═══
             item {
-                Column(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(ScreenBg),
+                ) {
                     // 타이틀 행
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                            .padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Phone, null, tint = OnDarkPrimary, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("통화 관리", style = TextStyle(fontSize = 18.sp, color = OnDarkPrimary))
-                        }
-                        Icon(Icons.Filled.NotificationsNone, "알림", tint = OnDarkPrimary, modifier = Modifier.size(20.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.call_icon_logo),
+                            contentDescription = "FIANO",
+                            modifier = Modifier.width(70.dp).height(24.dp),
+                        )
+                        Image(
+                            painter = painterResource(id = R.drawable.call_icon_alarm),
+                            contentDescription = "알림",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
 
                     // 서브타이틀 + 검색바
@@ -183,7 +191,11 @@ fun CallSummaryListScreen(
                                 Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(Icons.Filled.Search, null, tint = PlaceholderGray, modifier = Modifier.size(18.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.call_icon_search),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Box(Modifier.weight(1f)) {
                                     if (searchText.text.isEmpty()) {
@@ -250,10 +262,11 @@ fun CallSummaryListScreen(
                 }
             } else if (filtered.isEmpty()) {
                 item {
-                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                    Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                        Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
                             Text(
                                 if (tab == AnalysisTab.PENDING) "분석 대기 중인 통화가 없어요" else "해당하는 통화가 없어요",
+                                modifier = Modifier.padding(top = 40.dp),
                                 style = TextStyle(fontSize = 13.sp, color = PlaceholderGray),
                             )
                         }
@@ -310,13 +323,13 @@ fun CallSummaryListScreen(
                                         PendingCallCard(
                                             call = call,
                                             onClick = { onCallClick(call.id) },
-                                            onSave = { num, nm -> vm.updateCaller(call.id, num, nm) },
+                                            onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
                                         )
                                     } else {
                                         CallListCard(
                                             call = call,
                                             onClick = { onCallClick(call.id) },
-                                            onSave = { num, nm -> vm.updateCaller(call.id, num, nm) },
+                                            onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
                                         )
                                     }
                                 }
@@ -411,7 +424,7 @@ private fun pendingPhaseOf(call: Call): PendingPhase {
 private fun PendingCallCard(
     call: Call,
     onClick: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onEditContact: () -> Unit,
 ) {
     val callTime = formatTimeShort(call.createdAt)
     val durationText = formatDuration(call.duration)
@@ -420,8 +433,6 @@ private fun PendingCallCard(
     val name = call.callerName?.takeIf { it.isNotBlank() }
     val number = call.callerNumber?.takeIf { it.isNotBlank() }
     val primary = name ?: number ?: "발신번호 없음"
-
-    var showEdit by remember { mutableStateOf(false) }
 
     Surface(
         onClick = onClick,
@@ -432,11 +443,7 @@ private fun PendingCallCard(
         Column(Modifier.padding(8.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 왼쪽 원형 아이콘
-                Surface(color = Color(0xFFF1F3F8), shape = CircleShape, modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Phone, null, tint = Ink, modifier = Modifier.size(18.dp))
-                    }
-                }
+                CallTypeIcon(call)
 
                 Column(Modifier.weight(1f)) {
                     // 이름/번호 + 시간 + 상태 배지
@@ -447,12 +454,12 @@ private fun PendingCallCard(
                                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Icon(
-                                Icons.Filled.Edit, "수정",
-                                tint = LabelGray,
+                            Image(
+                                painter = painterResource(id = R.drawable.call_icon_edit),
+                                contentDescription = "연락처 수정",
                                 modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { showEdit = true },
+                                    .size(20.dp)
+                                    .clickable { onEditContact() },
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(callTime, style = TextStyle(fontSize = 13.sp, color = AccentBlue))
@@ -485,18 +492,6 @@ private fun PendingCallCard(
             }
         }
     }
-
-    if (showEdit) {
-        CallerEditDialog(
-            initialNumber = call.callerNumber ?: "",
-            initialName = call.callerName ?: "",
-            onDismiss = { showEdit = false },
-            onSave = { num, nm ->
-                onSave(num, nm)
-                showEdit = false
-            },
-        )
-    }
 }
 
 @Composable
@@ -516,7 +511,7 @@ private fun PhaseBadge(phase: PendingPhase) {
 private fun CallListCard(
     call: Call,
     onClick: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onEditContact: () -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val callTime = formatTimeShort(call.createdAt)
@@ -524,23 +519,16 @@ private fun CallListCard(
 
     val internalKw = remember(call.internalKeywordsRaw) { call.internalKeywordsMap() }
 
-    val processResult = call.summary?.takeIf { it.isNotBlank() }
-        ?: info?.specialNotes?.takeIf { it.isNotBlank() }
-        ?: internalKw.entries.firstOrNull()?.value
-        ?: "처리 결과 없음"
+    val processResult = remember(call.summary, call.extractedInfoRaw, call.internalKeywordsRaw) {
+        compactCallListSummary(call, info, internalKw)
+    }
 
     val name = call.callerName?.takeIf { it.isNotBlank() }
     val number = call.callerNumber?.takeIf { it.isNotBlank() }
     val primary = name ?: number ?: "발신번호 없음"
 
-    // ② 통화 방향 아이콘 (서버 방향 컬럼이 없으므로 현재는 통화 아이콘으로 통일.
-    //    추후 Call.direction 들어오면 여기 분기만 바꾸면 됨)
-    val directionIcon: ImageVector = Icons.Filled.Phone
-
     // ③ 캘린더 등록 안내 문구: 예약 + date·time 있을 때만
     val calendarText = remember(call.id, info) { buildCalendarNotice(call, info) }
-
-    var showEdit by remember { mutableStateOf(false) }
 
     Surface(
         onClick = onClick,
@@ -551,11 +539,7 @@ private fun CallListCard(
         Column(Modifier.padding(8.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 왼쪽 원형 통화 아이콘
-                Surface(color = Color(0xFFF1F3F8), shape = CircleShape, modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(directionIcon, null, tint = Ink, modifier = Modifier.size(18.dp))
-                    }
-                }
+                CallTypeIcon(call)
 
                 Column(Modifier.weight(1f)) {
                     // 이름/번호 + 시간 + 배지
@@ -566,12 +550,12 @@ private fun CallListCard(
                                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
                             )
                             Spacer(Modifier.width(4.dp))
-                            Icon(
-                                Icons.Filled.Edit, "수정",
-                                tint = LabelGray,
+                            Image(
+                                painter = painterResource(id = R.drawable.call_icon_edit),
+                                contentDescription = "연락처 수정",
                                 modifier = Modifier
-                                    .size(16.dp)
-                                    .clickable { showEdit = true },
+                                    .size(20.dp)
+                                    .clickable { onEditContact() },
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(callTime, style = TextStyle(fontSize = 13.sp, color = AccentBlue))
@@ -597,7 +581,11 @@ private fun CallListCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(Icons.Filled.CalendarMonth, null, tint = CalBoxFg, modifier = Modifier.size(16.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.call_icon_timeline_marker),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
                         Text(
                             calendarText,
                             style = TextStyle(fontSize = 13.sp, color = CalBoxFg),
@@ -607,18 +595,21 @@ private fun CallListCard(
             }
         }
     }
+}
 
-    if (showEdit) {
-        CallerEditDialog(
-            initialNumber = call.callerNumber ?: "",
-            initialName = call.callerName ?: "",
-            onDismiss = { showEdit = false },
-            onSave = { num, nm ->
-                onSave(num, nm)
-                showEdit = false
-            },
-        )
-    }
+@Composable
+private fun CallTypeIcon(call: Call) {
+    Image(
+        painter = painterResource(id = callTypeIconRes(call)),
+        contentDescription = null,
+        modifier = Modifier.size(36.dp),
+    )
+}
+
+private fun callTypeIconRes(call: Call): Int {
+    // 현재 API에는 수신/발신 방향 필드가 아직 없다.
+    // direction/source 필드가 내려오면 여기에서 incoming/outgoing/recording 리소스로 분기하면 된다.
+    return R.drawable.call_icon_type_default
 }
 
 @Composable
@@ -631,54 +622,6 @@ private fun InfoRow(label: String, value: String) {
             maxLines = 1,
         )
     }
-}
-
-/* ── 발신자 정보 수정 다이얼로그 ── */
-@Composable
-private fun CallerEditDialog(
-    initialNumber: String,
-    initialName: String,
-    onDismiss: () -> Unit,
-    onSave: (String, String) -> Unit,
-) {
-    var number by remember { mutableStateOf(initialNumber) }
-    var name by remember { mutableStateOf(initialName) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text("발신자 정보 수정", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = number,
-                    onValueChange = { number = it },
-                    label = { Text("전화번호") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("이름") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(number, name) }) {
-                Text("저장", style = TextStyle(color = AccentBlue, fontWeight = FontWeight.Bold))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("취소", style = TextStyle(color = SubInk))
-            }
-        },
-    )
 }
 
 @Composable
@@ -700,6 +643,73 @@ private fun CategoryBadge(category: String?) {
 }
 
 /* ── 유틸 ── */
+
+private fun compactCallListSummary(
+    call: Call,
+    info: com.callrecorder.app.data.model.ExtractedInfo?,
+    internalKeywords: Map<String, String>,
+): String {
+    val candidate = call.summary?.takeIf { it.isNotBlank() }
+        ?: info?.specialNotes?.takeIf { it.isNotBlank() }
+        ?: internalKeywords.entries.firstOrNull()?.value
+        ?: "처리 결과 없음"
+
+    val normalized = candidate
+        .replace("\n", " ")
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("^(AI\\s*)?요약\\s*[:：]\\s*"), "")
+        .trim()
+
+    val firstClause = normalized
+        .split(Regex("(?<=[.!?。！？])\\s+|[。.!?]\\s+"))
+        .firstOrNull()
+        ?.trim()
+        .orEmpty()
+        .ifBlank { normalized }
+
+    return if (firstClause.length <= 34) firstClause else firstClause.take(33).trimEnd() + "…"
+}
+
+private fun openContactEditor(context: Context, number: String?, name: String?) {
+    val cleanNumber = number?.trim().orEmpty()
+    val cleanName = name?.trim().orEmpty()
+    val contactUri = findContactUri(context, cleanNumber)
+
+    val intent = if (contactUri != null) {
+        Intent(Intent.ACTION_EDIT, contactUri).apply {
+            putExtra("finishActivityOnSaveCompleted", true)
+        }
+    } else {
+        Intent(Intent.ACTION_INSERT_OR_EDIT).apply {
+            type = ContactsContract.Contacts.CONTENT_ITEM_TYPE
+            if (cleanNumber.isNotBlank()) putExtra(ContactsContract.Intents.Insert.PHONE, cleanNumber)
+            if (cleanName.isNotBlank()) putExtra(ContactsContract.Intents.Insert.NAME, cleanName)
+        }
+    }
+
+    runCatching { context.startActivity(intent) }
+}
+
+private fun findContactUri(context: Context, number: String): Uri? {
+    if (number.isBlank()) return null
+    return runCatching {
+        val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+        context.contentResolver.query(
+            uri,
+            arrayOf(ContactsContract.PhoneLookup.LOOKUP_KEY),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val lookupKey = cursor.getString(0)
+                Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_LOOKUP_URI, lookupKey)
+            } else {
+                null
+            }
+        }
+    }.getOrNull()
+}
 
 /** ③ 캘린더 등록 안내 문구 합성. 예약 + 날짜·시간 있을 때만 반환, 아니면 null */
 private fun buildCalendarNotice(call: Call, info: com.callrecorder.app.data.model.ExtractedInfo?): String? {

@@ -7,8 +7,11 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.callrecorder.app.R
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +48,12 @@ private val OnLightPrimary = Color(0xFF1F2937)
 private val OnLightSub      = Color(0xFF6B7280)
 private val OnLightMuted   = Color(0xFF9CA3AF)
 private val DividerLight   = Color(0xFFF0F1F4)
+private val FianoSettingsBg = Color(0xFF413838)
+private val FianoSettingsContent = Color(0xFFFFFFFF)
+private val FianoSettingsText = Color(0xFF343659)
+private val FianoSettingsSubText = Color(0xFF99A1B0)
+private val FianoSettingsLine = Color(0xFFF1EEEE)
+private val FianoSettingsAvatar = Color(0xFFF6F3F3)
 
 /* ─────────────────────────────────────────────────────
  * 업종 프리셋
@@ -112,166 +122,178 @@ fun SettingsScreen(
         return
     }
 
-    Scaffold(
-        containerColor = LightBg,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text("설정", style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로", tint = OnDarkPrimary)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Filled.Notifications, "알림", tint = OnDarkPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkNavy),
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 24.dp),
+    Scaffold(containerColor = FianoSettingsBg) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(FianoSettingsBg),
         ) {
-            // 프로필 카드
-            item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+                    .padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.settings_icon_logo),
+                    contentDescription = "FIANO",
+                    modifier = Modifier.size(width = 70.dp, height = 24.dp),
+                )
+                Spacer(Modifier.weight(1f))
+                Image(
+                    painter = painterResource(R.drawable.settings_icon_alarm),
+                    contentDescription = "알림",
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .background(DarkNavy)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(FianoSettingsAvatar),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = WhiteCard,
-                        shape = RoundedCornerShape(16.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFDBEAFE)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    state.userName.take(1).ifBlank { "홍" },
-                                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AccentBlue),
+                    Text(
+                        state.userName.take(1).ifBlank { "행" },
+                        style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsBg),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        state.userName.ifBlank { "행복 부동산 사장님" },
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (state.userPhone.isBlank()) "관리자 · owner@happyfood.kr" else "관리자 · ${state.userPhone}",
+                        style = TextStyle(fontSize = 13.sp, color = FianoSettingsSubText),
+                    )
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(FianoSettingsContent),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+            ) {
+                item {
+                    SettingsMainSection("통화 설정") {
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_auto_analysis,
+                            title = "통화 자동 분석",
+                            trailing = {
+                                FianoSettingToggle(
+                                    checked = state.autoAnalyzeEnabled,
+                                    onCheckedChange = { vm.setAutoAnalyze(it) },
                                 )
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    state.userName.ifBlank { "사장님" },
-                                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = OnLightPrimary),
+                            },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_auto_filter,
+                            title = "통화 자동 필터링",
+                            trailing = {
+                                FianoSettingToggle(
+                                    checked = state.importantCategories.isNotEmpty(),
+                                    onCheckedChange = { enabled ->
+                                        if (!enabled) {
+                                            state.importantCategories.forEach { vm.toggleCategory(it) }
+                                        } else if (state.importantCategories.isEmpty()) {
+                                            ALL_CALL_CATEGORIES.forEach { vm.toggleCategory(it) }
+                                        }
+                                    },
                                 )
-                                Text("관리자", style = TextStyle(fontSize = 12.sp, color = OnLightSub))
-                            }
-                        }
+                            },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_keywords,
+                            title = "필터링 키워드 관리",
+                            onClick = { currentSubScreen = SettingsSubScreen.CALL_FILTER },
+                            trailing = { SettingsChevron() },
+                        )
                     }
                 }
-            }
 
-            // 통화 설정
-            item { SettingSectionLabel("통화 설정") }
-            item {
-                SettingGroup {
-                    SettingRowToggle(
-                        icon = Icons.Filled.GraphicEq,
-                        iconBg = Color(0xFFFFF7ED), iconTint = Color(0xFFEA8C2E),
-                        title = "통화 자동 업로드",
-                        subtitle = if (state.autoAnalyzeEnabled) "녹음 감지 시 자동으로 업로드·분석" else "직접 선택해서 업로드 (기본)",
-                        checked = state.autoAnalyzeEnabled,
-                        onCheckedChange = { vm.setAutoAnalyze(it) },
-                    )
-                    SettingDivider()
-                    SettingRow(
-                        icon = Icons.Filled.FilterAlt,
-                        iconBg = Color(0xFFFFF7ED), iconTint = Color(0xFFEA8C2E),
-                        title = "중요 통화 키워드 관리",
-                        subtitle = "업종별 키워드 설정",
-                        onClick = { currentSubScreen = SettingsSubScreen.CALL_FILTER },
-                    )
+                item {
+                    SettingsMainSection("SMS 설정") {
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_sms_auto,
+                            title = "SMS 자동 발송",
+                            trailing = {
+                                FianoSettingToggle(
+                                    checked = state.smsEnabled,
+                                    onCheckedChange = { vm.setSmsEnabled(it) },
+                                )
+                            },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_sms_manage,
+                            title = "SMS 관리",
+                            onClick = { },
+                            trailing = { SettingsChevron() },
+                        )
+                    }
                 }
-            }
 
-            // 앱 권한
-            item { SettingSectionLabel("앱 권한") }
-            item {
-                SettingGroup {
-                    SettingRow(
-                        icon = Icons.Filled.Security,
-                        iconBg = Color(0xFFEFF6FF), iconTint = AccentBlue,
-                        title = "권한 설정",
-                        subtitle = "마이크 · 통화기록 · 연락처 · 알림",
-                        onClick = { currentSubScreen = SettingsSubScreen.PERMISSION },
-                    )
+                item {
+                    SettingsMainSection("연동 설정") {
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_calendar,
+                            title = "외부 캘린더 연동",
+                            onClick = { currentSubScreen = SettingsSubScreen.CALENDAR },
+                            trailing = {
+                                SettingsConnectionTag("연결됨")
+                                Spacer(Modifier.width(6.dp))
+                                SettingsChevron()
+                            },
+                        )
+                    }
                 }
-            }
 
-            // 연동 설정
-            item { SettingSectionLabel("연동 설정") }
-            item {
-                SettingGroup {
-                    SettingRowBadge(
-                        icon = Icons.Filled.CalendarMonth,
-                        iconBg = Color(0xFFEFF6FF), iconTint = AccentBlue,
-                        title = "외부 캘린더 연동",
-                        subtitle = "Google · Naver · Kakao",
-                        badgeText = "연결됨",
-                        badgeBg = Color(0xFFECFDF5),
-                        badgeFg = Color(0xFF059669),
-                        onClick = { currentSubScreen = SettingsSubScreen.CALENDAR },
-                    )
-                }
-            }
-
-            // 계정 관리
-            item { SettingSectionLabel("계정 관리") }
-            item {
-                SettingGroup {
-                    SettingRow(
-                        icon = Icons.Filled.Person,
-                        iconBg = Color(0xFFEFF6FF), iconTint = AccentBlue,
-                        title = "회원 정보 수정",
-                        subtitle = "이름, 연락처, 비밀번호",
-                        onClick = { currentSubScreen = SettingsSubScreen.USER_INFO },
-                    )
-                    SettingDivider()
-                    SettingRow(
-                        icon = Icons.Filled.CreditCard,
-                        iconBg = Color(0xFFEFF6FF), iconTint = AccentBlue,
-                        title = "구독 및 결제",
-                        subtitle = "구독 상태, 결제 내역",
-                        onClick = { currentSubScreen = SettingsSubScreen.SUBSCRIPTION },
-                    )
-                    SettingDivider()
-                    SettingRow(
-                        icon = Icons.Filled.PersonOff,
-                        iconBg = Color(0xFFFEF2F2), iconTint = Color(0xFFEF4444),
-                        title = "회원 탈퇴",
-                        subtitle = "계정 및 모든 데이터 삭제",
-                        titleColor = Color(0xFFEF4444),
-                        onClick = { showWithdrawDialog = true },
-                    )
-                }
-            }
-
-            // 로그아웃
-            item {
-                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp)) {
-                    OutlinedButton(
-                        onClick = { auth.logout(); onLoggedOut() },
-                        modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.5.dp, AccentBlue),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(vertical = 14.dp),
-                    ) {
-                        Text("로그아웃", style = TextStyle(fontSize = 15.sp, color = AccentBlue))
+                item {
+                    SettingsMainSection("계정 관리") {
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_user,
+                            title = "회원 정보 수정",
+                            onClick = { currentSubScreen = SettingsSubScreen.USER_INFO },
+                            trailing = { SettingsChevron() },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_subscription,
+                            title = "구독 및 결제",
+                            onClick = { currentSubScreen = SettingsSubScreen.SUBSCRIPTION },
+                            trailing = { SettingsChevron() },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_withdraw,
+                            title = "회원 탈퇴",
+                            onClick = { showWithdrawDialog = true },
+                            trailing = { SettingsChevron() },
+                        )
+                        SettingsMainDivider()
+                        SettingsMainRow(
+                            iconRes = R.drawable.settings_icon_logout,
+                            title = "로그아웃",
+                            onClick = { auth.logout(); onLoggedOut() },
+                            trailing = { SettingsChevron() },
+                        )
                     }
                 }
             }
@@ -910,6 +932,119 @@ private fun PermissionSettingsScreen(onBack: () -> Unit) {
  * 공통 컴포넌트
  * ───────────────────────────────────────────────────── */
 enum class SettingsSubScreen { USER_INFO, CALL_FILTER, SUBSCRIPTION, CALENDAR, PERMISSION }
+
+@Composable
+private fun SettingsMainSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                title,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+            )
+        }
+        Column(modifier = Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+@Composable
+private fun SettingsMainRow(
+    iconRes: Int,
+    title: String,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(66.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(34.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = FianoSettingsText),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, content = trailing)
+    }
+}
+
+@Composable
+private fun SettingsMainDivider() {
+    HorizontalDivider(
+        color = FianoSettingsLine,
+        thickness = 1.dp,
+        modifier = Modifier.padding(start = 58.dp),
+    )
+}
+
+@Composable
+private fun FianoSettingToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val track = if (checked) FianoSettingsBg else Color(0xFFE9E4E4)
+    val knobAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 26.dp)
+            .clip(RoundedCornerShape(13.dp))
+            .background(track)
+            .clickable { onCheckedChange(!checked) }
+            .padding(2.dp),
+        contentAlignment = knobAlignment,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+    }
+}
+
+@Composable
+private fun SettingsConnectionTag(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFF6F3F3))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = FianoSettingsBg),
+        )
+    }
+}
+
+@Composable
+private fun SettingsChevron() {
+    Icon(
+        imageVector = Icons.Filled.ChevronRight,
+        contentDescription = null,
+        tint = Color(0xFFC6C1C1),
+        modifier = Modifier.size(20.dp),
+    )
+}
 
 @Composable
 private fun SettingSectionLabel(text: String) {

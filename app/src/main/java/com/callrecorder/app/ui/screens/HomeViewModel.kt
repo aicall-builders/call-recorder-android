@@ -11,6 +11,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,6 +66,7 @@ class HomeViewModel : ViewModel() {
 
     private var _allCalls: List<Call> = emptyList()
     private var pollJob: Job? = null
+    private val retriedUploadedProcessIds = mutableSetOf<String>()
 
     init {
         val autoSummary = homePrefs.getBoolean("auto_summary", true)
@@ -182,8 +184,20 @@ class HomeViewModel : ViewModel() {
             if (!silent) _state.value = _state.value.copy(loading = true, error = null)
             val storeId = storeRepo.activeStoreId()
 
-            val callsDeferred = async { callRepo.listCalls(storeId) }
-            val schedulesDeferred = async { calendarRepo.getEvents() }
+            val callsDeferred = async {
+                runCatching {
+                    withTimeout(20_000L) {
+                        callRepo.listCalls(storeId).getOrThrow()
+                    }
+                }
+            }
+            val schedulesDeferred = async {
+                runCatching {
+                    withTimeout(8_000L) {
+                        calendarRepo.getEvents().getOrThrow()
+                    }
+                }
+            }
 
             val callsResult = callsDeferred.await()
             val schedulesResult = schedulesDeferred.await()
@@ -202,10 +216,13 @@ class HomeViewModel : ViewModel() {
                     val terminalIds = calls
                         .filter {
                             it.status.equals(CallStatus.SUMMARIZED, true) ||
+                                    it.status.equals(CallStatus.COMPLETED, true) ||
                                     it.status.equals(CallStatus.FAILED, true) ||
+                                    it.status.equals(CallStatus.ERROR, true) ||
                                     !it.summary.isNullOrBlank()
                         }
                         .map { it.id }.toSet()
+                    retryStuckUploadedCalls(calls)
                     if (terminalIds.isNotEmpty()) {
                         var doneCount = 0
                         recordingDao.getServerProcessing().forEach { rec ->
@@ -247,6 +264,28 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    private suspend fun retryStuckUploadedCalls(calls: List<Call>) {
+        val uploadedIds = calls
+            .filter { it.status.equals(CallStatus.UPLOADED, true) && it.summary.isNullOrBlank() }
+            .map { it.id }
+            .toSet()
+        if (uploadedIds.isEmpty()) return
+
+        uploadedIds
+            .filter { retriedUploadedProcessIds.add(it) }
+            .forEach { callRepo.triggerProcess(it) }
+
+        val staleThreshold = System.currentTimeMillis() - 30_000L
+        recordingDao.getServerProcessing().forEach { rec ->
+            val sid = rec.serverCallId ?: return@forEach
+            if (sid in uploadedIds && rec.updatedAt < staleThreshold) {
+                callRepo.triggerProcess(sid).onSuccess {
+                    recordingDao.updateStatus(rec.id, RecordingStatus.PROCESSING)
+                }
+            }
+        }
+    }
+
     /** 업로드 진행 목록에서 한 건 제거 (큐에서 취소). 목록은 Flow로 자동 갱신됨. */
     fun deleteUpload(id: Long) {
         viewModelScope.launch {
@@ -264,11 +303,9 @@ class HomeViewModel : ViewModel() {
     fun approveAll() {
         viewModelScope.launch {
             recordingDao.approveAll()
-            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.callrecorder.app.worker.ScanAndUploadWorker>()
-                .build()
-            androidx.work.WorkManager.getInstance(
+            com.callrecorder.app.worker.UploadWorker.enqueueOneShot(
                 CallRecorderApp.instance.applicationContext
-            ).enqueue(workRequest)
+            )
             refresh()
         }
     }

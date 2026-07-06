@@ -2,23 +2,16 @@ package com.callrecorder.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,11 +32,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.callrecorder.app.R
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
@@ -52,28 +47,29 @@ import com.callrecorder.app.data.model.internalKeywordsMap
 import com.callrecorder.app.onboarding.FeatureTourController
 import com.callrecorder.app.onboarding.TourKeys
 import com.callrecorder.app.onboarding.tourTarget
+import com.callrecorder.app.ui.theme.AppColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/* 색상 (피그마 2026-06-23 파운데이션) */
-private val ScreenBg    = Color(0xFF5F6071)
+/* 색상 (FIANO 0705 디자인 시스템) */
+private val ScreenBg    = AppColors.DeepBrown900
 private val ContentBg   = Color(0xFFFFFFFF)
 private val SectionAltBg = Color(0xFFEEEEEE)
-private val Navy        = Color(0xFF343659)
+private val Navy        = AppColors.DeepBrown900
 private val OnDark      = Color(0xFFFFFFFF)
-private val OnDarkSub   = Color(0xFFB9BECB)
-private val TimeBlue    = Color(0xFF2867E5)
-private val SchedTimeHi = Color(0xFF1C6BD4)
-private val SchedTimeSm = Color(0xFF767676)
-private val SchedMeta   = Color(0xFF757575)
-private val Connector   = Color(0xFFD6D9E5)
-private val AvatarBg    = Color(0xFFF1F1F1)
-private val AvatarText  = Color(0xFF5F5F5F)
-private val AccentBlue  = Color(0xFF3B7DD8)
-private val UploadBlue  = Color(0xFF005ABE)
-private val UploadBlueBg = Color(0xFFEAF2FF)
+private val OnDarkSub   = Color(0xFFFFFFFF)
+private val TimeBlue    = AppColors.SignalRed500
+private val SchedTimeHi = AppColors.SignalRed500
+private val SchedTimeSm = AppColors.DeepBrown500
+private val SchedMeta   = AppColors.DeepBrown500
+private val Connector   = AppColors.DeepBrown200
+private val AvatarBg    = AppColors.DeepBrown50
+private val AvatarText  = AppColors.DeepBrown700
+private val AccentBlue  = AppColors.SignalRed500
+private val UploadBlue  = AppColors.DeepBrown900
+private val UploadBlueBg = AppColors.DeepBrown100
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,8 +90,7 @@ fun HomeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(ScreenBg)
-            .verticalScroll(rememberScrollState()),
+            .background(ScreenBg),
     ) {
         // ── 히어로 (그레이) ──
         Hero(
@@ -116,11 +111,18 @@ fun HomeScreen(
         Column(
             Modifier
                 .fillMaxWidth()
+                .weight(1f)
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(ContentBg),
+                .background(ContentBg)
+                .verticalScroll(rememberScrollState()),
         ) {
             // 주요 분석 통화
-            Column(Modifier.tourTarget(tourController, TourKeys.RECENT_CALLS)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .tourTarget(tourController, TourKeys.RECENT_CALLS),
+            ) {
                 SectionHeader("주요 분석 통화", onSeeAll = onSeeAllCalls)
                 when {
                     state.loading && state.recentCalls.isEmpty() ->
@@ -133,14 +135,14 @@ fun HomeScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
 
-            // ── 주요 관리 고객 (#EEE, 흰색 위로 라운드) ──
+            // ── 주요 관리 고객 (#EEE 밴드) ──
             Column(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(SectionAltBg),
+                    .background(SectionAltBg)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
             ) {
                 SectionHeader("주요 관리 고객", onSeeAll = onSeeAllCustomers)
                 val customers = state.recentCalls.distinctBy { customerName(it) }.take(3)
@@ -157,27 +159,27 @@ fun HomeScreen(
                         repeat(3 - customers.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+            }
 
-                // ── 다가오는 일정 (흰색, #EEE 위로 라운드) ──
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                        .background(ContentBg),
-                ) {
-                    SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
-                    if (state.schedules.isEmpty()) {
-                        EmptyBox("예정된 일정이 없어요")
-                    } else {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            state.schedules.forEachIndexed { idx, ev ->
-                                ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
-                            }
+            // ── 다가오는 일정 (흰색 컨텐츠 안에서 이어짐) ──
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(ContentBg)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+            ) {
+                SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
+                if (state.schedules.isEmpty()) {
+                    EmptyBox("예정된 일정이 없어요")
+                } else {
+                    Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                        state.schedules.forEachIndexed { idx, ev ->
+                            ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
                         }
                     }
-                    Spacer(Modifier.height(24.dp))
                 }
+                Spacer(Modifier.height(64.dp))
             }
         }
     }
@@ -209,23 +211,27 @@ private fun Hero(
     val today = remember { todayFullDateLabel() }
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.PhoneAndroid, null, tint = OnDark, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("AI 통화 비서", style = TextStyle(fontSize = 18.sp, color = OnDark))
-            }
-            Icon(Icons.Filled.NotificationsNone, "알림", tint = OnDark, modifier = Modifier.size(20.dp))
+            Image(
+                painter = painterResource(id = R.drawable.home_icon_logo),
+                contentDescription = "FIANO",
+                modifier = Modifier.width(70.dp).height(24.dp),
+            )
+            Image(
+                painter = painterResource(id = R.drawable.home_icon_alarm),
+                contentDescription = "알림",
+                modifier = Modifier.size(24.dp),
+            )
         }
 
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
             Text(today, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnDark))
             Spacer(Modifier.height(16.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Surface(
                     onClick = onApprovalClick,
                     color = Color.White,
@@ -234,14 +240,17 @@ private fun Hero(
                 ) {
                     Row(Modifier.padding(start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Filled.Refresh, "새로고침", tint = Navy, modifier = Modifier.size(20.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.home_icon_refresh),
+                                contentDescription = "새로고침",
+                                modifier = Modifier.width(24.dp).height(26.dp),
+                            )
                         }
                         Spacer(Modifier.width(6.dp))
                         Text("통화 분석 대기 ${pendingCount}건",
                             style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy))
                     }
                 }
-                Spacer(Modifier.width(10.dp))
                 Surface(
                     onClick = onUploadClick,
                     color = Color.White,
@@ -249,14 +258,18 @@ private fun Hero(
                     modifier = Modifier.size(64.dp).tourTarget(tourController, TourKeys.UPLOAD),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Filled.NoteAdd, "파일 업로드", tint = Navy, modifier = Modifier.size(24.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.home_icon_add_calendar),
+                            contentDescription = "파일 업로드",
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 }
             }
 
             if (uploadingCount > 0) {
                 Spacer(Modifier.height(10.dp))
-                Surface(onClick = onUploadingClick, color = UploadBlueBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Surface(onClick = onUploadingClick, color = UploadBlueBg, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = UploadBlue)
                         Spacer(Modifier.width(10.dp))
@@ -269,47 +282,55 @@ private fun Hero(
             }
 
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth()) {
-                ToggleButton(autoSummaryOn, "통화 자동 요약 ${if (autoSummaryOn) "ON" else "OFF"}",
-                    { onAutoSummaryChange(!autoSummaryOn) }, Modifier.weight(1f))
-                ToggleButton(importantFilterOn, "중요 통화 필터링 ${if (importantFilterOn) "ON" else "OFF"}",
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ToggleButton(autoSummaryOn, "통화 자동 요약",
+                    { onAutoSummaryChange(!autoSummaryOn) },
+                    Modifier.weight(1f))
+                ToggleButton(importantFilterOn, "중요 통화 필터링",
                     { onImportantFilterChange(!importantFilterOn) },
-                    Modifier.weight(1f).tourTarget(tourController, TourKeys.IMPORTANT_FILTER), important = true)
+                    Modifier.weight(1f).tourTarget(tourController, TourKeys.IMPORTANT_FILTER))
             }
         }
     }
 }
 
 @Composable
-private fun ToggleButton(on: Boolean, label: String, onToggle: () -> Unit, modifier: Modifier = Modifier, important: Boolean = false) {
+private fun ToggleButton(on: Boolean, label: String, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier.clip(RoundedCornerShape(999.dp)).clickable { onToggle() }.padding(horizontal = 8.dp, vertical = 8.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .clickable { onToggle() }
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val icon = when {
-            important && on -> Icons.Filled.Star
-            important -> Icons.Filled.StarBorder
-            on -> Icons.Filled.CheckCircle
-            else -> Icons.Filled.RadioButtonUnchecked
-        }
-        Icon(icon, null, tint = if (on) OnDark else OnDarkSub, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(label, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = if (on) OnDark else OnDarkSub), maxLines = 1)
+        Image(
+            painter = painterResource(id = if (on) R.drawable.home_icon_action_filter_on else R.drawable.home_icon_action_summary_off),
+            contentDescription = if (on) "켜짐" else "꺼짐",
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "$label ${if (on) "ON" else "OFF"}",
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = OnDark),
+            maxLines = 1,
+        )
     }
 }
 
 @Composable
 private fun SectionHeader(title: String, onSeeAll: () -> Unit, emphasis: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(20.dp).clip(CircleShape).background(Navy), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.ChevronRight, null, tint = Color.White, modifier = Modifier.size(14.dp))
-            }
+            Image(
+                painter = painterResource(id = R.drawable.home_icon_section_open),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
             Spacer(Modifier.width(8.dp))
             Text(title, style = TextStyle(fontSize = 16.sp, fontWeight = if (emphasis) FontWeight.ExtraBold else FontWeight.Bold, color = Navy))
         }
@@ -325,7 +346,11 @@ private fun CallRow(call: Call, onClick: () -> Unit) {
     val name = customerName(call)
     Surface(onClick = onClick, color = Color.Transparent) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(name, 36.dp)
+            Image(
+                painter = painterResource(id = R.drawable.home_icon_call),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+            )
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Navy), maxLines = 1)
@@ -367,12 +392,20 @@ private fun CustomerCard(call: Call, modifier: Modifier, onClick: () -> Unit) {
 
 @Composable
 private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
-    val isPhone = name.firstOrNull()?.isDigit() == true || name == "발신번호 없음"
+    val displayName = name.ifBlank { "발신번호 없음" }
+    val isPhone = displayName.firstOrNull()?.isDigit() == true || displayName == "발신번호 없음"
     Box(Modifier.size(size).clip(CircleShape).background(AvatarBg), contentAlignment = Alignment.Center) {
         if (isPhone) {
             Icon(Icons.Filled.Phone, null, tint = AvatarText, modifier = Modifier.size(size * 0.45f))
         } else {
-            Text(name.first().toString(), style = TextStyle(fontSize = (size.value * 0.4f).sp, fontWeight = FontWeight.Bold, color = AvatarText))
+            Text(
+                displayName.first().toString(),
+                style = TextStyle(
+                    fontSize = (size.value * 0.4f).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AvatarText,
+                ),
+            )
         }
     }
 }
@@ -406,7 +439,7 @@ private fun EmptyBox(text: String) {
 private fun customerName(call: Call): String =
     call.extractedInfoOrNull()?.customerName?.takeIf { it.isNotBlank() }
         ?: call.callerName?.takeIf { it.isNotBlank() }
-        ?: call.callerNumber
+        ?: call.callerNumber?.takeIf { it.isNotBlank() }
         ?: "발신번호 없음"
 
 /** 표시 이름이 전화번호가 아니라 진짜 이름인지 */
@@ -424,7 +457,11 @@ private fun callSubtitle(call: Call): String {
     if (brief.isNotBlank()) return brief
     val kw = call.internalKeywordsMap().entries.take(2).joinToString(" · ") { it.value }
     if (kw.isNotBlank()) return kw
-    return if (call.status.equals(CallStatus.PROCESSING, true) || call.status.equals(CallStatus.UPLOADED, true)) "분석 중…" else "—"
+    return when {
+        call.status.equals(CallStatus.PROCESSING, true) -> "분석 중..."
+        call.status.equals(CallStatus.UPLOADED, true) -> "서버 분석 대기"
+        else -> "-"
+    }
 }
 
 private val Weekdays = arrayOf("일", "월", "화", "수", "목", "금", "토")

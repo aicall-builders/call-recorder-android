@@ -1,6 +1,6 @@
-# 📱 call-recorder-android (Android Client)
+# 📱 FIANO Android Client
 
-> 소상공인 AI 통화 요약 서비스의 안드로이드 앱 — 삼성 기본 통화녹음 파일을 자동 감지·업로드
+> 통화요약 CRM FIANO의 안드로이드 앱 — 통화 녹음 자동 감지, AI 분석, 고객 히스토리 정리, 일정 추출·캘린더 등록
 
 [🌐 웹 데모](https://dk1k75g0ji3vw.cloudfront.net) 
 
@@ -14,13 +14,16 @@
 
 ## 🎯 역할
 
-본 레포는 [소상공인 AI 통화 요약 서비스](https://github.com/seongminj0613-tech/business-ai-assistant)의 **안드로이드 클라이언트**를 담당합니다.
+본 레포는 통화요약 CRM **FIANO**의 **안드로이드 클라이언트**를 담당합니다.
 
 핵심 책임:
 - 삼성 기본 통화녹음 파일 자동 감지 (ContentObserver + WorkManager 이중화)
 - 자동 PII 분류 (BUSINESS / PERSONAL / UNCLASSIFIED)
 - S3 직접 PUT 업로드 (presigned URL)
 - 통화 상세 + 음성 재생 (ExoPlayer)
+- 통화 내용 AI 분석 데이터 히스토리 정리
+- 통화자별 고객 맥락 관리
+- 일정 추출 후 캘린더 자동 등록
 - 카카오 OAuth → Firebase Custom Token 인증
 
 > 통화 경로에는 일체 개입하지 않습니다. 통화녹음이 끝난 파일을 **사후에** 수집할 뿐이므로 통화 품질·부재중 알림에 영향 없음.

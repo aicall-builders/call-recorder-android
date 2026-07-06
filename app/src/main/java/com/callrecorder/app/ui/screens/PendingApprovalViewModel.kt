@@ -2,11 +2,9 @@ package com.callrecorder.app.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.local.RecordingEntity
-import com.callrecorder.app.worker.ScanAndUploadWorker
+import com.callrecorder.app.worker.UploadWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,9 +55,6 @@ class PendingApprovalViewModel : ViewModel() {
     }
 
     private fun triggerUpload() {
-        val workRequest = OneTimeWorkRequestBuilder<ScanAndUploadWorker>().build()
-        WorkManager.getInstance(
-            CallRecorderApp.instance.applicationContext
-        ).enqueue(workRequest)
+        UploadWorker.enqueueOneShot(CallRecorderApp.instance.applicationContext)
     }
 }

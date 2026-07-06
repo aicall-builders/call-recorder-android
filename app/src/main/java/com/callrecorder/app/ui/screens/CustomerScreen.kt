@@ -31,39 +31,40 @@ import coil.compose.AsyncImage
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.keywordsList
+import com.callrecorder.app.ui.theme.AppColors
 import java.text.SimpleDateFormat
 import java.util.*
 
-/* ── 색상: 시안(고객관리) 기준 ── */
-private val ScreenBg   = Color(0xFF5F6071)
+/* ── 색상: FIANO 0705 디자인 시스템 ── */
+private val ScreenBg   = AppColors.DeepBrown700
 private val SheetBg    = Color(0xFFFFFFFF)
-private val TabOffBg   = Color(0xFFEEEEEE)
-private val Ink        = Color(0xFF343659)
-private val SubInk     = Color(0xFF5A5D86)
-private val AccentBlue = Color(0xFF1C6BD4)
-private val PlaceholderGray = Color(0xFF99A1AF)
-private val LabelGray  = Color(0xFF757575)
-private val Divider    = Color(0xFFD6D6D6)
-private val AvatarBg    = Color(0xFFF4F4F4)
-private val AvatarFg    = Color(0xFF575757)
-private val SearchBorder = Color(0xFFE8ECF2)
-private val PhoneGray   = Color(0xFF6A7282)
+private val TabOffBg   = AppColors.DeepBrown50
+private val Ink        = AppColors.DeepBrown950
+private val SubInk     = AppColors.DeepBrown700
+private val AccentBlue = AppColors.SignalRed500
+private val PlaceholderGray = AppColors.DeepBrown400
+private val LabelGray  = AppColors.DeepBrown500
+private val Divider    = AppColors.DeepBrown200
+private val AvatarBg    = AppColors.DeepBrown50
+private val AvatarFg    = AppColors.DeepBrown700
+private val SearchBorder = AppColors.DeepBrown100
+private val PhoneGray   = AppColors.DeepBrown600
 
 // 히스토리 시안 색
-private val TimelineLine = Color(0xFFD6D9E5)
-private val ChipBlueBg   = Color(0xFFDBEAFE)
-private val ChipBlueFg   = Color(0xFF155DFC)
-private val ChipGreenBg  = Color(0xFFF0FDF4)
-private val ChipGreenFg  = Color(0xFF00A63E)
-private val PhotoBg      = Color(0xFFEFEFEF)
-private val LinkBlue     = Color(0xFF155DFC)
+private val TimelineLine = AppColors.DeepBrown200
+private val ChipBlueBg   = AppColors.SignalRed50
+private val ChipBlueFg   = AppColors.SignalRed700
+private val ChipGreenBg  = AppColors.DeepBrown50
+private val ChipGreenFg  = AppColors.DeepBrown700
+private val PhotoBg      = AppColors.DeepBrown50
+private val LinkBlue     = AppColors.SignalRed600
 
 // 등급 배지 색 (시안)
 private fun gradeBadgeColors(grade: CustomerGrade): Triple<Color, Color, String> = when (grade) {
     CustomerGrade.VIP     -> Triple(Ink, Color.White, "VIP")
     CustomerGrade.REGULAR -> Triple(SubInk, Color.White, "단골")
-    CustomerGrade.NORMAL  -> Triple(Color(0xFF8588AA), Color.White, "일반")
-    CustomerGrade.NEW     -> Triple(Color(0xFFECEEF6), Ink, "신규")
+    CustomerGrade.NORMAL  -> Triple(AppColors.DeepBrown500, Color.White, "일반")
+    CustomerGrade.NEW     -> Triple(AppColors.DeepBrown100, Ink, "신규")
 }
 
 private enum class CustFilter { ALL, VIP, REGULAR, NORMAL, NEW }
@@ -113,7 +114,7 @@ fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
             item {
                 Column(Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -172,8 +173,8 @@ fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
             // ═══ 본문 ═══
             if (state.loading) {
                 item {
-                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                    Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                        Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
                             CircularProgressIndicator(color = AccentBlue)
                         }
                     }
@@ -181,8 +182,11 @@ fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
             }
             if (!state.loading && filtered.isEmpty()) {
                 item {
-                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                        Column(
+                            Modifier.fillMaxSize().padding(top = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Text("아직 고객 정보가 없어요", style = TextStyle(fontSize = 14.sp, color = PlaceholderGray))
                         }
                     }
@@ -304,7 +308,7 @@ fun CustomerDetailScreen(customer: CustomerUiItem, vm: CustomerViewModel, onBack
 
             // 상단 바
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

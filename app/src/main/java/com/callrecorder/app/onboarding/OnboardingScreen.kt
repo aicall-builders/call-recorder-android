@@ -2,6 +2,7 @@ package com.callrecorder.app.onboarding
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,10 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,43 +31,52 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.callrecorder.app.R
+import com.callrecorder.app.ui.theme.AppColors
 
 // ─────────────────────────────────────────────────────────────
 // 팔레트
 // ─────────────────────────────────────────────────────────────
-private val Bg          = Color(0xFFE5ECF6)
-private val Primary     = Color(0xFF474B6B)
-private val DarkNavy    = Color(0xFF343659)
+private val Bg          = AppColors.DeepBrown100
+private val Primary     = AppColors.DeepBrown900
+private val DarkNavy    = AppColors.DeepBrown950
 private val TitleColor  = Color(0xFF1B1F2A)
 private val DescColor   = Color(0xFF5A5F6C)
-private val Device      = Color(0xFF5F6071)
-private val Blue        = Color(0xFF2867E5)
-private val AiBg        = Color(0xFFE8F2FF)
-private val AiText      = Color(0xFF1C6BD4)
-private val GrayText    = Color(0xFF99A1AF)
+private val Device      = AppColors.DeepBrown900
+private val Blue        = AppColors.SignalRed500
+private val AiBg        = AppColors.SignalRed50
+private val AiText      = AppColors.SignalRed700
+private val GrayText    = AppColors.DeepBrown400
 private val DotInactive = Color(0xFFFFFFFF)
 
 private const val PAGE_COUNT = 5
 
-private data class OnbPage(val pill: String, val title: String, val desc: String)
+private data class OnbPage(val pill: String, val title: String, val desc: String, val imageRes: Int)
 
 // 업종 선택은 별도 화면(BusinessTypeScreen)으로 분리 → 여기는 기능 소개 5장
 private val pages = listOf(
     OnbPage("메인 화면", "통화 업무관리 프로세스",
-        "통화를 분석하고 일정을 등록하고 고객을\n관리하는 자동 프로세스를 경험해보세요."),
+        "통화를 분석하고 일정을 등록하고 고객을\n관리하는 자동 프로세스를 경험해보세요.",
+        R.drawable.onboarding_home_preview),
     OnbPage("통화 관리 · 분석 완료", "통화 자동 분석",
-        "메모나 기억할 필요 없어요.\n모든 통화를 AI가 수집하고 정리해요."),
+        "메모나 기억할 필요 없어요.\n모든 통화를 AI가 수집하고 정리해요.",
+        R.drawable.onboarding_calls_preview),
     OnbPage("통화 상세 · AI 요약", "통화 핵심 요약카드",
-        "액션·고객 성향 희망 조건까지,\n카드 한 장으로 요약해요."),
+        "액션·고객 성향 희망 조건까지,\n카드 한 장으로 요약해요.",
+        R.drawable.onboarding_detail_preview),
     OnbPage("일정관리 · 월 캘린더", "일정 자동 등록",
-        "통화에서 잡힌 일정을 캘린더에\n자동 등록하고 알림까지 챙겨드려요."),
+        "통화에서 잡힌 일정을 캘린더에\n자동 등록하고 알림까지 챙겨드려요.",
+        R.drawable.onboarding_calendar_preview),
     OnbPage("고객 관리", "나만의 통화 DB",
-        "통화자와의 히스토리를 맥락에 맞게\n자동으로 분석하고 정리해줘요."),
+        "통화자와의 히스토리를 맥락에 맞게\n자동으로 분석하고 정리해줘요.",
+        R.drawable.onboarding_customer_preview),
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -93,41 +101,26 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp),
+                        .background(Bg),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Spacer(Modifier.height(24.dp))
-                    Pill(pages[s].pill)
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        pages[s].title,
-                        style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = TitleColor),
-                        textAlign = TextAlign.Center,
+                    Spacer(Modifier.height(39.dp))
+                    SummarySection(
+                        pill = pages[s].pill,
+                        title = pages[s].title,
+                        desc = pages[s].desc,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        pages[s].desc,
-                        style = TextStyle(fontSize = 16.sp, color = DescColor, lineHeight = 24.sp),
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(28.dp))
-                    when (s) {
-                        0 -> HomeMockup()
-                        1 -> CallListMockup()
-                        2 -> SummaryMockup()
-                        3 -> CalendarMockup()
-                        4 -> CustomerMockup()
-                    }
-                    Spacer(Modifier.height(20.dp))
+                    SectionPreviewImage(imageRes = pages[s].imageRes)
                 }
             }
 
             Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 64.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Dots(current = step)
+                Dots(current = step, onDotClick = { step = it })
                 Spacer(Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
@@ -155,33 +148,86 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     }
 }
 
+@Composable
+private fun SummarySection(
+    pill: String,
+    title: String,
+    desc: String,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Pill(pill)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                title,
+                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = TitleColor, lineHeight = 32.sp),
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                desc,
+                style = TextStyle(fontSize = 18.sp, color = DescColor, lineHeight = 24.sp, letterSpacing = (-0.5).sp),
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionPreviewImage(imageRes: Int) {
+    Image(
+        painter = painterResource(id = imageRes),
+        contentDescription = null,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(400.dp),
+        contentScale = ContentScale.Fit,
+    )
+}
+
 // ─────────────────────────────────────────────────────────────
 // 공통 조각
 // ─────────────────────────────────────────────────────────────
 @Composable
 private fun Pill(text: String) {
-    Box(
+    Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(Color.White)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(text, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Primary))
+        Image(
+            painter = painterResource(id = R.drawable.icon_timeline_marker),
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.SignalRed500, lineHeight = 16.sp))
     }
 }
 
 @Composable
-private fun Dots(current: Int) {
+private fun Dots(current: Int, onDotClick: (Int) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         repeat(PAGE_COUNT) { i ->
             val active = i == current
             val w by animateDpAsState(if (active) 24.dp else 8.dp, label = "dotW")
             Box(
                 modifier = Modifier
-                    .padding(horizontal = 4.dp)
+                    .padding(horizontal = 8.dp)
                     .size(width = w, height = 8.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(if (active) DarkNavy else DotInactive),
+                    .background(if (active) DarkNavy else DotInactive)
+                    .noRippleClickable { onDotClick(i) },
             )
         }
     }
@@ -203,7 +249,7 @@ private fun DeviceFrame(content: @Composable () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("AI 통화 비서", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                Text("FIANO", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White))
                 Box(Modifier.size(14.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.35f)))
             }
             content()

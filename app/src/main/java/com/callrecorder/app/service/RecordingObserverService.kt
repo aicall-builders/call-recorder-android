@@ -115,7 +115,7 @@ class RecordingObserverService : Service() {
         )
         val n: Notification = NotificationCompat.Builder(this, CallRecorderApp.CHANNEL_OBSERVER)
             .setSmallIcon(android.R.drawable.ic_menu_call)
-            .setContentTitle("통화 비서")
+            .setContentTitle("FIANO")
             .setContentText("새로운 통화 녹음을 감지하고 있어요")
             .setOngoing(true)
             .setContentIntent(intent)

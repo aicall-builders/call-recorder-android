@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -44,7 +45,9 @@ object ApiClient {
             val req = if (isS3 || isAuthEndpoint) {
                 original
             } else {
-                val idToken = runBlocking { fetchFirebaseIdToken() }
+                val idToken = runBlocking {
+                    withTimeoutOrNull(8_000L) { fetchFirebaseIdToken() }
+                }
                 if (!idToken.isNullOrBlank()) {
                     original.newBuilder()
                         .addHeader("Authorization", "Bearer $idToken")
@@ -68,6 +71,7 @@ object ApiClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
             else HttpLoggingInterceptor.Level.NONE
+            redactHeader("Authorization")
         }
 
         val client = OkHttpClient.Builder()

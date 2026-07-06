@@ -134,15 +134,21 @@ class CallRepository(
         }
 
         // 3) STT/요약 처리 트리거
-        val procResp = api.processCall(urlResp.callId)
-        if (!procResp.isSuccessful) {
-            SafeLog.w("CallRepo", "process trigger failed: ${procResp.code()}")
-            // 실패해도 업로드는 됐으므로 PROCESSING 으로만 마킹
-        }
+        triggerProcess(urlResp.callId).getOrThrow()
         dao.updateStatus(rec.id, RecordingStatus.PROCESSING)
         urlResp.callId
     }.onFailure { e ->
         dao.setError(rec.id, RecordingStatus.FAILED, e.message)
+    }
+
+    suspend fun triggerProcess(callId: String): Result<Unit> = runCatching {
+        val procResp = api.processCall(callId)
+        if (!procResp.isSuccessful) {
+            error("process trigger failed: HTTP ${procResp.code()}")
+        }
+        Unit
+    }.onFailure { e ->
+        SafeLog.w("CallRepo", "process trigger failed for $callId: ${e.message}", e)
     }
 
     suspend fun deleteCall(callId: String): Result<Unit> = runCatching {

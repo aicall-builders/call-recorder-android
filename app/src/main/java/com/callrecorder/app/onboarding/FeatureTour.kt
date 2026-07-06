@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.callrecorder.app.ui.theme.AppColors
 
 // ─────────────────────────────────────────────────────────────
 // 1) 영구 저장 플래그 (한 번 본 사용자는 다시 안 보이게)
@@ -262,7 +263,7 @@ private fun TourTooltipCard(
                 Text(
                     text = step.description,
                     fontSize = 14.sp,
-                    color = Color(0xFF555B6E),
+                    color = AppColors.DeepBrown600,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.size(16.dp))
@@ -275,14 +276,14 @@ private fun TourTooltipCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!isLast) {
                             TextButton(onClick = onSkip) {
-                                Text("건너뛰기", color = Color(0xFF9AA0B0), fontSize = 14.sp)
+                                Text("건너뛰기", color = AppColors.DeepBrown400, fontSize = 14.sp)
                             }
                             Spacer(Modifier.width(4.dp))
                         }
                         TextButton(onClick = onNext) {
                             Text(
                                 text = if (isLast) "시작하기" else "다음",
-                                color = Color(0xFF3B7DD8),
+                                color = AppColors.SignalRed500,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                             )
@@ -310,7 +311,7 @@ private fun StepDots(index: Int, total: Int) {
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCircle(
-                        color = if (active) Color(0xFF3B7DD8) else Color(0xFFD2D6E0)
+                        color = if (active) AppColors.SignalRed500 else AppColors.DeepBrown200
                     )
                 }
             }

@@ -25,7 +25,7 @@ class CallRecorderApp : Application(), Configuration.Provider {
             this,
             BuildConfig.NAVER_CLIENT_ID,
             BuildConfig.NAVER_CLIENT_SECRET,
-            "AI 통화 비서"
+            "FIANO"
         )
 
         // DI 컨테이너 (수동 DI - Hilt 없이 가벼움 유지)
@@ -55,7 +55,7 @@ class CallRecorderApp : Application(), Configuration.Provider {
         val text = if (count == 1) "통화 1건 분석이 완료됐어요" else "통화 ${count}건 분석이 완료됐어요"
         val n = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_SUMMARY)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("통화 분석 완료")
+            .setContentTitle("FIANO 분석 완료")
             .setContentText(text)
             .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
@@ -74,7 +74,7 @@ class CallRecorderApp : Application(), Configuration.Provider {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_OBSERVER,
-                "통화 감지",
+                "FIANO 통화 감지",
                 NotificationManager.IMPORTANCE_LOW
             ).apply { description = "통화 녹음 파일을 감지합니다" }
         )
@@ -82,7 +82,7 @@ class CallRecorderApp : Application(), Configuration.Provider {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_UPLOAD,
-                "업로드",
+                "FIANO 업로드",
                 NotificationManager.IMPORTANCE_LOW
             ).apply { description = "녹음 파일을 서버에 업로드합니다" }
         )
@@ -90,7 +90,7 @@ class CallRecorderApp : Application(), Configuration.Provider {
         nm.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_SUMMARY,
-                "요약 완료",
+                "FIANO 요약 완료",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply { description = "통화 요약이 준비되었습니다" }
         )
