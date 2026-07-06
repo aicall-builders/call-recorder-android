@@ -12,6 +12,7 @@ import com.callrecorder.app.util.RecordingScanner
 import com.callrecorder.app.data.repository.CalendarRepository
 import com.callrecorder.app.data.repository.NotesRepository
 import com.callrecorder.app.data.repository.KeywordRepository
+import com.callrecorder.app.data.repository.CustomerRepository
 
 class AppContainer(context: Context) {
     val tokenStore = TokenStore(context)
@@ -33,6 +34,8 @@ class AppContainer(context: Context) {
     val notesRepo = NotesRepository(api)
 
     val keywordRepo = KeywordRepository(api)
+
+    val customerRepo = CustomerRepository(api)
 
     // 외부 캘린더 OAuth 딥링크 콜백 브릿지 (Activity -> Compose)
     val calendarOAuthBridge = CalendarOAuthBridge()

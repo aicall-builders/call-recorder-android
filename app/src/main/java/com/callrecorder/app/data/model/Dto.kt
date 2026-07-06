@@ -391,3 +391,124 @@ data class UpdateCustomerRequest(
     @SerialName("special_notes") val specialNotes: String? = null,
     @SerialName("custom_fields") val customFields: Map<String, String>? = null,
 )
+
+
+// ===== Customer extended APIs =====
+
+@Serializable
+data class CustomerListResponse(
+    val customers: List<CustomerListItem> = emptyList(),
+    val count: Int = 0,
+)
+
+@Serializable
+data class CustomerListItem(
+    val id: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    val phone: String,
+    val name: String? = null,
+    val email: String? = null,
+    val tendency: String? = null,
+    val medical: String? = null,
+    @SerialName("special_notes") val specialNotes: String? = null,
+    @SerialName("custom_fields") val customFields: JsonElement? = null,
+    @SerialName("consent_status") val consentStatus: String = "pending",
+    @SerialName("consented_at") val consentedAt: String? = null,
+    @SerialName("consent_revoked_at") val consentRevokedAt: String? = null,
+    @SerialName("consent_version") val consentVersion: String? = null,
+    @SerialName("call_count") val callCount: Int = 0,
+    @SerialName("last_call_at") val lastCallAt: String? = null,
+    @SerialName("latest_summary") val latestSummary: String? = null,
+    @SerialName("latest_category") val latestCategory: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
+)
+
+@Serializable
+data class CreateConsentLinkRequest(
+    val name: String? = null,
+    @SerialName("customer_name") val customerName: String? = null,
+    @SerialName("store_id") val storeId: String? = null,
+)
+
+@Serializable
+data class ConsentLinkResponse(
+    val phone: String,
+    @SerialName("customer_name") val customerName: String? = null,
+    @SerialName("consent_status") val consentStatus: String? = null,
+    val token: String? = null,
+    @SerialName("consent_url") val consentUrl: String,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+
+@Serializable
+data class CustomerHistoryResponse(
+    val phone: String,
+    val items: List<CustomerHistoryItem> = emptyList(),
+    val count: Int = 0,
+)
+
+@Serializable
+data class CustomerHistoryItem(
+    val type: String,
+    val id: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val title: String? = null,
+    val summary: String? = null,
+    val category: String? = null,
+    val memo: String? = null,
+    val status: String? = null,
+    @SerialName("is_anonymized") val isAnonymized: Boolean = false,
+    val photos: List<CustomerHistoryPhoto> = emptyList(),
+)
+
+@Serializable
+data class CustomerHistoryPhoto(
+    val id: String? = null,
+    val url: String? = null,
+    val caption: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class CreateCustomerMemoRequest(
+    val memo: String,
+    @SerialName("is_anonymized") val isAnonymized: Boolean = false,
+)
+
+@Serializable
+data class CustomerMemoResponse(
+    val id: String,
+    val phone: String? = null,
+    val memo: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+@Serializable
+data class CustomerMemoPhotoUploadUrlRequest(
+    @SerialName("file_name") val fileName: String,
+)
+
+@Serializable
+data class CustomerMemoPhotoUploadUrlResponse(
+    @SerialName("photo_id") val photoId: String,
+    @SerialName("memo_id") val memoId: String,
+    @SerialName("s3_key") val s3Key: String,
+    @SerialName("upload_url") val uploadUrl: String,
+    @SerialName("upload_headers") val uploadHeaders: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class SaveCustomerMemoPhotoRequest(
+    @SerialName("photo_id") val photoId: String? = null,
+    @SerialName("s3_key") val s3Key: String,
+    val caption: String? = null,
+)
+
+@Serializable
+data class CustomerMemoPhotoResponse(
+    val id: String,
+    @SerialName("memo_id") val memoId: String? = null,
+    val url: String? = null,
+    val caption: String? = null,
+)

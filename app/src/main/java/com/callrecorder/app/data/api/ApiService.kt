@@ -181,4 +181,38 @@ interface ApiService {
         @Path("phone") phone: String,
         @Body body: UpdateCustomerRequest,
     ): Response<Unit>
+
+    @GET("customers")
+    suspend fun listCustomers(): CustomerListResponse
+
+    @POST("customers/{phone}/consent-link")
+    suspend fun createCustomerConsentLink(
+        @Path("phone") phone: String,
+        @Body body: CreateConsentLinkRequest = CreateConsentLinkRequest(),
+    ): ConsentLinkResponse
+
+    @GET("customers/{phone}/history")
+    suspend fun getCustomerHistory(@Path("phone") phone: String): CustomerHistoryResponse
+
+    @POST("customers/{phone}/memos")
+    suspend fun createCustomerMemo(
+        @Path("phone") phone: String,
+        @Body body: CreateCustomerMemoRequest,
+    ): CustomerMemoResponse
+
+    @POST("customers/{phone}/memos/{memoId}/photos/upload-url")
+    suspend fun requestCustomerMemoPhotoUploadUrl(
+        @Path("phone") phone: String,
+        @Path("memoId") memoId: String,
+        @Body body: CustomerMemoPhotoUploadUrlRequest,
+    ): CustomerMemoPhotoUploadUrlResponse
+
+    @POST("customers/{phone}/memos/{memoId}/photos")
+    suspend fun saveCustomerMemoPhoto(
+        @Path("phone") phone: String,
+        @Path("memoId") memoId: String,
+        @Body body: SaveCustomerMemoPhotoRequest,
+    ): CustomerMemoPhotoResponse
+
+
 }
