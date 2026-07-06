@@ -98,6 +98,7 @@ data class Call(
     @SerialName("caller_number") val callerNumber: String? = null,
     @SerialName("caller_name") val callerName: String? = null,
     @SerialName("caller_category") val callerCategory: String? = null,
+    @SerialName("direction") val direction: String? = null,
     @SerialName("s3_key") val s3Key: String? = null,
     @SerialName("clova_job_id") val clovaJobId: String? = null,
     @SerialName("stt_result") val sttResult: String? = null,

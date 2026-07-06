@@ -471,6 +471,8 @@ private fun PendingCallCard(
 
                     // 통화 길이
                     InfoRow("시간", durationText)
+                    Spacer(Modifier.height(2.dp))
+                    InfoRow("방향", callDirectionLabel(call))
                     Spacer(Modifier.height(6.dp))
 
                     // 진행 안내 줄
@@ -568,6 +570,8 @@ private fun CallListCard(
                     // 시간 / 내용
                     InfoRow("시간", durationText)
                     Spacer(Modifier.height(2.dp))
+                    InfoRow("방향", callDirectionLabel(call))
+                    Spacer(Modifier.height(2.dp))
                     InfoRow("내용", processResult)
                 }
             }
@@ -604,6 +608,15 @@ private fun CallTypeIcon(call: Call) {
         contentDescription = null,
         modifier = Modifier.size(36.dp),
     )
+}
+
+private fun callDirectionLabel(call: Call): String {
+    return when (call.direction?.lowercase()) {
+        "inbound", "incoming" -> "수신"
+        "outbound", "outgoing" -> "발신"
+        "manual" -> "수동"
+        else -> "미상"
+    }
 }
 
 private fun callTypeIconRes(call: Call): Int {

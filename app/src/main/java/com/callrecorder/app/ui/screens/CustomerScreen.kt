@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.callrecorder.app.data.model.Call
+import com.callrecorder.app.data.model.CustomerHistoryItem
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.keywordsList
 import com.callrecorder.app.ui.theme.AppColors
@@ -439,6 +440,46 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
     detail.saveMessage?.let {
         Spacer(Modifier.height(8.dp))
         Text(it, style = TextStyle(fontSize = 12.sp, color = SubInk))
+    }
+
+    ManualMemoHistoryBlock(detail.manualHistory)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ManualMemoHistoryBlock(items: List<CustomerHistoryItem>) {
+    val memos = items.filter { !it.memo.isNullOrBlank() || it.photos.isNotEmpty() }.take(5)
+    if (memos.isEmpty()) return
+
+    Spacer(Modifier.height(24.dp))
+    Text("메모/이미지", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Ink))
+    Spacer(Modifier.height(8.dp))
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        memos.forEach { item ->
+            Surface(color = Color(0xFFF8F8F8), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        item.memo?.takeIf { it.isNotBlank() } ?: "메모 내용 없음",
+                        style = TextStyle(fontSize = 12.sp, color = Ink, lineHeight = 17.sp),
+                    )
+                    val photos = item.photos.mapNotNull { it.url }.take(3)
+                    if (photos.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            photos.forEach { url ->
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = "메모 이미지",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)).background(PhotoBg),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

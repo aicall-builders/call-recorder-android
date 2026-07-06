@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CustomerAnalysis
+import com.callrecorder.app.data.model.CustomerHistoryItem
 import com.callrecorder.app.data.model.CustomerProfile
 import com.callrecorder.app.data.model.UpdateCustomerRequest
 import com.callrecorder.app.data.model.extractedInfoOrNull
@@ -63,6 +64,7 @@ data class CustomerDetailState(
     val profile: CustomerProfile? = null,
     val analysis: CustomerAnalysis? = null,
     val notes: Map<String, CustomerCallNote> = emptyMap(),   // callId → 메모/사진
+    val manualHistory: List<CustomerHistoryItem> = emptyList(),
     val saving: Boolean = false,
     val saveMessage: String? = null,
 )
@@ -151,10 +153,13 @@ class CustomerViewModel : ViewModel() {
 
             // 1) 프로필 + 분석
             val resp = runCatching { api.getCustomer(phone) }.getOrNull()
+            val historyItems = runCatching { api.getCustomerHistory(phone).items }
+                .getOrDefault(emptyList())
             _detail.value = _detail.value.copy(
                 loading = false,
                 profile = resp?.profile,
                 analysis = resp?.analysis,
+                manualHistory = historyItems.filter { it.type == "manual_memo" },
             )
 
             // 2) 통화별 메모/사진 (병렬)
