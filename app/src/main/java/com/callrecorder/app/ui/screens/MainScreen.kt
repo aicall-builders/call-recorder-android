@@ -20,7 +20,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.local.CallCategory
 import com.callrecorder.app.data.local.RecordingEntity
+import com.callrecorder.app.data.local.RecordingStatus
 import com.callrecorder.app.onboarding.FeatureTourOverlay
 import com.callrecorder.app.onboarding.HomeTourSteps
 import com.callrecorder.app.onboarding.TourKeys
@@ -74,6 +78,7 @@ fun MainScreen(
     var callDetailId by remember { mutableStateOf<String?>(null) }
     var noteEditCallId by remember { mutableStateOf<String?>(null) }
     var noteEditTitle by remember { mutableStateOf("통화 메모") }
+    var approvalRefreshKey by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -115,7 +120,8 @@ fun MainScreen(
                     }
                     val fileName = name ?: "upload_${UUID.randomUUID()}.m4a"
 
-                    val destFile = File(context.filesDir, fileName)
+                    val localFileName = "${System.currentTimeMillis()}_${fileName}"
+                    val destFile = File(context.filesDir, localFileName)
                     context.contentResolver.openInputStream(uri)?.use { input ->
                         destFile.outputStream().use { output ->
                             input.copyTo(output)
@@ -125,7 +131,7 @@ fun MainScreen(
                     val storeId = container.storeRepo.activeStoreId() ?: ""
                     val durationSeconds = readAudioDurationSeconds(destFile.absolutePath)
 
-                    recordingDao.insert(
+                    val insertedId = recordingDao.insert(
                         RecordingEntity(
                             filePath = destFile.absolutePath,
                             fileName = fileName,
@@ -134,11 +140,17 @@ fun MainScreen(
                             callStartedAtMillis = System.currentTimeMillis(),
                             counterpartNumber = null,
                             storeId = storeId,
-                            status = "AWAITING_APPROVAL",
+                            status = RecordingStatus.AWAITING_APPROVAL,
                             category = CallCategory.UNCLASSIFIED,
                         )
                     )
+                    if (insertedId == -1L) {
+                        recordingDao.findByPath(destFile.absolutePath)?.let { existing ->
+                            recordingDao.updateStatus(existing.id, RecordingStatus.AWAITING_APPROVAL)
+                        }
+                    }
                     homeVm.refresh()
+                    approvalRefreshKey += 1
                     delay(300)
                     showApproval = true
                 } catch (e: Exception) {
@@ -158,12 +170,7 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding()),
             ) {
-                if (showApproval) {
-                    PendingApprovalScreen(onBack = {
-                        showApproval = false
-                        homeVm.refresh()  // 추가
-                    })
-                } else if (noteEditCallId != null) {
+                if (noteEditCallId != null) {
                     CallNoteEditScreen(
                         callId = noteEditCallId!!,
                         callTitle = noteEditTitle,
@@ -175,7 +182,10 @@ fun MainScreen(
                             vm = homeVm,
                             onCallClick = handleCallClick,
                             onSettings = { selected = BottomTab.SETTINGS },
-                            onApprovalClick = { showApproval = true },
+                            onApprovalClick = {
+                                approvalRefreshKey += 1
+                                showApproval = true
+                            },
                             onUploadClick = { uploadLauncher.launch("audio/*") },
                             onSeeAllCalls = { selected = BottomTab.CALLS },
                             onSeeAllSchedules = { selected = BottomTab.CALENDAR },
@@ -194,7 +204,7 @@ fun MainScreen(
                                 )
                             }
                         }
-                        BottomTab.CUSTOMERS -> CustomerScreen()
+                        BottomTab.CUSTOMERS -> CustomerScreen(onCallDetailClick = handleCallClick)
                         BottomTab.CALENDAR -> InternalCalendarScreen(
                             onCallDetailClick = handleCallClick,
                             onMemoImageClick = { callId, title ->
@@ -224,11 +234,43 @@ fun MainScreen(
                 .tourTarget(tourController, TourKeys.BOTTOM_NAV),
         )
 
+        if (showApproval) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .clickable {
+                        showApproval = false
+                        homeVm.refresh()
+                    },
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(align = Alignment.Bottom)
+                        .clickable { },
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    color = AppColors.Surface,
+                ) {
+                    PendingApprovalScreen(
+                        refreshKey = approvalRefreshKey,
+                        onBack = {
+                            showApproval = false
+                            homeVm.refresh()
+                        },
+                    )
+                }
+            }
+        }
+
         // ── 기능 투어 오버레이 (최상단) ──
-        FeatureTourOverlay(
-            controller = tourController,
-            onFinish = { context.markFeatureTourDone() },
-        )
+        if (!showApproval) {
+            FeatureTourOverlay(
+                controller = tourController,
+                onFinish = { context.markFeatureTourDone() },
+            )
+        }
     }
 }
 

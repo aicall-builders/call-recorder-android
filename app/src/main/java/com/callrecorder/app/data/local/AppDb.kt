@@ -175,6 +175,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE status = 'AWAITING_APPROVAL' ORDER BY createdAt DESC")
     suspend fun getAwaitingApproval(): List<RecordingEntity>
 
+    @Query("SELECT COUNT(*) FROM recordings WHERE fileName = :fileName AND fileSize = :fileSize")
+    suspend fun countByFileNameAndSize(fileName: String, fileSize: Long): Int
+
     @Query("UPDATE recordings SET status = 'PENDING', updatedAt = :now WHERE id = :id")
     suspend fun approveOne(id: Long, now: Long = System.currentTimeMillis())
 

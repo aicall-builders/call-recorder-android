@@ -1,6 +1,7 @@
 package com.callrecorder.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.callrecorder.app.R
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CustomerHistoryItem
 import com.callrecorder.app.data.model.extractedInfoOrNull
@@ -37,10 +40,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /* ── 색상: FIANO 0705 디자인 시스템 ── */
-private val ScreenBg   = AppColors.DeepBrown700
+private val ScreenBg   = AppColors.DeepBrown900
 private val SheetBg    = Color(0xFFFFFFFF)
 private val TabOffBg   = AppColors.DeepBrown50
-private val Ink        = AppColors.DeepBrown950
+private val Ink        = AppColors.DeepBrown900
+private val TitleInk   = Color(0xFF342D2D)
 private val SubInk     = AppColors.DeepBrown700
 private val AccentBlue = AppColors.SignalRed500
 private val PlaceholderGray = AppColors.DeepBrown400
@@ -50,6 +54,9 @@ private val AvatarBg    = AppColors.DeepBrown50
 private val AvatarFg    = AppColors.DeepBrown700
 private val SearchBorder = AppColors.DeepBrown100
 private val PhoneGray   = AppColors.DeepBrown600
+private val MutedText   = Color(0xFFA59C9C)
+private val DetailLinkRed = Color(0xFFC61500)
+private val AiSummaryBg = Color(0xFFFFF3F1)
 
 // 히스토리 시안 색
 private val TimelineLine = AppColors.DeepBrown200
@@ -72,14 +79,22 @@ private enum class CustFilter { ALL, VIP, REGULAR, NORMAL, NEW }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
+fun CustomerScreen(
+    vm: CustomerViewModel = viewModel(),
+    onCallDetailClick: (String) -> Unit = {},
+) {
     val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CustFilter.ALL) }
     var selectedCustomer by remember { mutableStateOf<CustomerUiItem?>(null) }
 
     if (selectedCustomer != null) {
-        CustomerDetailScreen(customer = selectedCustomer!!, vm = vm, onBack = { selectedCustomer = null })
+        CustomerDetailScreen(
+            customer = selectedCustomer!!,
+            vm = vm,
+            onBack = { selectedCustomer = null },
+            onCallDetailClick = onCallDetailClick,
+        )
         return
     }
 
@@ -115,27 +130,47 @@ fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
             item {
                 Column(Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                        Modifier.fillMaxWidth()
+                            .height(52.dp)
+                            .padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.People, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("고객관리", style = TextStyle(fontSize = 18.sp, color = Color.White))
+                        Image(
+                            painter = painterResource(R.drawable.call_icon_logo),
+                            contentDescription = "FIANO",
+                            modifier = Modifier.size(width = 70.dp, height = 24.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                            Image(
+                                painter = painterResource(R.drawable.call_icon_alarm),
+                                contentDescription = "알림",
+                                modifier = Modifier.size(24.dp),
+                                contentScale = ContentScale.Fit,
+                            )
                         }
-                        Icon(Icons.Filled.NotificationsNone, "알림", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(124.dp)
+                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
+                    ) {
                         Text("고객 데이터를 정리해두었어요.",
-                            style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                            style = TextStyle(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Color.White))
                         Spacer(Modifier.height(16.dp))
                         // 흰색 pill 검색바
                         Surface(color = SheetBg, shape = RoundedCornerShape(999.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, SearchBorder),
-                            modifier = Modifier.fillMaxWidth()) {
-                            Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Search, null, tint = PlaceholderGray, modifier = Modifier.size(18.dp))
+                            modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                            Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Image(
+                                    painter = painterResource(R.drawable.call_icon_search),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
                                 Spacer(Modifier.width(8.dp))
                                 Box(Modifier.weight(1f)) {
                                     if (searchText.text.isEmpty()) {
@@ -156,17 +191,20 @@ fun CustomerScreen(vm: CustomerViewModel = viewModel()) {
 
             // ═══ 흰 시트 헤더 (라운드) + 필터 칩 ═══
             item {
-                Surface(color = SheetBg, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = SheetBg,
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) {
                     Row(
-                        Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+                        Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        GradeFilterChip("전체 $totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
-                        GradeFilterChip("VIP $vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
-                        GradeFilterChip("단골 $regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
-                        GradeFilterChip("일반 $normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
-                        GradeFilterChip("신규 $newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
+                        GradeFilterChip("전체$totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
+                        GradeFilterChip("VIP$vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
+                        GradeFilterChip("단골$regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
+                        GradeFilterChip("일반$normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
+                        GradeFilterChip("신규$newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
                     }
                 }
             }
@@ -242,8 +280,13 @@ private fun CustomerCard(customer: CustomerUiItem, onClick: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(displayName, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF101828)))
-                            Icon(Icons.Filled.Call, null, tint = Ink, modifier = Modifier.size(12.dp))
+                            Text(displayName, style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = TitleInk))
+                            Image(
+                                painter = painterResource(R.drawable.customer_icon_call_count),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                contentScale = ContentScale.Fit,
+                            )
                             Text("${customer.callCount}", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink))
                         }
                         Surface(color = badgeBg, shape = RoundedCornerShape(999.dp)) {
@@ -254,10 +297,15 @@ private fun CustomerCard(customer: CustomerUiItem, onClick: () -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     Text(customer.phone, style = TextStyle(fontSize = 14.sp, color = PhoneGray))
                     if (!aiLine.isNullOrBlank()) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(Modifier.size(14.dp).background(AccentBlue))
-                            Text(aiLine, style = TextStyle(fontSize = 13.sp, color = Ink, lineHeight = 20.sp), maxLines = 1)
+                            Image(
+                                painter = painterResource(R.drawable.customer_icon_timeline_marker),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                contentScale = ContentScale.Fit,
+                            )
+                            Text(aiLine, style = TextStyle(fontSize = 13.sp, color = Ink, lineHeight = 20.sp), maxLines = 2)
                         }
                     }
                 }
@@ -274,7 +322,12 @@ private enum class CustDetailTab { ANALYSIS, HISTORY }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomerDetailScreen(customer: CustomerUiItem, vm: CustomerViewModel, onBack: () -> Unit) {
+fun CustomerDetailScreen(
+    customer: CustomerUiItem,
+    vm: CustomerViewModel,
+    onBack: () -> Unit,
+    onCallDetailClick: (String) -> Unit = {},
+) {
     val detail by vm.detail.collectAsState()
     var tab by remember { mutableStateOf(CustDetailTab.ANALYSIS) }
     var editingCall by remember { mutableStateOf<Call?>(null) }
@@ -298,50 +351,75 @@ fun CustomerDetailScreen(customer: CustomerUiItem, vm: CustomerViewModel, onBack
 
     val displayName = customer.name ?: customer.phone
     val (badgeBg, badgeFg, badgeLabel) = gradeBadgeColors(customer.grade)
-    val reservationCount = customer.calls.count { it.category == "예약" }
-    val relatedSchedule = customer.calls.count {
-        val info = it.extractedInfoOrNull(); info?.date != null
-    }
-
     Scaffold(containerColor = ScreenBg) { padding ->
         Column(Modifier.fillMaxSize().background(ScreenBg)
             .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())) {
 
             // 상단 바
             Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                Modifier.fillMaxWidth()
+                    .height(56.dp)
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로", tint = Color.White,
-                        modifier = Modifier.size(20.dp).clip(CircleShape).clickable { onBack() })
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Image(
+                        painter = painterResource(R.drawable.detail_icon_back),
+                        contentDescription = "뒤로",
+                        modifier = Modifier.size(24.dp).clickable { onBack() },
+                        contentScale = ContentScale.Fit,
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("고객 상세", style = TextStyle(fontSize = 18.sp, color = Color.White))
+                    Text("고객 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
+                }
+                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                    Image(
+                        painter = painterResource(R.drawable.call_icon_alarm),
+                        contentDescription = "알림",
+                        modifier = Modifier.size(24.dp),
+                        contentScale = ContentScale.Fit,
+                    )
                 }
             }
 
-            // 프로필 헤더 (아바타 + 이름 + 배지 + 번호 + 통계 3개)
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF94A3C0)), contentAlignment = Alignment.Center) {
-                    Text(displayName.take(1), style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(displayName, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
-                    Surface(color = badgeBg, shape = RoundedCornerShape(999.dp)) {
-                        Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = TextStyle(fontSize = 11.sp, color = badgeFg))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .height(184.dp)
+                    .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().height(52.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFFA59C9C)), contentAlignment = Alignment.Center) {
+                        Text(displayName.take(1), style = TextStyle(fontSize = 20.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(displayName, style = TextStyle(fontSize = 20.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                                Surface(color = Color.White, shape = RoundedCornerShape(999.dp)) {
+                                    Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
+                                }
+                            }
+                        }
+                        Text(customer.phone, style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = Color(0xFFC3BBBB)))
                     }
                 }
-                Spacer(Modifier.height(2.dp))
-                Text(customer.phone, style = TextStyle(fontSize = 12.sp, color = Color(0xFFB8C4D9)))
-
-                Spacer(Modifier.height(16.dp))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    StatItem("${customer.callCount}회", "총 통화")
-                    StatItem("${reservationCount}건", "예약 완료")
-                    StatItem("${relatedSchedule}건", "관련 일정")
+                Surface(color = AiSummaryBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(88.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = Ink))
+                        val text = detail.analysis?.analysis ?: customer.lastSummary
+                        Text(
+                            if (!text.isNullOrBlank()) text else "통화가 쌓이면 고객 분석을 자동으로 정리해드려요.",
+                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = PhoneGray),
+                            maxLines = 2,
+                        )
+                    }
                 }
             }
 
@@ -356,7 +434,12 @@ fun CustomerDetailScreen(customer: CustomerUiItem, vm: CustomerViewModel, onBack
                 .padding(horizontal = 16.dp).padding(top = 24.dp, bottom = 80.dp)) {
                 when (tab) {
                     CustDetailTab.ANALYSIS -> AnalysisTab(customer = customer, detail = detail, vm = vm)
-                    CustDetailTab.HISTORY -> HistoryTab(customer = customer, detail = detail, onEditCall = { editingCall = it })
+                    CustDetailTab.HISTORY -> HistoryTab(
+                        customer = customer,
+                        detail = detail,
+                        onEditCall = { editingCall = it },
+                        onCallDetailClick = onCallDetailClick,
+                    )
                 }
             }
         }
@@ -394,27 +477,15 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
     var medical by remember(profile) { mutableStateOf(profile?.medical ?: "") }
     var special by remember(profile) { mutableStateOf(profile?.specialNotes ?: "") }
 
-    // AI 분석 카드
-    Surface(color = Color(0xFFF8F8F8), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink))
-            Spacer(Modifier.height(8.dp))
-            val text = detail.analysis?.analysis
-            Text(
-                if (!text.isNullOrBlank()) text else "아직 분석이 준비되지 않았어요. 통화가 쌓이면 자동으로 생성돼요.",
-                style = TextStyle(fontSize = 12.sp, color = if (text.isNullOrBlank()) PlaceholderGray else Ink, lineHeight = 17.sp),
-            )
-        }
-    }
-
-    Spacer(Modifier.height(24.dp))
-
-    // 주요 정보 (편집)
-    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text("주요 정보", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Ink))
+    Row(
+        Modifier.fillMaxWidth().height(36.dp).padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("주요 정보", style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink))
         Text(
             if (editing) "저장" else "편집",
-            style = TextStyle(fontSize = 12.sp, color = LinkBlue),
+            style = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, color = PhoneGray),
             modifier = Modifier.clickable {
                 if (editing) {
                     vm.saveProfile(customer.phone, email, tendency, medical, special)
@@ -423,18 +494,15 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
             },
         )
     }
-    Spacer(Modifier.height(8.dp))
 
-    if (editing) {
-        EditableField("이메일", email) { email = it }
-        EditableField("고객성향", tendency) { tendency = it }
-        EditableField("병력", medical) { medical = it }
-        EditableField("특이사항", special) { special = it }
-    } else {
-        ReadOnlyField("이메일", email)
-        ReadOnlyField("고객성향", tendency)
-        ReadOnlyField("병력", medical)
-        ReadOnlyField("특이사항", special)
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CustomerInfoField("이메일", email, editing, onChange = { email = it }, onClear = { email = "" })
+        CustomerInfoField("고객성향", tendency, editing, onChange = { tendency = it }, onClear = { tendency = "" })
+        CustomerInfoField("병력", medical, editing, onChange = { medical = it }, onClear = { medical = "" })
+        CustomerInfoField("특이사항", special, editing, onChange = { special = it }, onClear = { special = "" })
     }
 
     detail.saveMessage?.let {
@@ -484,23 +552,50 @@ private fun ManualMemoHistoryBlock(items: List<CustomerHistoryItem>) {
 }
 
 @Composable
-private fun ReadOnlyField(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, modifier = Modifier.width(62.dp), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = LabelGray))
-        Text(value.ifBlank { "-" }, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EditableField(label: String, value: String, onChange: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, modifier = Modifier.width(62.dp), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, color = LabelGray))
-        Box(Modifier.weight(1f).background(Color(0xFFF4F4F6), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-            if (value.isEmpty()) Text("입력", style = TextStyle(fontSize = 14.sp, color = PlaceholderGray))
-            BasicTextField(value = value, onValueChange = onChange,
-                textStyle = TextStyle(fontSize = 14.sp, color = Ink), cursorBrush = SolidColor(Ink),
-                singleLine = true, modifier = Modifier.fillMaxWidth())
+private fun CustomerInfoField(
+    label: String,
+    value: String,
+    editing: Boolean,
+    onChange: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = if (editing) 22.dp else 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.width(56.dp),
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PhoneGray),
+        )
+        if (editing) {
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                textStyle = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = Ink),
+                cursorBrush = SolidColor(Ink),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth()) {
+                        if (value.isBlank()) Text("내용", style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = PlaceholderGray))
+                        inner()
+                    }
+                },
+            )
+            Image(
+                painter = painterResource(R.drawable.customer_icon_cancel),
+                contentDescription = "내용 지우기",
+                modifier = Modifier.size(22.dp).clickable { onClear() },
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            Text(
+                value.ifBlank { "-" },
+                modifier = Modifier.weight(1f),
+                style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = Ink),
+            )
         }
     }
 }
@@ -511,7 +606,19 @@ private fun HistoryTab(
     customer: CustomerUiItem,
     detail: CustomerDetailState,
     onEditCall: (Call) -> Unit,
+    onCallDetailClick: (String) -> Unit,
 ) {
+    val reservationCount = customer.calls.count { it.category == "예약" }
+    val relatedSchedule = customer.calls.count {
+        val info = it.extractedInfoOrNull(); info?.date != null
+    }
+    MetricsRow(
+        totalCalls = customer.callCount,
+        reservationCount = reservationCount,
+        relatedSchedule = relatedSchedule,
+    )
+    Spacer(Modifier.height(24.dp))
+
     if (customer.calls.isEmpty()) {
         Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
             Text("통화 기록이 없어요", style = TextStyle(fontSize = 13.sp, color = PlaceholderGray))
@@ -525,7 +632,31 @@ private fun HistoryTab(
             isFirst = idx == 0,
             isLast = idx == customer.calls.lastIndex,
             onEditClick = { onEditCall(call) },
+            onCallDetailClick = { onCallDetailClick(call.id) },
         )
+    }
+}
+
+@Composable
+private fun MetricsRow(totalCalls: Int, reservationCount: Int, relatedSchedule: Int) {
+    Row(
+        Modifier.fillMaxWidth().height(58.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MetricItem("${totalCalls}회", "총 통화")
+        Box(Modifier.width(1.dp).height(20.dp).background(Color(0xFFDAD4D4)))
+        MetricItem("${reservationCount}건", "예약 완료")
+        Box(Modifier.width(1.dp).height(20.dp).background(Color(0xFFDAD4D4)))
+        MetricItem("${relatedSchedule}건", "관련 일정")
+    }
+}
+
+@Composable
+private fun MetricItem(value: String, label: String) {
+    Column(Modifier.width(60.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink))
+        Text(label, style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp, color = MutedText))
     }
 }
 
@@ -537,6 +668,7 @@ private fun HistoryRow(
     isFirst: Boolean,
     isLast: Boolean,
     onEditClick: () -> Unit,
+    onCallDetailClick: () -> Unit,
 ) {
     val (title, body) = callTitleAndBody(call)
     val (dateStr, timeStr) = formatDateTime(call.createdAt)
@@ -545,61 +677,50 @@ private fun HistoryRow(
     val memo = note?.memo?.trim().orEmpty()
     val hasUserContent = memo.isNotBlank() || photos.isNotEmpty()
 
-    Row(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 270.dp)) {
         // 타임라인 점 + 선
         Column(Modifier.width(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(AccentBlue))
+                Image(
+                    painter = painterResource(R.drawable.customer_icon_dot_as),
+                    contentDescription = null,
+                    modifier = Modifier.size(8.dp),
+                    contentScale = ContentScale.Fit,
+                )
             }
-            if (!isLast) Box(Modifier.width(2.dp).weight(1f).background(TimelineLine))
+            if (!isLast) Box(Modifier.width(2.dp).weight(1f).background(Color(0xFFDAD4D4)))
         }
 
         Column(
-            Modifier.weight(1f).padding(start = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
+            Modifier.weight(1f).padding(start = 8.dp, end = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (isFirst) {
-                // ── 강조 카드: 다크 배지 + 세로 배치 ──
-                call.category?.let { cat ->
-                    Surface(color = Ink, shape = RoundedCornerShape(999.dp)) {
-                        Text(cat, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color.White))
-                    }
+            call.category?.let { cat ->
+                Surface(color = Ink, shape = RoundedCornerShape(999.dp)) {
+                    Text(cat, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, color = Color.White))
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(title, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink, lineHeight = 20.sp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(dateStr, style = TextStyle(fontSize = 12.sp, color = PlaceholderGray))
-                        Text(timeStr, style = TextStyle(fontSize = 12.sp, color = PlaceholderGray))
-                    }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(dateStr, style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.ExtraBold, color = Ink))
+                    Text(
+                        "통화상세",
+                        style = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, color = DetailLinkRed),
+                        modifier = Modifier.clickable { onCallDetailClick() },
+                    )
                 }
-            } else {
-                // ── 일반 카드: 작은 파란 배지 + 가로 배치, 우측 날짜 ──
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                        call.category?.let { cat ->
-                            Surface(color = ChipBlueBg, shape = RoundedCornerShape(999.dp)) {
-                                Text(cat, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    style = TextStyle(fontSize = 11.sp, color = ChipBlueFg))
-                            }
-                        }
-                        Text(title, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Ink), maxLines = 1)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(dateStr, style = TextStyle(fontSize = 11.sp, color = PlaceholderGray))
-                        Text(timeStr, style = TextStyle(fontSize = 11.sp, color = PlaceholderGray))
-                    }
+                if (timeStr.isNotBlank()) {
+                    Text(timeStr, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = PlaceholderGray))
                 }
             }
 
             // 본문
-            if (!body.isNullOrBlank()) {
-                Text(body, style = TextStyle(
-                    fontSize = if (isFirst) 12.sp else 11.sp,
-                    color = PhoneGray,
-                    lineHeight = if (isFirst) 16.sp else 17.sp,
-                ))
-            }
+            Text(
+                body ?: title,
+                style = TextStyle(fontSize = 12.sp, color = PhoneGray, lineHeight = 16.sp),
+                maxLines = 2,
+            )
 
             // 키워드 칩 (초록)
             if (chips.isNotEmpty()) {
@@ -610,7 +731,7 @@ private fun HistoryRow(
                     chips.forEach { kw ->
                         Surface(color = ChipGreenBg, shape = RoundedCornerShape(999.dp)) {
                             Text(kw, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                style = TextStyle(fontSize = 11.sp, color = ChipGreenFg))
+                                style = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, color = PlaceholderGray))
                         }
                     }
                 }
@@ -651,8 +772,8 @@ private fun HistoryRow(
             // 메모 / 이미지 추가·편집
             Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onEditClick() }) {
                 Text(
-                    if (hasUserContent) "메모 / 이미지 편집하기" else "메모 / 이미지 추가하기+",
-                    style = TextStyle(fontSize = 12.sp, color = LinkBlue),
+                    if (hasUserContent) "+ 수정하기" else "+ 수정하기",
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = DetailLinkRed),
                 )
             }
         }

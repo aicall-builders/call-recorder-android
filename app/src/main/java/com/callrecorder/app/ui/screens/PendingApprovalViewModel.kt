@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 
 data class PendingApprovalUiState(
     val recordings: List<RecordingEntity> = emptyList(),
+    val duplicateIds: Set<Long> = emptySet(),
     val loading: Boolean = false,
 )
 
@@ -27,7 +28,15 @@ class PendingApprovalViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true)
             val recordings = recordingDao.getAwaitingApproval()
-            _state.value = PendingApprovalUiState(recordings = recordings, loading = false)
+            val duplicateIds = recordings
+                .filter { recordingDao.countByFileNameAndSize(it.fileName, it.fileSize) > 1 }
+                .map { it.id }
+                .toSet()
+            _state.value = PendingApprovalUiState(
+                recordings = recordings,
+                duplicateIds = duplicateIds,
+                loading = false,
+            )
         }
     }
 
