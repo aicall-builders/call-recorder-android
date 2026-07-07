@@ -366,6 +366,7 @@ data class CustomerProfile(
     @SerialName("special_notes") val specialNotes: String? = null,  // 특이사항
     @SerialName("custom_fields") val customFields: JsonElement? = null,
     @SerialName("updated_at") val updatedAt: String? = null,
+    @SerialName("is_pinned") val isPinned: Boolean = false,
 )
 
 /** 고객 AI 분석 (GET /customers/{phone} 의 analysis) */
@@ -391,6 +392,7 @@ data class UpdateCustomerRequest(
     val medical: String? = null,
     @SerialName("special_notes") val specialNotes: String? = null,
     @SerialName("custom_fields") val customFields: Map<String, String>? = null,
+    @SerialName("is_pinned") val isPinned: Boolean? = null,
 )
 
 
@@ -423,6 +425,7 @@ data class CustomerListItem(
     @SerialName("latest_category") val latestCategory: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("updated_at") val updatedAt: String? = null,
+    @SerialName("is_pinned") val isPinned: Boolean = false,
 )
 
 @Serializable

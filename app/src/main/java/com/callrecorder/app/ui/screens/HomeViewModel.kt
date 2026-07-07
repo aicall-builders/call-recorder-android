@@ -7,6 +7,7 @@ import com.callrecorder.app.data.local.RecordingStatus
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
+import com.callrecorder.app.data.model.CustomerListItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +35,7 @@ data class HomeUiState(
     val todaySummarized: Int = 0,
     val todayScheduled: Int = 0,
     val recentCalls: List<Call> = emptyList(),
+    val pinnedCustomers: List<CustomerListItem> = emptyList(),
     val pendingApprovalCount: Int = 0,
     val schedules: List<CalendarEvent> = emptyList(),
     val error: String? = null,
@@ -50,6 +52,7 @@ class HomeViewModel : ViewModel() {
     private val storeRepo = container.storeRepo
     private val recordingDao = container.recordingDao
     private val calendarRepo = container.calendarRepo
+    private val api = container.api
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -198,9 +201,17 @@ class HomeViewModel : ViewModel() {
                     }
                 }
             }
+            val customersDeferred = async {
+                runCatching {
+                    withTimeout(8_000L) {
+                        api.listCustomers().customers
+                    }
+                }
+            }
 
             val callsResult = callsDeferred.await()
             val schedulesResult = schedulesDeferred.await()
+            val customersResult = customersDeferred.await()
 
             callsResult.fold(
                 onSuccess = { allCalls ->
@@ -253,6 +264,10 @@ class HomeViewModel : ViewModel() {
                         todaySummarized = countTodaySummarized(calls),
                         todayScheduled = countTodayScheduled(calls),
                         recentCalls = filtered.take(20),
+                        pinnedCustomers = customersResult.getOrDefault(emptyList())
+                            .filter { it.isPinned }
+                            .sortedWith(compareByDescending<CustomerListItem> { it.callCount }.thenByDescending { it.lastCallAt ?: "" })
+                            .take(3),
                         pendingApprovalCount = awaitingCount,
                         schedules = schedulesResult.getOrDefault(emptyList()),
                     )

@@ -289,9 +289,14 @@ private fun CustomerCard(customer: CustomerUiItem, onClick: () -> Unit) {
                             )
                             Text("${customer.callCount}", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink))
                         }
-                        Surface(color = badgeBg, shape = RoundedCornerShape(999.dp)) {
-                            Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = TextStyle(fontSize = 10.sp, color = badgeFg))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (customer.isPinned) {
+                                Text("★", style = TextStyle(fontSize = 12.sp, color = Ink))
+                            }
+                            Surface(color = badgeBg, shape = RoundedCornerShape(999.dp)) {
+                                Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    style = TextStyle(fontSize = 10.sp, color = badgeFg))
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))

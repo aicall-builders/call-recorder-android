@@ -18,15 +18,15 @@ import kotlinx.coroutines.launch
 
 /** 고객 등급 (통화 횟수 기준 자동) */
 enum class CustomerGrade(val label: String) {
-    VIP("VIP"),       // >= 7
-    REGULAR("단골"),  // >= 4
-    NORMAL("일반"),   // >= 2
-    NEW("신규");      // = 1
+    VIP("VIP"),       // >= 20
+    REGULAR("단골"),  // >= 10
+    NORMAL("일반"),   // 2~9
+    NEW("신규");      // <= 1
 
     companion object {
         fun of(callCount: Int): CustomerGrade = when {
-            callCount >= 7 -> VIP
-            callCount >= 4 -> REGULAR
+            callCount >= 20 -> VIP
+            callCount >= 10 -> REGULAR
             callCount >= 2 -> NORMAL
             else -> NEW
         }
@@ -42,6 +42,7 @@ data class CustomerUiItem(
     val categories: List<String>,
     val calls: List<Call>,
     val grade: CustomerGrade,
+    val isPinned: Boolean = false,
 ) {
     val isVip: Boolean get() = grade == CustomerGrade.VIP
 }
@@ -89,6 +90,8 @@ class CustomerViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
             val storeId = storeRepo.activeStoreId()
+            val serverCustomers = runCatching { api.listCustomers().customers }.getOrDefault(emptyList())
+            val serverByPhone = serverCustomers.associateBy { it.phone.filter { ch -> ch.isDigit() } }
             callRepo.listCalls(storeId).fold(
                 onSuccess = { allCalls ->
                     // 그룹핑 키: 번호가 있으면 번호(숫자만), 없으면 이름.
@@ -107,7 +110,7 @@ class CustomerViewModel : ViewModel() {
                         .filter { groupKey(it) != null }
                         .groupBy { groupKey(it)!! }
 
-                    val customers = grouped.map { (_, calls) ->
+                    val callCustomers = grouped.map { (_, calls) ->
                         val sorted = calls.sortedByDescending { it.createdAt }
                         val latest = sorted.first()
                         // 표시용 번호/이름: 그룹 내에서 실제 값이 있는 걸 채택
@@ -115,20 +118,49 @@ class CustomerViewModel : ViewModel() {
                             .firstOrNull { it.filter { ch -> ch.isDigit() }.length >= 7 }
                             ?: latest.callerNumber ?: ""
 
+                        val normalizedPhone = phone.filter { ch -> ch.isDigit() }
+                        val server = serverByPhone[normalizedPhone]
+                        val count = maxOf(calls.size, server?.callCount ?: 0)
                         CustomerUiItem(
                             phone = phone,
-                            name = calls.mapNotNull { it.callerName?.takeIf { n -> n.isNotBlank() } }
-                                .firstOrNull()
+                            name = server?.name
+                                ?: calls.mapNotNull { it.callerName?.takeIf { n -> n.isNotBlank() } }
+                                    .firstOrNull()
                                 ?: calls.mapNotNull { it.extractedInfoOrNull()?.customerName }
                                     .firstOrNull { it.isNotBlank() },
-                            callCount = calls.size,
-                            lastCallAt = latest.createdAt,
-                            lastSummary = latest.summary,
+                            callCount = count,
+                            lastCallAt = latest.createdAt ?: server?.lastCallAt,
+                            lastSummary = server?.latestSummary ?: latest.summary,
                             categories = calls.mapNotNull { it.category }.distinct(),
                             calls = sorted,
-                            grade = CustomerGrade.of(calls.size),
+                            grade = CustomerGrade.of(count),
+                            isPinned = server?.isPinned == true,
                         )
-                    }.sortedByDescending { it.callCount }
+                    }
+
+                    val existingPhones = callCustomers.map { it.phone.filter { ch -> ch.isDigit() } }.toSet()
+                    val pinnedOnly = serverCustomers
+                        .filter { it.isPinned && it.phone.filter { ch -> ch.isDigit() } !in existingPhones }
+                        .map {
+                            CustomerUiItem(
+                                phone = it.phone,
+                                name = it.name,
+                                callCount = it.callCount,
+                                lastCallAt = it.lastCallAt,
+                                lastSummary = it.latestSummary,
+                                categories = listOfNotNull(it.latestCategory),
+                                calls = emptyList(),
+                                grade = CustomerGrade.of(it.callCount),
+                                isPinned = true,
+                            )
+                        }
+
+                    val customers = (pinnedOnly + callCustomers)
+                        .sortedWith(
+                            compareByDescending<CustomerUiItem> { it.isPinned }
+                                .thenByDescending { it.callCount }
+                                .thenByDescending { it.lastCallAt ?: "" }
+                        )
 
                     _state.value = CustomerUiState(loading = false, customers = customers)
                 },
@@ -188,6 +220,16 @@ class CustomerViewModel : ViewModel() {
                 profile = resp?.profile,
                 analysis = resp?.analysis,
             )
+        }
+    }
+
+    fun setPinned(customer: CustomerUiItem, pinned: Boolean) {
+        viewModelScope.launch {
+            val req = UpdateCustomerRequest(isPinned = pinned)
+            runCatching { api.updateCustomer(customer.phone, req) }.onSuccess {
+                loadCustomers()
+                loadDetail(customer.phone)
+            }
         }
     }
 

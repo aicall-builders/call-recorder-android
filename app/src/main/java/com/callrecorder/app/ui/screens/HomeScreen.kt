@@ -42,6 +42,7 @@ import com.callrecorder.app.R
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
+import com.callrecorder.app.data.model.CustomerListItem
 import com.callrecorder.app.data.model.extractedInfoOrNull
 import com.callrecorder.app.data.model.internalKeywordsMap
 import com.callrecorder.app.onboarding.FeatureTourController
@@ -145,18 +146,26 @@ fun HomeScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
             ) {
                 SectionHeader("주요 관리 고객", onSeeAll = onSeeAllCustomers)
+                val pinnedCustomers = state.pinnedCustomers
                 val customers = state.recentCalls.distinctBy { customerName(it) }.take(3)
-                if (customers.isEmpty()) {
+                if (pinnedCustomers.isEmpty() && customers.isEmpty()) {
                     EmptyBox("관리 중인 고객이 없어요")
                 } else {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        customers.forEach { call ->
-                            CustomerCard(call, Modifier.weight(1f)) { onCallClick(call.id) }
+                        if (pinnedCustomers.isNotEmpty()) {
+                            pinnedCustomers.forEach { c ->
+                                PinnedCustomerCard(c, Modifier.weight(1f), onClick = onSeeAllCustomers)
+                            }
+                            repeat(3 - pinnedCustomers.size) { Spacer(Modifier.weight(1f)) }
+                        } else {
+                            customers.forEach { call ->
+                                CustomerCard(call, Modifier.weight(1f)) { onCallClick(call.id) }
+                            }
+                            repeat(3 - customers.size) { Spacer(Modifier.weight(1f)) }
                         }
-                        repeat(3 - customers.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -409,6 +418,24 @@ private fun Avatar(name: String, size: androidx.compose.ui.unit.Dp) {
         }
     }
 }
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PinnedCustomerCard(customer: CustomerListItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val name = customer.name?.takeIf { it.isNotBlank() } ?: customer.phone
+    Surface(onClick = onClick, color = Color.White, shape = RoundedCornerShape(8.dp), modifier = modifier.height(112.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(AvatarBg), contentAlignment = Alignment.Center) {
+                Text(name.take(1), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AvatarText))
+            }
+            Text(name, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy), maxLines = 1)
+            Text(customer.phone, style = TextStyle(fontSize = 10.sp, color = SchedMeta), maxLines = 1)
+            Text("★ 주요관리", style = TextStyle(fontSize = 10.sp, color = AccentBlue), maxLines = 1)
+        }
+    }
+}
+
 
 @Composable
 private fun ScheduleTimelineItem(event: CalendarEvent, isFirst: Boolean, isLast: Boolean) {
