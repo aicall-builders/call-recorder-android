@@ -2,6 +2,7 @@ package com.callrecorder.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,11 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.callrecorder.app.R
 import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.ui.theme.AppColors
 import java.text.SimpleDateFormat
@@ -32,7 +36,6 @@ fun PendingApprovalScreen(
     val state by vm.state.collectAsState()
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     val allSelected = state.recordings.isNotEmpty() && selectedIds.size == state.recordings.size
-    val actionCount = if (selectedIds.isNotEmpty()) selectedIds.size else state.recordings.size
 
     LaunchedEffect(refreshKey) {
         selectedIds = emptySet()
@@ -43,16 +46,16 @@ fun PendingApprovalScreen(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 560.dp)
-            .background(AppColors.Surface)
+            .background(AppColors.Surface),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
-                .padding(horizontal = 16.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 24.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -75,7 +78,6 @@ fun PendingApprovalScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 전체 선택 체크박스
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable {
@@ -83,15 +85,8 @@ fun PendingApprovalScreen(
                             else state.recordings.map { it.id }.toSet()
                         }
                     ) {
-                        Checkbox(
-                            checked = allSelected,
-                            onCheckedChange = { checked ->
-                                selectedIds = if (checked) state.recordings.map { it.id }.toSet()
-                                else emptySet()
-                            },
-                            colors = CheckboxDefaults.colors(checkedColor = AppColors.BrandBlue),
-                        )
-                        Spacer(Modifier.width(4.dp))
+                        ApprovalCheckbox(checked = allSelected)
+                        Spacer(Modifier.width(10.dp))
                         Text(
                             "전체 선택",
                             style = TextStyle(fontSize = 13.sp, color = AppColors.TextSecondary),
@@ -125,7 +120,8 @@ fun PendingApprovalScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     items(state.recordings, key = { it.id }) { rec ->
                         val isSelected = rec.id in selectedIds
@@ -145,8 +141,9 @@ fun PendingApprovalScreen(
 
         if (state.recordings.isNotEmpty()) {
             ApprovalActionBar(
-                deleteLabel = if (selectedIds.isNotEmpty()) "삭제 ${actionCount}건" else "삭제",
-                approveLabel = if (selectedIds.isNotEmpty()) "승인 ${actionCount}건" else "승인",
+                deleteLabel = "삭제",
+                approveLabel = "승인",
+                deleteEnabled = selectedIds.isNotEmpty(),
                 onDelete = {
                     if (selectedIds.isNotEmpty()) {
                         selectedIds.forEach { vm.rejectOne(it) }
@@ -170,9 +167,26 @@ fun PendingApprovalScreen(
 }
 
 @Composable
+private fun ApprovalCheckbox(
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Image(
+        painter = painterResource(
+            if (checked) R.drawable.approval_checkbox_on
+            else R.drawable.approval_checkbox_off
+        ),
+        contentDescription = if (checked) "선택됨" else "선택 안 됨",
+        contentScale = ContentScale.Fit,
+        modifier = modifier.size(20.dp),
+    )
+}
+
+@Composable
 private fun ApprovalActionBar(
     deleteLabel: String,
     approveLabel: String,
+    deleteEnabled: Boolean,
     onDelete: () -> Unit,
     onApprove: () -> Unit,
 ) {
@@ -183,13 +197,13 @@ private fun ApprovalActionBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 8.dp),
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ApprovalActionButton(
                 label = deleteLabel,
                 fill = false,
-                enabled = deleteLabel != "삭제",
+                enabled = deleteEnabled,
                 onClick = onDelete,
                 modifier = Modifier.weight(1f),
             )
@@ -225,7 +239,7 @@ private fun ApprovalActionButton(
         border = if (fill) null else BorderStroke(1.dp, strokeColor),
         modifier = modifier.height(48.dp),
     ) {
-        Box(Modifier.fillMaxSize().padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
             Text(
                 label,
                 style = TextStyle(
@@ -253,12 +267,7 @@ private fun ApprovalCard(
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(
-            checked = isSelected,
-            onCheckedChange = { onToggleSelect() },
-            colors = CheckboxDefaults.colors(checkedColor = AppColors.BrandBlue),
-            modifier = Modifier.size(24.dp),
-        )
+        ApprovalCheckbox(checked = isSelected)
         Spacer(Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
@@ -267,14 +276,17 @@ private fun ApprovalCard(
                 style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary),
             )
             Spacer(Modifier.height(3.dp))
-            Text(
-                text = formatMillis(recording.callStartedAtMillis),
-                style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
-            )
-            Text(
-                text = formatDuration(recording.durationSeconds),
-                style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatMillis(recording.callStartedAtMillis),
+                    style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = formatDuration(recording.durationSeconds),
+                    style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
+                )
+            }
         }
         if (isDuplicate) {
             Text(

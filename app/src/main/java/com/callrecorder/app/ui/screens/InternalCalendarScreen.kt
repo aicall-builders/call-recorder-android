@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -141,20 +140,8 @@ fun InternalCalendarScreen(
                 .background(DarkNavy)
                 .padding(padding),
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Phone, null, tint = OnDarkPrimary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "일정관리",
-                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Normal, color = OnDarkPrimary, lineHeight = 28.sp),
-                )
-            }
+            FianoTopHeader()
+            CalendarHero()
             InternalCalendarTab(
                 year = currentYear,
                 month = currentMonth,
@@ -228,6 +215,26 @@ fun InternalCalendarScreen(
 // ─────────────────────────────────────────────────────
 
 @Composable
+private fun CalendarHero() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 60.dp)
+            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
+    ) {
+        Text(
+            "일정을 확인해보세요.",
+            style = TextStyle(
+                fontSize = 18.sp,
+                lineHeight = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = OnDarkPrimary,
+            ),
+        )
+    }
+}
+
+@Composable
 private fun InternalCalendarTab(
     year: Int,
     month: Int,
@@ -273,7 +280,7 @@ private fun InternalCalendarTab(
                     Icon(Icons.Filled.ChevronLeft, "이전 달", tint = Color.White, modifier = Modifier.size(18.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${year}년 ${month}월", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary, lineHeight = 18.sp))
+                    Text("${year}년 ${month}월", style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary, lineHeight = 24.sp))
                     if (loading) {
                         Spacer(Modifier.width(8.dp))
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = AccentBlue)
@@ -467,7 +474,7 @@ private fun EmptyScheduleTimeline(onAddClick: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "일정 추가하기+",
+                "+일정 추가하기",
                 modifier = Modifier.clickable(onClick = onAddClick),
                 style = TextStyle(fontSize = 12.sp, color = AppColors.SignalRed700, lineHeight = 16.sp),
             )

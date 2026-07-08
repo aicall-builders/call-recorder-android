@@ -79,6 +79,7 @@ fun MainScreen(
     var noteEditCallId by remember { mutableStateOf<String?>(null) }
     var noteEditTitle by remember { mutableStateOf("통화 메모") }
     var approvalRefreshKey by remember { mutableStateOf(0) }
+    var showExternalCalendarSheet by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -216,6 +217,7 @@ fun MainScreen(
                             onBack = { selected = BottomTab.HOME },
                             onChangeStore = onChangeStore,
                             onLoggedOut = onLoggedOut,
+                            onExternalCalendarClick = { showExternalCalendarSheet = true },
                         )
                     }
                 }
@@ -264,8 +266,14 @@ fun MainScreen(
             }
         }
 
+        if (showExternalCalendarSheet) {
+            ExternalCalendarBottomSheetOverlay(
+                onDismiss = { showExternalCalendarSheet = false },
+            )
+        }
+
         // ── 기능 투어 오버레이 (최상단) ──
-        if (!showApproval) {
+        if (!showApproval && !showExternalCalendarSheet) {
             FeatureTourOverlay(
                 controller = tourController,
                 onFinish = { context.markFeatureTourDone() },

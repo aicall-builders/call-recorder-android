@@ -214,5 +214,11 @@ interface ApiService {
         @Body body: SaveCustomerMemoPhotoRequest,
     ): CustomerMemoPhotoResponse
 
+    @DELETE("customers/{phone}/memos/{memoId}/photos/{photoId}")
+    suspend fun deleteCustomerMemoPhoto(
+        @Path("phone") phone: String,
+        @Path("memoId") memoId: String,
+        @Path("photoId") photoId: String,
+    ): Response<Unit>
 
 }

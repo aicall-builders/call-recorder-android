@@ -33,12 +33,14 @@ import com.callrecorder.app.ui.screens.LoginScreen
 import com.callrecorder.app.ui.screens.LoginType
 import com.callrecorder.app.ui.screens.MainScreen
 import com.callrecorder.app.ui.screens.PermissionScreen
+import com.callrecorder.app.ui.screens.PrivacyConsentScreen
 import com.callrecorder.app.ui.screens.StoreViewModel
 import com.callrecorder.app.ui.screens.StoresScreen
 import com.callrecorder.app.di.CalendarOAuthResult
 import com.callrecorder.app.onboarding.BusinessTypeScreen
 import com.callrecorder.app.onboarding.OnboardingScreen
 import com.callrecorder.app.onboarding.hasSelectedDomain
+import com.callrecorder.app.onboarding.resetFeatureTour
 import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.callrecorder.app.util.SafeLog
 import com.kakao.sdk.common.util.Utility
@@ -95,7 +97,13 @@ private fun AppRoot() {
         composable(Routes.INTRO) {
             IntroScreen(
                 onStart = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
-                onSkip = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
+                onSkip = { nav.navigate(Routes.PRIVACY_CONSENT) },
+            )
+        }
+        composable(Routes.PRIVACY_CONSENT) {
+            PrivacyConsentScreen(
+                onBack = { nav.popBackStack() },
+                onNext = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
             )
         }
         composable(Routes.LOGIN) {
@@ -132,8 +140,10 @@ private fun AppRoot() {
         }
         // 온보딩 5장 (매 로그인): 끝나면 메인
         composable(Routes.ONBOARDING) {
+            val context = LocalContext.current
             OnboardingScreen(
                 onFinish = {
+                    context.resetFeatureTour()
                     nav.navigate(Routes.MAIN) {
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
                     }
@@ -234,6 +244,7 @@ fun Context.markPermissionOnboardingDone() {
 
 object Routes {
     const val INTRO = "intro"
+    const val PRIVACY_CONSENT = "privacy_consent"
     const val LOGIN = "login"
     const val KAKAO_LINKED = "kakao_linked"
     const val PERMISSION = "permission"             // 콜드 스타트용 (자동 통과 가능)

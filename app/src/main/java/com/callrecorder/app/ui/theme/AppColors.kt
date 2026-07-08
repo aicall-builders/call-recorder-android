@@ -3,22 +3,35 @@ package com.callrecorder.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * 0705 FIANO 디자인 시스템에서 추출한 색상 토큰.
+ * FIANO 디자인 시스템에서 추출한 색상 토큰.
  * Material3 컬러스킴에 의존하지 않고 Composable에서 직접 참조한다.
  */
 object AppColors {
-    // ===== Primitive: Deep Brown =====
-    val DeepBrown950 = Color(0xFF342D2D)
-    val DeepBrown900 = Color(0xFF413838)
-    val DeepBrown800 = Color(0xFF4F4545)
-    val DeepBrown700 = Color(0xFF5F5555)
-    val DeepBrown600 = Color(0xFF746A6A)
-    val DeepBrown500 = Color(0xFF8E8585)
-    val DeepBrown400 = Color(0xFFA59C9C)
-    val DeepBrown300 = Color(0xFFC3BBBB)
-    val DeepBrown200 = Color(0xFFDAD4D4)
-    val DeepBrown100 = Color(0xFFE9E4E4)
-    val DeepBrown50 = Color(0xFFF6F3F3)
+    // ===== Primitive: Fiano Black =====
+    val FianoBlack950 = Color(0xFF07090C)
+    val FianoBlack900 = Color(0xFF101418)
+    val FianoBlack800 = Color(0xFF2A2F36)
+    val FianoBlack700 = Color(0xFF454C55)
+    val FianoBlack600 = Color(0xFF6B7078)
+    val FianoBlack500 = Color(0xFF8A9098)
+    val FianoBlack400 = Color(0xFFA8AFB6)
+    val FianoBlack300 = Color(0xFFC7CDD3)
+    val FianoBlack200 = Color(0xFFE2E6EA)
+    val FianoBlack100 = Color(0xFFF4F6F8)
+    val FianoBlack50 = Color(0xFFFAFBFC)
+
+    // 기존 화면 호환 alias. primitive/deep-brown 토큰은 primitive/fiano-black 토큰으로 대체됨.
+    val DeepBrown950 = FianoBlack950
+    val DeepBrown900 = FianoBlack900
+    val DeepBrown800 = FianoBlack800
+    val DeepBrown700 = FianoBlack700
+    val DeepBrown600 = FianoBlack600
+    val DeepBrown500 = FianoBlack500
+    val DeepBrown400 = FianoBlack400
+    val DeepBrown300 = FianoBlack300
+    val DeepBrown200 = FianoBlack200
+    val DeepBrown100 = FianoBlack100
+    val DeepBrown50 = FianoBlack50
 
     // ===== Primitive: Signal Red =====
     val SignalRed900 = Color(0xFF7A0C00)

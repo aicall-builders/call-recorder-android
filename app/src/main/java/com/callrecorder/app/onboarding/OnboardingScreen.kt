@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -45,16 +44,16 @@ import com.callrecorder.app.ui.theme.AppColors
 // 팔레트
 // ─────────────────────────────────────────────────────────────
 private val Bg          = AppColors.DeepBrown100
-private val Primary     = AppColors.DeepBrown900
-private val DarkNavy    = AppColors.DeepBrown950
-private val TitleColor  = Color(0xFF1B1F2A)
-private val DescColor   = Color(0xFF5A5F6C)
-private val Device      = AppColors.DeepBrown900
-private val Blue        = AppColors.SignalRed500
+private val Primary     = AppColors.Brand
+private val DarkNavy    = AppColors.BrandDark
+private val TitleColor  = AppColors.TextPrimary
+private val DescColor   = AppColors.TextSecondary
+private val Device      = AppColors.Brand
+private val Blue        = AppColors.Accent
 private val AiBg        = AppColors.SignalRed50
 private val AiText      = AppColors.SignalRed700
 private val GrayText    = AppColors.DeepBrown400
-private val DotInactive = Color(0xFFFFFFFF)
+private val DotInactive = AppColors.Surface
 
 private const val PAGE_COUNT = 5
 
@@ -133,7 +132,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 ) {
                     Text(
                         if (step == PAGE_COUNT - 1) "시작하기" else "다음",
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary),
                     )
                 }
                 Box(
@@ -174,7 +173,7 @@ private fun SummarySection(
             )
             Text(
                 desc,
-                style = TextStyle(fontSize = 18.sp, color = DescColor, lineHeight = 24.sp, letterSpacing = (-0.5).sp),
+                style = TextStyle(fontSize = 18.sp, color = DescColor, lineHeight = 24.sp),
                 textAlign = TextAlign.Center,
             )
         }
@@ -201,7 +200,7 @@ private fun Pill(text: String) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color.White)
+            .background(AppColors.Surface)
             .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -211,7 +210,7 @@ private fun Pill(text: String) {
             contentDescription = null,
             modifier = Modifier.size(18.dp),
         )
-        Text(text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.SignalRed500, lineHeight = 16.sp))
+        Text(text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.Accent, lineHeight = 16.sp))
     }
 }
 
@@ -249,8 +248,8 @@ private fun DeviceFrame(content: @Composable () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("FIANO", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White))
-                Box(Modifier.size(14.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.35f)))
+                Text("FIANO", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary))
+                Box(Modifier.size(14.dp).clip(CircleShape).background(AppColors.Surface.copy(alpha = 0.35f)))
             }
             content()
         }
@@ -266,11 +265,11 @@ private fun MiniChip(text: String, filled: Boolean) {
             .clip(RoundedCornerShape(999.dp))
             .then(
                 if (filled) Modifier.background(DarkNavy)
-                else Modifier.background(Color.White).border(0.8.dp, DarkNavy, RoundedCornerShape(999.dp))
+                else Modifier.background(AppColors.Surface).border(0.8.dp, DarkNavy, RoundedCornerShape(999.dp))
             )
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
-        Text(text, style = ChipTextStyle.copy(color = if (filled) Color.White else DarkNavy))
+        Text(text, style = ChipTextStyle.copy(color = if (filled) AppColors.TextOnPrimary else DarkNavy))
     }
 }
 
@@ -280,8 +279,8 @@ private fun CallRow(name: String, sub: String, time: String, badge: String? = nu
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(26.dp).clip(CircleShape).background(Color(0xFFEDEFF5)), contentAlignment = Alignment.Center) {
-            Text(name.take(1), style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5F5F5F)))
+        Box(Modifier.size(26.dp).clip(CircleShape).background(AppColors.DeepBrown100), contentAlignment = Alignment.Center) {
+            Text(name.take(1), style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown600))
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
@@ -290,12 +289,12 @@ private fun CallRow(name: String, sub: String, time: String, badge: String? = nu
                 Spacer(Modifier.width(4.dp))
                 Text(time, style = TextStyle(fontSize = 10.sp, color = Blue))
             }
-            Text(sub, style = TextStyle(fontSize = 10.sp, color = Color(0xFF7A7F8C)))
+            Text(sub, style = TextStyle(fontSize = 10.sp, color = AppColors.TextSecondary))
         }
         if (badge != null) {
             Box(
                 Modifier.clip(RoundedCornerShape(999.dp)).background(DarkNavy).padding(horizontal = 8.dp, vertical = 3.dp),
-            ) { Text(badge, style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium, color = Color.White)) }
+            ) { Text(badge, style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Medium, color = AppColors.TextOnPrimary)) }
         }
     }
 }
@@ -305,10 +304,10 @@ private fun CallRow(name: String, sub: String, time: String, badge: String? = nu
 private fun HomeMockup() {
     DeviceFrame {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-            Text("2026년 6월 9일 화요일", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White))
+            Text("2026년 6월 9일 화요일", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary))
             Spacer(Modifier.height(10.dp))
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).background(Color.White)
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(999.dp)).background(AppColors.Surface)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text("통화 분석 대기 24건", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DarkNavy))
@@ -321,7 +320,7 @@ private fun HomeMockup() {
         }
         Spacer(Modifier.height(12.dp))
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(Color.White)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)).background(AppColors.Surface)
                 .padding(12.dp),
         ) {
             Text("주요 분석 통화", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DarkNavy))
@@ -338,12 +337,12 @@ private fun CallListMockup() {
     DeviceFrame {
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(999.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 8.dp),
+                .clip(RoundedCornerShape(999.dp)).background(AppColors.Surface).padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text("전화번호 또는 요약 검색", style = TextStyle(fontSize = 11.sp, color = GrayText))
         }
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color.White)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(AppColors.Surface)
                 .padding(10.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -370,12 +369,12 @@ private fun CallListMockup() {
 private fun SummaryMockup() {
     DeviceFrame {
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp)) {
-            Text("010-4762-0815", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White))
-            Text("2026. 06. 04   17:07", style = TextStyle(fontSize = 10.sp, color = Color.White.copy(alpha = 0.7f)))
+            Text("010-4762-0815", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary))
+            Text("2026. 06. 04   17:07", style = TextStyle(fontSize = 10.sp, color = AppColors.TextOnPrimary.copy(alpha = 0.7f)))
         }
         Spacer(Modifier.height(10.dp))
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color.White)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(AppColors.Surface)
                 .padding(14.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -408,7 +407,7 @@ private fun CalendarMockup() {
     DeviceFrame {
         Column(
             Modifier.fillMaxWidth().padding(8.dp)
-                .clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp),
+                .clip(RoundedCornerShape(16.dp)).background(AppColors.Surface).padding(12.dp),
         ) {
             Text("2026년 6월", style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = DarkNavy))
             Spacer(Modifier.height(8.dp))
@@ -437,7 +436,7 @@ private fun CalendarMockup() {
                                 ) {
                                     Text("$d", style = TextStyle(
                                         fontSize = 10.sp,
-                                        color = if (highlight) Color.White else DarkNavy,
+                                        color = if (highlight) AppColors.TextOnPrimary else DarkNavy,
                                         fontWeight = if (highlight) FontWeight.Bold else FontWeight.Normal,
                                     ))
                                 }
@@ -450,11 +449,11 @@ private fun CalendarMockup() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(Blue))
                 Spacer(Modifier.width(4.dp))
-                Text("통화 자동 등록", style = TextStyle(fontSize = 9.sp, color = Color(0xFF7A7F8C)))
+                Text("통화 자동 등록", style = TextStyle(fontSize = 9.sp, color = AppColors.TextSecondary))
                 Spacer(Modifier.width(12.dp))
-                Box(Modifier.size(7.dp).clip(CircleShape).background(Color(0xFF22C55E)))
+                Box(Modifier.size(7.dp).clip(CircleShape).background(AppColors.DeepBrown900))
                 Spacer(Modifier.width(4.dp))
-                Text("수동 등록", style = TextStyle(fontSize = 9.sp, color = Color(0xFF7A7F8C)))
+                Text("수동 등록", style = TextStyle(fontSize = 9.sp, color = AppColors.TextSecondary))
             }
         }
     }
@@ -466,12 +465,12 @@ private fun CustomerMockup() {
     DeviceFrame {
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(999.dp)).background(Color.White).padding(horizontal = 12.dp, vertical = 8.dp),
+                .clip(RoundedCornerShape(999.dp)).background(AppColors.Surface).padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text("고객 이름 또는 전화번호 검색", style = TextStyle(fontSize = 11.sp, color = GrayText))
         }
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(Color.White)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)).background(AppColors.Surface)
                 .padding(10.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -493,8 +492,8 @@ private fun CustomerRow(name: String, tag: String, sub: String) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFEDEFF5)), contentAlignment = Alignment.Center) {
-            Text(name.take(1), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5F5F5F)))
+        Box(Modifier.size(28.dp).clip(CircleShape).background(AppColors.DeepBrown100), contentAlignment = Alignment.Center) {
+            Text(name.take(1), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown600))
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
@@ -505,7 +504,7 @@ private fun CustomerRow(name: String, tag: String, sub: String) {
                     Text(tag, style = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AiText))
                 }
             }
-            Text(sub, style = TextStyle(fontSize = 10.sp, color = Color(0xFF7A7F8C)))
+            Text(sub, style = TextStyle(fontSize = 10.sp, color = AppColors.TextSecondary))
         }
     }
 }

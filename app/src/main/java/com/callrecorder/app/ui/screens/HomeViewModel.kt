@@ -57,12 +57,7 @@ class HomeViewModel : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    // 홈 토글 설정 저장
-    private val homePrefs by lazy {
-        CallRecorderApp.instance.getSharedPreferences("home_settings", android.content.Context.MODE_PRIVATE)
-    }
-
-    // 중요 통화 카테고리 설정 읽기
+    // 홈 히어로와 설정 화면이 같은 설정값을 공유한다.
     private val appPrefs by lazy {
         CallRecorderApp.instance.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
     }
@@ -72,12 +67,7 @@ class HomeViewModel : ViewModel() {
     private val retriedUploadedProcessIds = mutableSetOf<String>()
 
     init {
-        val autoSummary = homePrefs.getBoolean("auto_summary", true)
-        val importantFilter = homePrefs.getBoolean("important_filter", false)
-        _state.value = _state.value.copy(
-            autoSummaryEnabled = autoSummary,
-            importantFilterEnabled = importantFilter,
-        )
+        syncSettingsFromPrefs()
         refresh()
         observeUploads()
     }
@@ -121,18 +111,33 @@ class HomeViewModel : ViewModel() {
     }
 
     fun setAutoSummary(enabled: Boolean) {
-        homePrefs.edit().putBoolean("auto_summary", enabled).apply()
+        appPrefs.edit().putBoolean("auto_analyze", enabled).apply()
         _state.value = _state.value.copy(autoSummaryEnabled = enabled)
     }
 
     fun setImportantFilter(enabled: Boolean) {
-        homePrefs.edit().putBoolean("important_filter", enabled).apply()
+        appPrefs.edit()
+            .putStringSet(
+                "important_categories",
+                if (enabled) ALL_CALL_CATEGORIES.toSet() else emptySet(),
+            )
+            .apply()
         _state.value = _state.value.copy(importantFilterEnabled = enabled)
         applyFilter()
     }
 
     // 설정 화면에서 카테고리 변경 시 홈 목록 갱신용
     fun refreshFilter() {
+        syncSettingsFromPrefs()
+        applyFilter()
+    }
+
+    fun syncSettingsFromPrefs() {
+        val categories = getImportantCategories()
+        _state.value = _state.value.copy(
+            autoSummaryEnabled = appPrefs.getBoolean("auto_analyze", false),
+            importantFilterEnabled = categories.isNotEmpty(),
+        )
         applyFilter()
     }
 

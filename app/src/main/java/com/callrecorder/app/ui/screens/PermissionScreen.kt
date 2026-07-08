@@ -18,6 +18,10 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +83,10 @@ fun PermissionScreen(onGranted: () -> Unit) {
     val notifPerm = if (Build.VERSION.SDK_INT >= 33) {
         rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     } else null
+    var audioToggleOn by remember { mutableStateOf(false) }
+    var contactsToggleOn by remember { mutableStateOf(false) }
+    var callLogToggleOn by remember { mutableStateOf(false) }
+    var notificationsToggleOn by remember { mutableStateOf(false) }
 
     // 핵심 권한(녹음) 허용되면 백그라운드 서비스/워커 시작
     LaunchedEffect(audioPerm.status.isGranted) {
@@ -87,16 +95,41 @@ fun PermissionScreen(onGranted: () -> Unit) {
             UploadWorker.enqueuePeriodic(context)
         }
     }
+    LaunchedEffect(audioPerm.status.isGranted) {
+        if (audioPerm.status.isGranted && audioToggleOn) audioToggleOn = true
+    }
+    LaunchedEffect(contactsPerm.status.isGranted) {
+        if (contactsPerm.status.isGranted && contactsToggleOn) contactsToggleOn = true
+    }
+    LaunchedEffect(callLogPerm.status.isGranted) {
+        if (callLogPerm.status.isGranted && callLogToggleOn) callLogToggleOn = true
+    }
+    LaunchedEffect(notifPerm?.status?.isGranted) {
+        if ((notifPerm?.status?.isGranted ?: false) && notificationsToggleOn) notificationsToggleOn = true
+    }
 
     PermissionContent(
-        audioGranted = audioPerm.status.isGranted,
-        contactsGranted = contactsPerm.status.isGranted,
-        callLogGranted = callLogPerm.status.isGranted,
-        notificationsGranted = notifPerm?.status?.isGranted ?: true,
-        onAudioToggle = { handlePermissionToggle(context, audioPerm) },
-        onContactsToggle = { handlePermissionToggle(context, contactsPerm) },
-        onCallLogToggle = { handlePermissionToggle(context, callLogPerm) },
-        onNotificationsToggle = { notifPerm?.let { handlePermissionToggle(context, it) } },
+        audioGranted = audioToggleOn,
+        contactsGranted = contactsToggleOn,
+        callLogGranted = callLogToggleOn,
+        notificationsGranted = notificationsToggleOn,
+        canContinue = audioPerm.status.isGranted,
+        onAudioToggle = {
+            audioToggleOn = true
+            handlePermissionToggle(context, audioPerm)
+        },
+        onContactsToggle = {
+            contactsToggleOn = true
+            handlePermissionToggle(context, contactsPerm)
+        },
+        onCallLogToggle = {
+            callLogToggleOn = true
+            handlePermissionToggle(context, callLogPerm)
+        },
+        onNotificationsToggle = {
+            notificationsToggleOn = true
+            notifPerm?.let { handlePermissionToggle(context, it) }
+        },
         onGranted = onGranted,
     )
 }
@@ -107,6 +140,7 @@ private fun PermissionContent(
     contactsGranted: Boolean,
     callLogGranted: Boolean,
     notificationsGranted: Boolean,
+    canContinue: Boolean = audioGranted,
     onAudioToggle: () -> Unit,
     onContactsToggle: () -> Unit,
     onCallLogToggle: () -> Unit,
@@ -206,7 +240,7 @@ private fun PermissionContent(
             OnboardingPrimaryButton(
                 text = "통화비서 이용하기",
                 onClick = onGranted,
-                enabled = audioGranted,
+                enabled = canContinue,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 64.dp),
@@ -228,7 +262,7 @@ private fun PermissionScreenPreview() {
             audioGranted = false,
             contactsGranted = false,
             callLogGranted = false,
-            notificationsGranted = true,
+            notificationsGranted = false,
             onAudioToggle = {},
             onContactsToggle = {},
             onCallLogToggle = {},
@@ -330,8 +364,8 @@ private fun PermissionCard(
                 onCheckedChange = { onToggle() },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = AppColors.DeepBrown900,
-                    checkedBorderColor = AppColors.DeepBrown900,
+                    checkedTrackColor = AppColors.FianoBlack900,
+                    checkedBorderColor = AppColors.FianoBlack900,
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = ToggleOffTrack,
                     uncheckedBorderColor = ToggleOffTrack,
@@ -341,4 +375,4 @@ private fun PermissionCard(
     }
 }
 
-private val ToggleOffTrack = AppColors.DeepBrown200
+private val ToggleOffTrack = AppColors.FianoBlack300

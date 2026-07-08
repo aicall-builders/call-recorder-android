@@ -66,6 +66,13 @@ fun Context.markFeatureTourDone() {
         .apply()
 }
 
+fun Context.resetFeatureTour() {
+    getSharedPreferences(TOUR_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_HOME_TOUR_DONE)
+        .apply()
+}
+
 // ─────────────────────────────────────────────────────────────
 // 2) 투어 대상 키 (홈 화면 기준 - 필요하면 추가/수정)
 // ─────────────────────────────────────────────────────────────

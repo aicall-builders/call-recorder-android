@@ -69,6 +69,10 @@ class SettingsViewModel : ViewModel() {
         }
     }
 
+    fun syncPrefs() {
+        loadPrefs()
+    }
+
     // 중요 통화 카테고리 토글
     fun toggleCategory(category: String) {
         val current = _state.value.importantCategories.toMutableSet()

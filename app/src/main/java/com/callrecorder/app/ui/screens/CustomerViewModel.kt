@@ -56,7 +56,19 @@ data class CustomerUiState(
 /** 통화별 메모/사진 (히스토리 타임라인용) */
 data class CustomerCallNote(
     val memo: String = "",
-    val photoUrls: List<String> = emptyList(),
+    val photos: List<CustomerRelatedPhoto> = emptyList(),
+)
+
+data class CustomerRelatedPhoto(
+    val id: String,
+    val callId: String,
+    val url: String,
+)
+
+data class CustomerManualPhoto(
+    val id: String,
+    val memoId: String,
+    val url: String,
 )
 
 /** 고객 상세(프로필+분석+메모/사진) 상태 */
@@ -66,6 +78,7 @@ data class CustomerDetailState(
     val analysis: CustomerAnalysis? = null,
     val notes: Map<String, CustomerCallNote> = emptyMap(),   // callId → 메모/사진
     val manualHistory: List<CustomerHistoryItem> = emptyList(),
+    val manualPhotos: List<CustomerManualPhoto> = emptyList(),
     val saving: Boolean = false,
     val saveMessage: String? = null,
 )
@@ -76,6 +89,7 @@ class CustomerViewModel : ViewModel() {
     private val callRepo = container.callRepo
     private val storeRepo = container.storeRepo
     private val notesRepo = container.notesRepo
+    private val customerRepo = container.customerRepo
     private val api = container.api
 
     private val _state = MutableStateFlow(CustomerUiState())
@@ -192,6 +206,20 @@ class CustomerViewModel : ViewModel() {
                 profile = resp?.profile,
                 analysis = resp?.analysis,
                 manualHistory = historyItems.filter { it.type == "manual_memo" },
+                manualPhotos = historyItems
+                    .filter { it.type == "manual_memo" }
+                    .flatMap { item ->
+                        item.photos.mapNotNull { photo ->
+                            val memoId = item.id ?: return@mapNotNull null
+                            val photoId = photo.id ?: return@mapNotNull null
+                            val url = photo.url ?: return@mapNotNull null
+                            CustomerManualPhoto(
+                                id = photoId,
+                                memoId = memoId,
+                                url = url,
+                            )
+                        }
+                    },
             )
 
             // 2) 통화별 메모/사진 (병렬)
@@ -203,7 +231,13 @@ class CustomerViewModel : ViewModel() {
                     note?.let {
                         id to CustomerCallNote(
                             memo = it.memo,
-                            photoUrls = it.photos.mapNotNull { p -> p.url },
+                            photos = it.photos.map { p ->
+                                CustomerRelatedPhoto(
+                                    id = p.id,
+                                    callId = id,
+                                    url = p.url,
+                                )
+                            },
                         )
                     }
                 }.toMap()
@@ -265,5 +299,91 @@ class CustomerViewModel : ViewModel() {
 
     fun clearSaveMessage() {
         _detail.value = _detail.value.copy(saveMessage = null)
+    }
+
+    fun uploadRelatedPhoto(customer: CustomerUiItem, callId: String, fileName: String, bytes: ByteArray) {
+        viewModelScope.launch {
+            _detail.value = _detail.value.copy(saving = true, saveMessage = null)
+            notesRepo.uploadPhoto(callId, fileName, bytes).fold(
+                onSuccess = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지가 추가됐어요")
+                    enterDetail(customer)
+                },
+                onFailure = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지 추가 실패: ${it.message}")
+                },
+            )
+        }
+    }
+
+    fun deleteRelatedPhoto(customer: CustomerUiItem, photo: CustomerRelatedPhoto) {
+        viewModelScope.launch {
+            _detail.value = _detail.value.copy(saving = true, saveMessage = null)
+            notesRepo.deletePhoto(photo.callId, photo.id).fold(
+                onSuccess = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지가 삭제됐어요")
+                    enterDetail(customer)
+                },
+                onFailure = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지 삭제 실패: ${it.message}")
+                },
+            )
+        }
+    }
+
+    fun uploadAdditionalInfoPhoto(customer: CustomerUiItem, fileName: String, bytes: ByteArray) {
+        viewModelScope.launch {
+            _detail.value = _detail.value.copy(saving = true, saveMessage = null)
+            val currentItems = _detail.value.manualHistory
+            val memoIdResult = currentItems.firstOrNull { !it.id.isNullOrBlank() }?.id
+                ?.let { Result.success(it) }
+                ?: customerRepo.createMemo(customer.phone, memo = "")
+                    .map { it.id }
+
+            memoIdResult.fold(
+                onSuccess = { memoId ->
+                    customerRepo.uploadMemoPhoto(
+                        phone = customer.phone,
+                        memoId = memoId,
+                        fileName = fileName,
+                        imageBytes = bytes,
+                    ).fold(
+                        onSuccess = {
+                            _detail.value = _detail.value.copy(saving = false, saveMessage = "추가정보 이미지가 추가됐어요")
+                            enterDetail(customer)
+                        },
+                        onFailure = {
+                            _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지 추가 실패: ${it.message}")
+                        },
+                    )
+                },
+                onFailure = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "메모 생성 실패: ${it.message}")
+                },
+            )
+        }
+    }
+
+    fun uploadManualPhoto(customer: CustomerUiItem, fileName: String, bytes: ByteArray) {
+        uploadAdditionalInfoPhoto(customer, fileName, bytes)
+    }
+
+    fun deleteManualPhoto(customer: CustomerUiItem, photo: CustomerManualPhoto) {
+        viewModelScope.launch {
+            _detail.value = _detail.value.copy(saving = true, saveMessage = null)
+            customerRepo.deleteMemoPhoto(
+                phone = customer.phone,
+                memoId = photo.memoId,
+                photoId = photo.id,
+            ).fold(
+                onSuccess = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지가 삭제됐어요")
+                    enterDetail(customer)
+                },
+                onFailure = {
+                    _detail.value = _detail.value.copy(saving = false, saveMessage = "이미지 삭제 실패: ${it.message}")
+                },
+            )
+        }
     }
 }

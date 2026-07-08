@@ -5,10 +5,14 @@ import com.callrecorder.app.data.model.CreateConsentLinkRequest
 import com.callrecorder.app.data.model.CreateCustomerMemoRequest
 import com.callrecorder.app.data.model.CustomerHistoryItem
 import com.callrecorder.app.data.model.CustomerListItem
+import com.callrecorder.app.data.model.CustomerMemoPhotoResponse
 import com.callrecorder.app.data.model.CustomerMemoPhotoUploadUrlRequest
 import com.callrecorder.app.data.model.CustomerProfileResponse
 import com.callrecorder.app.data.model.SaveCustomerMemoPhotoRequest
 import com.callrecorder.app.data.model.UpdateCustomerRequest
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 
 class CustomerRepository(
     private val api: ApiService,
@@ -89,5 +93,48 @@ class CustomerRepository(
                 caption = caption,
             ),
         )
+    }
+
+    suspend fun uploadMemoPhoto(
+        phone: String,
+        memoId: String,
+        fileName: String,
+        imageBytes: ByteArray,
+        caption: String? = null,
+    ): Result<CustomerMemoPhotoResponse> = runCatching {
+        val urlRes = api.requestCustomerMemoPhotoUploadUrl(
+            phone = phone,
+            memoId = memoId,
+            body = CustomerMemoPhotoUploadUrlRequest(fileName),
+        )
+        val contentType = urlRes.uploadHeaders["Content-Type"] ?: "image/jpeg"
+        val body: RequestBody = imageBytes.toRequestBody(contentType.toMediaTypeOrNull())
+        val putRes = api.uploadToS3(
+            url = urlRes.uploadUrl,
+            headers = urlRes.uploadHeaders,
+            body = body,
+        )
+        if (!putRes.isSuccessful) {
+            error("S3 업로드 실패: HTTP ${putRes.code()}")
+        }
+        api.saveCustomerMemoPhoto(
+            phone = phone,
+            memoId = memoId,
+            body = SaveCustomerMemoPhotoRequest(
+                photoId = urlRes.photoId,
+                s3Key = urlRes.s3Key,
+                caption = caption,
+            ),
+        )
+    }
+
+    suspend fun deleteMemoPhoto(
+        phone: String,
+        memoId: String,
+        photoId: String,
+    ): Result<Unit> = runCatching {
+        val res = api.deleteCustomerMemoPhoto(phone, memoId, photoId)
+        if (!res.isSuccessful) error("삭제 실패: HTTP ${res.code()}")
+        Unit
     }
 }

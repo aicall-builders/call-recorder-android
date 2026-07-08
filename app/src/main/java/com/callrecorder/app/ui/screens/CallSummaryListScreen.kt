@@ -32,11 +32,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.callrecorder.app.R
+import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CallCategoryLabel
 import com.callrecorder.app.data.model.extractedInfoOrNull
@@ -51,15 +52,14 @@ import java.util.TimeZone
 /* ── 색상: FIANO 0705 디자인 시스템 ── */
 private val ScreenBg       = AppColors.DeepBrown900
 private val SheetBg        = Color(0xFFFFFFFF)   // 본문 흰 시트
-private val TabInactiveBg  = AppColors.DeepBrown50
+private val TabInactiveBg  = Color(0xFFEEEEEE)
 private val Ink            = AppColors.DeepBrown950
 private val SubInk         = AppColors.DeepBrown700
 private val AccentBlue     = AppColors.SignalRed500
 private val OnDarkPrimary  = Color(0xFFFFFFFF)
-private val PlaceholderGray = AppColors.DeepBrown400
+private val PlaceholderGray = AppColors.DeepBrown500
 private val LabelGray      = AppColors.DeepBrown400
 private val GroupGray      = AppColors.DeepBrown600
-private val SearchBorder   = AppColors.DeepBrown100
 
 // 캘린더 등록 안내 박스
 private val CalBoxBg = AppColors.SignalRed50
@@ -80,12 +80,43 @@ private enum class AnalysisTab { PENDING, DONE }
 fun CallSummaryListScreen(
     onCallClick: (String) -> Unit,
     vm: HomeViewModel = viewModel(),
+    approvalVm: PendingApprovalViewModel = viewModel(),
+) {
+    val state by vm.state.collectAsState()
+    val approvalState by approvalVm.state.collectAsState()
+    CallSummaryListContent(
+        state = state,
+        approvalState = approvalState,
+        onCallClick = onCallClick,
+        onDeleteCall = { vm.deleteCall(it) },
+        onApproveRecording = { id ->
+            approvalVm.approveOne(id)
+            vm.refresh(silent = true)
+        },
+        onDeleteRecording = { id ->
+            approvalVm.rejectOne(id)
+            vm.refresh(silent = true)
+        },
+        onPendingTabVisible = { approvalVm.load() },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CallSummaryListContent(
+    state: HomeUiState,
+    approvalState: PendingApprovalUiState,
+    onCallClick: (String) -> Unit,
+    onDeleteCall: (String) -> Unit,
+    onApproveRecording: (Long) -> Unit,
+    onDeleteRecording: (Long) -> Unit,
+    onPendingTabVisible: () -> Unit = {},
+    initialTab: AnalysisTab = AnalysisTab.DONE,
 ) {
     val context = LocalContext.current
-    val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CallFilter.ALL) }
-    var tab by remember { mutableStateOf(AnalysisTab.DONE) }
+    var tab by remember { mutableStateOf(initialTab) }
 
     val uniqueCalls = remember(state.recentCalls) { state.recentCalls.distinctBy { it.id } }
 
@@ -97,14 +128,6 @@ fun CallSummaryListScreen(
                 AnalysisTab.PENDING -> !call.isAnalyzed()
             }
         }
-    }
-
-    // 카운트 (현재 탭 기준)
-    val totalCount = tabCalls.size
-    val resCount = tabCalls.count { it.category == CallCategoryLabel.RESERVATION }
-    val inqCount = tabCalls.count { it.category == CallCategoryLabel.INQUIRY }
-    val otherCount = tabCalls.count {
-        it.category != CallCategoryLabel.RESERVATION && it.category != CallCategoryLabel.INQUIRY
     }
 
     // 필터 + 검색
@@ -132,10 +155,33 @@ fun CallSummaryListScreen(
             }
             .sortedByDescending { it.createdAt }
     }
+    val awaitingApprovals = remember(approvalState.recordings, searchText.text, tab) {
+        if (tab != AnalysisTab.PENDING) {
+            emptyList()
+        } else {
+            val q = searchText.text.trim()
+            approvalState.recordings.filter { recording ->
+                q.isBlank() ||
+                    recording.fileName.contains(q, ignoreCase = true) ||
+                    recording.counterpartNumber.orEmpty().contains(q)
+            }
+        }
+    }
+    // 카운트 (현재 탭 기준)
+    val totalCount = tabCalls.size + if (tab == AnalysisTab.PENDING) awaitingApprovals.size else 0
+    val resCount = tabCalls.count { it.category == CallCategoryLabel.RESERVATION }
+    val inqCount = tabCalls.count { it.category == CallCategoryLabel.INQUIRY }
+    val otherCount = tabCalls.count {
+        it.category != CallCategoryLabel.RESERVATION && it.category != CallCategoryLabel.INQUIRY
+    }
 
     // 날짜별 그룹
     val grouped = remember(filtered) {
         filtered.groupBy { dateGroupLabel(it.createdAt) }
+    }
+
+    LaunchedEffect(tab) {
+        if (tab == AnalysisTab.PENDING) onPendingTabVisible()
     }
 
     Scaffold(containerColor = ScreenBg) { padding ->
@@ -148,72 +194,11 @@ fun CallSummaryListScreen(
         ) {
             // ═══ 헤더 (ScreenBg 위) ═══
             item {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(ScreenBg),
-                ) {
-                    // 타이틀 행
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.call_icon_logo),
-                            contentDescription = "FIANO",
-                            modifier = Modifier.width(70.dp).height(24.dp),
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.call_icon_alarm),
-                            contentDescription = "알림",
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-
-                    // 서브타이틀 + 검색바
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp)) {
-                        Text(
-                            "통화 분석 내역을 확인해보세요.",
-                            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary),
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        // 흰색 pill 검색바
-                        Surface(
-                            color = SheetBg,
-                            shape = RoundedCornerShape(999.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, SearchBorder),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.call_icon_search),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Box(Modifier.weight(1f)) {
-                                    if (searchText.text.isEmpty()) {
-                                        Text("전화번호 또는 요약 검색", style = TextStyle(fontSize = 14.sp, color = PlaceholderGray))
-                                    }
-                                    BasicTextField(
-                                        value = searchText,
-                                        onValueChange = { searchText = it },
-                                        textStyle = TextStyle(fontSize = 14.sp, color = Ink),
-                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Ink),
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                FianoListHeroHeader(
+                    title = "통화 분석 내역을 확인해보세요.",
+                    searchText = searchText,
+                    onSearchTextChange = { searchText = it },
+                )
             }
 
             // ═══ 분석 대기 / 완료 탭 (시트 상단, 라운드) ═══
@@ -238,21 +223,23 @@ fun CallSummaryListScreen(
 
             // ═══ 본문 (흰 시트) ═══
             // 필터 칩
-            item {
-                Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip("전체 $totalCount", filter == CallFilter.ALL) { filter = CallFilter.ALL }
-                        FilterChip("예약 $resCount", filter == CallFilter.RESERVATION) { filter = CallFilter.RESERVATION }
-                        FilterChip("문의 $inqCount", filter == CallFilter.INQUIRY) { filter = CallFilter.INQUIRY }
-                        FilterChip("기타 $otherCount", filter == CallFilter.OTHER) { filter = CallFilter.OTHER }
+            if (tab == AnalysisTab.DONE) {
+                item {
+                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FilterChip("전체 $totalCount", filter == CallFilter.ALL) { filter = CallFilter.ALL }
+                            FilterChip("예약 $resCount", filter == CallFilter.RESERVATION) { filter = CallFilter.RESERVATION }
+                            FilterChip("문의 $inqCount", filter == CallFilter.INQUIRY) { filter = CallFilter.INQUIRY }
+                            FilterChip("기타 $otherCount", filter == CallFilter.OTHER) { filter = CallFilter.OTHER }
+                        }
                     }
                 }
             }
 
-            if (state.loading && filtered.isEmpty()) {
+            if (state.loading && filtered.isEmpty() && awaitingApprovals.isEmpty()) {
                 item {
                     Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
                         Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
@@ -260,7 +247,7 @@ fun CallSummaryListScreen(
                         }
                     }
                 }
-            } else if (filtered.isEmpty()) {
+            } else if (filtered.isEmpty() && awaitingApprovals.isEmpty()) {
                 item {
                     Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
                         Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
@@ -273,6 +260,33 @@ fun CallSummaryListScreen(
                     }
                 }
             } else {
+                if (tab == AnalysisTab.PENDING && awaitingApprovals.isNotEmpty()) {
+                    item {
+                        Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "업로드 승인 대기",
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
+                            )
+                        }
+                    }
+                    items(awaitingApprovals, key = { "approval-${it.id}" }) { recording ->
+                        Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                Modifier
+                                    .background(SheetBg)
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                            ) {
+                                PendingApprovalCallCard(
+                                    recording = recording,
+                                    isDuplicate = recording.id in approvalState.duplicateIds,
+                                    onApprove = { onApproveRecording(recording.id) },
+                                    onDelete = { onDeleteRecording(recording.id) },
+                                )
+                            }
+                        }
+                    }
+                }
                 grouped.forEach { (dateLabel, calls) ->
                     item {
                         Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
@@ -287,7 +301,7 @@ fun CallSummaryListScreen(
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.EndToStart) {
-                                    vm.deleteCall(call.id)
+                                    onDeleteCall(call.id)
                                     true
                                 } else false
                             }
@@ -348,6 +362,84 @@ fun CallSummaryListScreen(
     }
 }
 
+@Preview(name = "Call Management - Pending With Upload Approvals", widthDp = 360, heightDp = 918, showBackground = false)
+@Composable
+private fun CallSummaryPendingWithApprovalsPreview() {
+    CallSummaryListContent(
+        state = HomeUiState(
+            loading = false,
+            recentCalls = listOf(
+                Call(
+                    id = "pending-1",
+                    callerNumber = "010-2488-1122",
+                    callerName = "박서윤",
+                    direction = "incoming",
+                    duration = 188,
+                    status = "processing",
+                    createdAt = "2026-07-08T09:20:00Z",
+                    summary = null,
+                    category = CallCategoryLabel.INQUIRY,
+                ),
+                Call(
+                    id = "pending-2",
+                    callerNumber = "02-778-9012",
+                    callerName = "한빛부동산",
+                    direction = "outgoing",
+                    duration = 82,
+                    status = "uploaded",
+                    createdAt = "2026-07-08T08:44:00Z",
+                    summary = null,
+                    category = CallCategoryLabel.RESERVATION,
+                ),
+                Call(
+                    id = "done-1",
+                    callerNumber = "010-9988-7766",
+                    callerName = "김민준",
+                    direction = "incoming",
+                    duration = 214,
+                    status = "completed",
+                    createdAt = "2026-07-07T13:10:00Z",
+                    summary = "7월 10일 오전 방문 가능 여부와 준비 서류를 문의했습니다.",
+                    category = CallCategoryLabel.RESERVATION,
+                ),
+            ),
+        ),
+        approvalState = PendingApprovalUiState(
+            recordings = listOf(
+                RecordingEntity(
+                    id = 1001L,
+                    filePath = "/preview/call_0708_0930.m4a",
+                    fileName = "통화녹음_박서윤_0708_0930.m4a",
+                    fileSize = 2_480_000L,
+                    durationSeconds = 156,
+                    callStartedAtMillis = 1_783_488_600_000L,
+                    counterpartNumber = "010-2488-1122",
+                    storeId = "preview-store",
+                    status = "AWAITING_APPROVAL",
+                ),
+                RecordingEntity(
+                    id = 1002L,
+                    filePath = "/preview/call_0708_0912.m4a",
+                    fileName = "통화녹음_중복파일_0708_0912.m4a",
+                    fileSize = 1_920_000L,
+                    durationSeconds = 96,
+                    callStartedAtMillis = 1_783_487_920_000L,
+                    counterpartNumber = "02-778-9012",
+                    storeId = "preview-store",
+                    status = "AWAITING_APPROVAL",
+                ),
+            ),
+            duplicateIds = setOf(1002L),
+            loading = false,
+        ),
+        onCallClick = {},
+        onDeleteCall = {},
+        onApproveRecording = {},
+        onDeleteRecording = {},
+        initialTab = AnalysisTab.PENDING,
+    )
+}
+
 /* ── 분석 대기/완료 탭 버튼 ── */
 @Composable
 private fun AnalysisTabButton(
@@ -356,10 +448,13 @@ private fun AnalysisTabButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    Surface(
-        color = if (selected) SheetBg else TabInactiveBg,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        modifier = modifier.clickable { onClick() },
+    val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(shape)
+            .background(if (selected) Color.White else TabInactiveBg)
+            .clickable { onClick() },
     ) {
         Box(
             Modifier
@@ -369,7 +464,7 @@ private fun AnalysisTabButton(
         ) {
             Text(
                 text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
+                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink),
             )
         }
     }
@@ -415,6 +510,111 @@ private fun pendingPhaseOf(call: Call): PendingPhase {
         "processing" -> PendingPhase("처리 중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
         "error", "failed" -> PendingPhase("분석 실패", Color(0xFFFBE3E3), Color(0xFFC23B3B), showProgress = false, isError = true)
         else -> PendingPhase("분석 대기", Color(0xFFE8EBF3), SubInk, showProgress = true)
+    }
+}
+
+/* ── 업로드 승인 대기 카드 ── */
+@Composable
+private fun PendingApprovalCallCard(
+    recording: RecordingEntity,
+    isDuplicate: Boolean,
+    onApprove: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        color = SheetBg,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Image(
+                    painter = painterResource(id = R.drawable.icon_call_up),
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                )
+
+                Column(Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            recording.fileName,
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
+                            maxLines = 1,
+                        )
+                        Surface(
+                            color = Color(0xFFE8EBF3),
+                            shape = RoundedCornerShape(999.dp),
+                        ) {
+                            Text(
+                                "승인 대기",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = SubInk),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+                    InfoRow("시간", formatDuration(recording.durationSeconds))
+                    Spacer(Modifier.height(2.dp))
+                    InfoRow("파일", formatFileSize(recording.fileSize))
+                    if (isDuplicate) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "중복파일",
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = AppColors.SignalRed500),
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        PendingApprovalActionButton(
+                            label = "삭제",
+                            filled = false,
+                            onClick = onDelete,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PendingApprovalActionButton(
+                            label = "승인",
+                            filled = true,
+                            onClick = onApprove,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PendingApprovalActionButton(
+    label: String,
+    filled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        color = if (filled) Ink else SheetBg,
+        shape = RoundedCornerShape(999.dp),
+        border = if (filled) null else androidx.compose.foundation.BorderStroke(1.dp, Ink),
+        modifier = modifier.height(40.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (filled) Color.White else Ink,
+                ),
+            )
+        }
     }
 }
 
@@ -498,7 +698,11 @@ private fun PendingCallCard(
 
 @Composable
 private fun PhaseBadge(phase: PendingPhase) {
-    Surface(color = phase.bg, shape = RoundedCornerShape(999.dp)) {
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, phase.fg),
+    ) {
         Text(
             phase.label,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -620,9 +824,12 @@ private fun callDirectionLabel(call: Call): String {
 }
 
 private fun callTypeIconRes(call: Call): Int {
-    // 현재 API에는 수신/발신 방향 필드가 아직 없다.
-    // direction/source 필드가 내려오면 여기에서 incoming/outgoing/recording 리소스로 분기하면 된다.
-    return R.drawable.call_icon_type_default
+    return when (call.direction?.lowercase()) {
+        "inbound", "incoming" -> R.drawable.icon_reception
+        "outbound", "outgoing" -> R.drawable.icon_outgoing
+        "manual", "upload", "uploaded" -> R.drawable.icon_call_up
+        else -> R.drawable.call_icon_type_default
+    }
 }
 
 @Composable
@@ -771,6 +978,16 @@ private fun formatDuration(seconds: Int?): String {
     val m = s / 60
     val sec = s % 60
     return if (m > 0) "${m}분 ${sec}초" else "${sec}초"
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "-"
+    val kb = bytes / 1024.0
+    return if (kb < 1024.0) {
+        String.format(Locale.KOREAN, "%.1fKB", kb)
+    } else {
+        String.format(Locale.KOREAN, "%.1fMB", kb / 1024.0)
+    }
 }
 
 private fun parseTime(s: String?): Date? {

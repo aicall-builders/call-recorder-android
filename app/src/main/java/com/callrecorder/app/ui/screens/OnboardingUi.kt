@@ -28,10 +28,12 @@ fun FianoFolderIcon(
     modifier: Modifier = Modifier,
     dark: Boolean = true,
 ) {
+    val logoRes = if (dark) R.drawable.logo_fiano_dark else R.drawable.logo_fiano_white
+    val width = if (dark) 120.dp else 122.dp
     Image(
-        painter = painterResource(id = R.drawable.icon_fiano_app),
-        contentDescription = null,
-        modifier = modifier.size(80.dp),
+        painter = painterResource(id = logoRes),
+        contentDescription = "FIANO",
+        modifier = modifier.size(width = width, height = 56.dp),
     )
 }
 

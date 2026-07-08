@@ -59,7 +59,7 @@ import java.util.TimeZone
 /* ── 색상: FIANO 0705 디자인 시스템 ── */
 private val ScreenBg   = AppColors.DeepBrown900
 private val SheetBg    = Color(0xFFFFFFFF)   // 본문 흰 시트
-private val TabOffBg   = AppColors.DeepBrown50
+private val TabOffBg   = Color(0xFFEEEEEE)
 private val Ink        = AppColors.DeepBrown950
 private val SummaryBoxBg = AppColors.DeepBrown50
 private val LabelGray  = AppColors.DeepBrown400
@@ -178,8 +178,8 @@ private fun DetailTopBar(onBack: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .height(60.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -187,16 +187,18 @@ private fun DetailTopBar(onBack: () -> Unit) {
             Image(
                 painter = painterResource(R.drawable.detail_icon_back),
                 contentDescription = "뒤로",
-                modifier = Modifier.size(24.dp).clickable { onBack() },
+                modifier = Modifier.size(32.dp).clickable { onBack() },
             )
             Spacer(Modifier.width(8.dp))
-            Text("통화 상세", style = TextStyle(fontSize = 18.sp, color = Color.White))
+            Text("통화 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
         }
-        Image(
-            painter = painterResource(R.drawable.call_icon_alarm),
-            contentDescription = "알림",
-            modifier = Modifier.size(24.dp),
-        )
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Image(
+                painter = painterResource(R.drawable.call_icon_alarm),
+                contentDescription = "알림",
+                modifier = Modifier.size(32.dp),
+            )
+        }
     }
 }
 
@@ -379,18 +381,21 @@ private fun DarkSeekBar(progress: Float, enabled: Boolean, onSeek: (Float) -> Un
 /* ─────────────── 탭 버튼 ─────────────── */
 @Composable
 private fun DetailTabButton(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
-        color = if (selected) SheetBg else TabOffBg,
-        modifier = modifier.clickable { onClick() },
+    val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .clip(shape)
+            .background(if (selected) Color.White else TabOffBg)
+            .clickable { onClick() },
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(44.dp)
                 .padding(top = 16.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
+            Text(text, style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink))
         }
     }
 }

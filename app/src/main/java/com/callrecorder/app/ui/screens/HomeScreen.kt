@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,6 +89,10 @@ fun HomeScreen(
     val state by vm.state.collectAsState()
     var showUploadSheet by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        vm.syncSettingsFromPrefs()
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -117,14 +122,14 @@ fun HomeScreen(
                 .background(ContentBg)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // 주요 분석 통화
+            // 최근 분석 통화
             Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 16.dp)
                     .tourTarget(tourController, TourKeys.RECENT_CALLS),
             ) {
-                SectionHeader("주요 분석 통화", onSeeAll = onSeeAllCalls)
+                SectionHeader("최근 분석 통화", onSeeAll = onSeeAllCalls)
                 when {
                     state.loading && state.recentCalls.isEmpty() ->
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -170,25 +175,31 @@ fun HomeScreen(
                 }
             }
 
-            // ── 다가오는 일정 (흰색 컨텐츠 안에서 이어짐) ──
-            Column(
+            // ── 다가오는 일정 (#EEE 밴드 위 흰색 라운드) ──
+            Box(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(ContentBg)
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .background(SectionAltBg),
             ) {
-                SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
-                if (state.schedules.isEmpty()) {
-                    EmptyBox("예정된 일정이 없어요")
-                } else {
-                    Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-                        state.schedules.forEachIndexed { idx, ev ->
-                            ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(ContentBg)
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                ) {
+                    SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
+                    if (state.schedules.isEmpty()) {
+                        EmptyBox("예정된 일정이 없어요")
+                    } else {
+                        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                            state.schedules.forEachIndexed { idx, ev ->
+                                ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
+                            }
                         }
                     }
+                    Spacer(Modifier.height(64.dp))
                 }
-                Spacer(Modifier.height(64.dp))
             }
         }
     }
@@ -219,25 +230,10 @@ private fun Hero(
 ) {
     val today = remember { todayFullDateLabel() }
     Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.home_icon_logo),
-                contentDescription = "FIANO",
-                modifier = Modifier.width(70.dp).height(24.dp),
-            )
-            Image(
-                painter = painterResource(id = R.drawable.home_icon_alarm),
-                contentDescription = "알림",
-                modifier = Modifier.size(24.dp),
-            )
-        }
+        FianoTopHeader()
 
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)) {
-            Text(today, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnDark))
+        Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)) {
+            Text(today, style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = OnDark))
             Spacer(Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -247,17 +243,21 @@ private fun Hero(
                     shape = RoundedCornerShape(999.dp),
                     modifier = Modifier.weight(1f).height(64.dp),
                 ) {
-                    Row(Modifier.padding(start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
-                            Image(
-                                painter = painterResource(id = R.drawable.home_icon_refresh),
-                                contentDescription = "새로고침",
-                                modifier = Modifier.width(24.dp).height(26.dp),
-                            )
-                        }
-                        Spacer(Modifier.width(6.dp))
+                    Row(
+                        Modifier.padding(start = 24.dp, end = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.home_icon_refresh),
+                            contentDescription = "새로고침",
+                            modifier = Modifier
+                                .width(24.dp)
+                                .height(26.dp)
+                                .clickable { onRefresh() },
+                        )
                         Text("통화 분석 대기 ${pendingCount}건",
-                            style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Navy))
+                            style = TextStyle(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Navy))
                     }
                 }
                 Surface(
@@ -290,12 +290,12 @@ private fun Hero(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 ToggleButton(autoSummaryOn, "통화 자동 요약",
                     { onAutoSummaryChange(!autoSummaryOn) },
                     Modifier.weight(1f))
-                ToggleButton(importantFilterOn, "중요 통화 필터링",
+                ToggleButton(importantFilterOn, "통화 자동 필터링",
                     { onImportantFilterChange(!importantFilterOn) },
                     Modifier.weight(1f).tourTarget(tourController, TourKeys.IMPORTANT_FILTER))
             }
@@ -309,8 +309,8 @@ private fun ToggleButton(on: Boolean, label: String, onToggle: () -> Unit, modif
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .clickable { onToggle() }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
+            .padding(horizontal = 0.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
@@ -321,7 +321,7 @@ private fun ToggleButton(on: Boolean, label: String, onToggle: () -> Unit, modif
         Spacer(Modifier.width(8.dp))
         Text(
             "$label ${if (on) "ON" else "OFF"}",
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = OnDark),
+            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = OnDark),
             maxLines = 1,
         )
     }
