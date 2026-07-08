@@ -41,8 +41,10 @@ import com.callrecorder.app.onboarding.BusinessTypeScreen
 import com.callrecorder.app.onboarding.OnboardingScreen
 import com.callrecorder.app.onboarding.hasSelectedDomain
 import com.callrecorder.app.onboarding.resetFeatureTour
+import com.callrecorder.app.service.RecordingObserverService
 import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.callrecorder.app.util.SafeLog
+import com.callrecorder.app.worker.UploadWorker
 import com.kakao.sdk.common.util.Utility
 
 class MainActivity : ComponentActivity() {
@@ -187,6 +189,11 @@ private fun PermissionRoute(nav: NavHostController, route: String, force: Boolea
 
     fun goNext() {
         storeVm.ensureActiveStore {
+            if (context.hasRecordingFilePermission()) {
+                RecordingObserverService.start(context)
+                UploadWorker.enqueuePeriodic(context)
+                UploadWorker.enqueueInitialScan(context)
+            }
             nav.navigate(next) { popUpTo(route) { inclusive = true } }
         }
     }
@@ -226,6 +233,15 @@ fun Context.hasAllRequiredPermissions(): Boolean =
     REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
     }
+
+fun Context.hasRecordingFilePermission(): Boolean {
+    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+}
 
 fun Context.hasCompletedPermissionOnboarding(): Boolean {
     val prefs = getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
