@@ -30,6 +30,10 @@ class AuthRepository(
         return IllegalStateException(message, this)
     }
 
+    private suspend fun FirebaseAuth.requireCurrentIdToken(): String =
+        currentUser?.getIdToken(true)?.await()?.token
+            ?: throw IllegalStateException("Firebase ID token null")
+
     // ═══════════════════════════════════════════════
     // 카카오 로그인 (기존 유지)
     // ═══════════════════════════════════════════════
@@ -58,10 +62,11 @@ class AuthRepository(
 
         val firebaseAuth = FirebaseAuth.getInstance()
         firebaseAuth.signInWithCustomToken(customToken).await()
+        val firebaseIdToken = firebaseAuth.requireCurrentIdToken()
         SafeLog.i("AuthRepo", "Kakao Firebase signed in. uid=${firebaseAuth.currentUser?.uid}")
 
         tokenStore.saveTokens(
-            access = customToken,
+            access = firebaseIdToken,
             refresh = resp.refreshToken,
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
@@ -109,11 +114,12 @@ class AuthRepository(
 
         // 3) Firebase custom_token으로 재로그인 (백엔드 uid 동기화)
         firebaseAuth.signInWithCustomToken(customToken).await()
+        val firebaseIdToken = firebaseAuth.requireCurrentIdToken()
         SafeLog.i("AuthRepo", "Google Firebase custom token sign-in ok uid=${firebaseAuth.currentUser?.uid}")
 
         // 4) TokenStore 저장
         tokenStore.saveTokens(
-            access = customToken,
+            access = firebaseIdToken,
             refresh = resp.refreshToken,
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
@@ -155,10 +161,11 @@ class AuthRepository(
 
         val firebaseAuth = FirebaseAuth.getInstance()
         firebaseAuth.signInWithCustomToken(customToken).await()
+        val firebaseIdToken = firebaseAuth.requireCurrentIdToken()
         SafeLog.i("AuthRepo", "Naver Firebase signed in. uid=${firebaseAuth.currentUser?.uid}")
 
         tokenStore.saveTokens(
-            access = customToken,
+            access = firebaseIdToken,
             refresh = resp.refreshToken,
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
