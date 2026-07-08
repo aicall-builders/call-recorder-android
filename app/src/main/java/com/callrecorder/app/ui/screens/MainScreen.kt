@@ -109,17 +109,6 @@ fun MainScreen(
         hasSystemNotification = context.hasActiveFianoSummaryNotification()
     }
 
-    LaunchedEffect(selected, showApproval, showExternalCalendarSheet, showNotifications) {
-        if (
-            selected == BottomTab.HOME &&
-            !showApproval &&
-            !showExternalCalendarSheet &&
-            !showNotifications
-        ) {
-            homeVm.refresh(silent = true)
-        }
-    }
-
     // ── 기능 투어 컨트롤러 ──
     val tourController = rememberFeatureTourController(HomeTourSteps)
 

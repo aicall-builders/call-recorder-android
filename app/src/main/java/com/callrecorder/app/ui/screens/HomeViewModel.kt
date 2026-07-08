@@ -202,20 +202,22 @@ class HomeViewModel : ViewModel() {
             }
             val schedulesDeferred = async {
                 runCatching {
-                    withTimeout(8_000L) {
-                        val from = todayDateString()
-                        val to = dateStringAfter(days = 30)
-                        val serverEvents = calendarRepo
+                    val from = todayDateString()
+                    val to = dateStringAfter(days = 30)
+                    val manualEvents = calendarRepo
+                        .getManualEventsInRange(from = from, to = to)
+                        .getOrDefault(emptyList())
+                        .map { it.toHomeCalendarEvent() }
+                    val serverEvents = runCatching {
+                        withTimeout(6_000L) {
+                            calendarRepo
                             .getEventsInRange(from = from, to = to, limit = 100)
                             .getOrDefault(emptyList())
-                        val manualEvents = calendarRepo
-                            .getManualEventsInRange(from = from, to = to)
-                            .getOrDefault(emptyList())
-                            .map { it.toHomeCalendarEvent() }
+                        }
+                    }.getOrDefault(emptyList())
 
-                        (serverEvents + manualEvents)
-                            .sortedWith(compareBy<CalendarEvent> { it.startAt.orEmpty() }.thenBy { it.time })
-                    }
+                    (serverEvents + manualEvents)
+                        .sortedWith(compareBy<CalendarEvent> { it.startAt.orEmpty() }.thenBy { it.time })
                 }
             }
             val customersDeferred = async {

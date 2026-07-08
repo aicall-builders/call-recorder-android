@@ -27,9 +27,10 @@ class CalendarViewModel : ViewModel() {
 
     private val _state = MutableStateFlow(CalendarUiState())
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
+    private var loadedMonthKey: String? = null
+    private var loadingMonthKey: String? = null
 
     init {
-        loadConnections()
         // 현재 월 전체 일정 로드
         val now = Calendar.getInstance()
         loadMonthEvents(now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1)
@@ -50,34 +51,61 @@ class CalendarViewModel : ViewModel() {
     }
 
     /** 해당 연/월의 1일~말일 범위 일정 로드 */
-    fun loadMonthEvents(year: Int, month: Int) {
+    fun loadMonthEvents(year: Int, month: Int, force: Boolean = false) {
+        val monthKey = "%04d-%02d".format(year, month)
+        if (!force && (loadedMonthKey == monthKey || loadingMonthKey == monthKey)) return
+        loadingMonthKey = monthKey
         viewModelScope.launch {
             _state.value = _state.value.copy(eventsLoading = true)
 
-            val cal = Calendar.getInstance().apply { set(year, month - 1, 1) }
-            val lastDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val from = "%04d-%02d-01".format(year, month)
-            val to = "%04d-%02d-%02d".format(year, month, lastDay)
+            try {
+                val cal = Calendar.getInstance().apply { set(year, month - 1, 1) }
+                val lastDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val from = "%04d-%02d-01".format(year, month)
+                val to = "%04d-%02d-%02d".format(year, month, lastDay)
 
-            val manualResult = calendarRepo.getManualEventsInRange(from = from, to = to)
-            calendarRepo.getEventsInRange(from = from, to = to, limit = 200).fold(
-                onSuccess = { events ->
-                    _state.value = _state.value.copy(
-                        eventsLoading = false,
-                        events = events,
-                        manualEvents = manualResult.getOrDefault(emptyList()),
-                        error = manualResult.exceptionOrNull()?.message,
-                    )
-                },
-                onFailure = {
-                    _state.value = _state.value.copy(
-                        eventsLoading = false,
-                        manualEvents = manualResult.getOrDefault(emptyList()),
-                        error = it.message,
-                    )
+                val manualResult = calendarRepo.getManualEventsInRange(from = from, to = to)
+                calendarRepo.getEventsInRange(from = from, to = to, limit = 200).fold(
+                    onSuccess = { events ->
+                        loadedMonthKey = monthKey
+                        _state.value = _state.value.copy(
+                            eventsLoading = false,
+                            events = events,
+                            manualEvents = manualResult.getOrDefault(emptyList()),
+                            error = manualResult.exceptionOrNull()?.message,
+                        )
+                    },
+                    onFailure = {
+                        loadedMonthKey = monthKey
+                        _state.value = _state.value.copy(
+                            eventsLoading = false,
+                            manualEvents = manualResult.getOrDefault(emptyList()),
+                            error = it.message,
+                        )
+                    }
+                )
+            } finally {
+                if (loadingMonthKey == monthKey) {
+                    loadingMonthKey = null
                 }
-            )
+                if (_state.value.eventsLoading) {
+                    _state.value = _state.value.copy(eventsLoading = false)
+                }
+            }
         }
+    }
+
+    fun refreshMonthEvents(year: Int, month: Int) {
+        loadMonthEvents(year, month, force = true)
+    }
+
+    fun ensureConnectionsLoaded() {
+        if (_state.value.connections.isNotEmpty() || _state.value.loading) return
+        loadConnections()
+    }
+
+    fun refreshConnections() {
+        loadConnections()
     }
 
     fun saveManualEvent(
@@ -90,7 +118,7 @@ class CalendarViewModel : ViewModel() {
             calendarRepo.saveManualEvent(event).fold(
                 onSuccess = {
                     onSaved()
-                    loadMonthEvents(year, month)
+                    refreshMonthEvents(year, month)
                 },
                 onFailure = {
                     _state.value = _state.value.copy(error = it.message)
@@ -108,13 +136,11 @@ class CalendarViewModel : ViewModel() {
         }
     }
 
-    /** 딥링크로 돌아온 OAuth code를 완료하고, 성공 시 연결 목록 새로고침 */
     fun completeOAuth(provider: String, code: String, redirectUri: String, state: String) {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true, error = null)
             calendarRepo.completeOAuth(provider, code, redirectUri, state).fold(
                 onSuccess = { loadConnections() },
-                onFailure = { _state.value = _state.value.copy(loading = false, error = it.message) }
+                onFailure = { _state.value = _state.value.copy(error = it.message) }
             )
         }
     }

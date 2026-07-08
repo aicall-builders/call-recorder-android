@@ -762,6 +762,10 @@ private fun ExternalCalendarTab(vm: CalendarViewModel) {
     val context = LocalContext.current
     val redirectBase = "https://dk1k75g0ji3vw.cloudfront.net/oauth"
 
+    LaunchedEffect(Unit) {
+        vm.ensureConnectionsLoaded()
+    }
+
     // 브라우저에서 callrecorder://oauth/{provider} 딥링크로 돌아오면 앱 토큰으로 직접 완료
     val bridge = CallRecorderApp.instance.container.calendarOAuthBridge
     val pending by bridge.pending.collectAsState()

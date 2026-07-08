@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.callrecorder.app.R
@@ -150,87 +150,84 @@ private fun PermissionContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
-                .padding(padding)
-                .padding(horizontal = 18.dp),
+                .padding(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(60.dp)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(
-                    onClick = { },
-                    modifier = Modifier.align(Alignment.CenterStart),
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.icon_header_back),
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
+                Image(
+                    painter = painterResource(id = R.drawable.icon_header_back),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                )
             }
 
-            Spacer(Modifier.height(45.dp))
+            Spacer(Modifier.height(37.dp))
 
-            Text(
-                text = "서비스 권한 설정",
-                style = TextStyle(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF1A1A21),
-                    lineHeight = 32.sp,
-                ),
-                textAlign = TextAlign.Center,
-            )
+            Column(
+                modifier = Modifier.width(325.dp),
+                verticalArrangement = Arrangement.spacedBy(33.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(11.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "서비스 권한 설정",
+                        style = TextStyle(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF1A1A21),
+                            lineHeight = 32.sp,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
 
-            Spacer(Modifier.height(11.dp))
+                    Text(
+                        text = "AI 통화 비서가 원활한 관리를 할 수 있도록\n권한을 허용해 주세요.",
+                        style = TextStyle(
+                            fontSize = 18.sp,
+                            color = Color(0xFF5A5F6C),
+                            lineHeight = 24.sp,
+                            letterSpacing = (-0.5).sp,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
+                }
 
-            Text(
-                text = "AI 통화 비서가 원활한 관리를 할 수 있도록\n권한을 허용해 주세요.",
-                style = TextStyle(
-                    fontSize = 18.sp,
-                    color = Color(0xFF5A5F6C),
-                    lineHeight = 24.sp,
-                    letterSpacing = (-0.5).sp,
-                ),
-                textAlign = TextAlign.Center,
-            )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_file,
+                        title = "통화 녹음 분석 및 저장",
+                        desc = "통화 녹음 분석시 파일 접근 권한 허용,\n통화 내용 분석 및 정보 추출 허용",
+                        checked = audioGranted,
+                        onToggle = onAudioToggle,
+                    )
 
-            Spacer(Modifier.height(33.dp))
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_num,
+                        title = "연락처 접근 권한",
+                        desc = "휴대폰 연락처 정보 접근 권한 허용,\n전화 수신 시 기본 고객 정보 표시 허용",
+                        checked = contactsGranted,
+                        onToggle = onContactsToggle,
+                    )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PermissionCard(
-                    iconRes = R.drawable.icon_access_file,
-                    title = "통화 녹음 분석 및 저장",
-                    desc = "통화 녹음 분석시 파일 접근 권한 허용,\n통화 내용 분석 및 정보 추출 허용",
-                    checked = audioGranted,
-                    onToggle = onAudioToggle,
-                )
-
-                PermissionCard(
-                    iconRes = R.drawable.icon_access_num,
-                    title = "연락처 접근 권한",
-                    desc = "휴대폰 연락처 정보 접근 권한 허용,\n전화 수신 시 기본 고객 정보 표시 허용",
-                    checked = contactsGranted,
-                    onToggle = onContactsToggle,
-                )
-
-                PermissionCard(
-                    iconRes = R.drawable.icon_access_mach,
-                    title = "통화 기록 접근",
-                    desc = "녹음된 통화의 발신 번호와 연락처 이름 자동 매칭 허용",
-                    checked = callLogGranted,
-                    onToggle = onCallLogToggle,
-                )
-
-                PermissionCard(
-                    iconRes = R.drawable.icon_access_alarm,
-                    title = "카카오 알림톡 전송",
-                    desc = "일정 등록 시 카카오톡 실시간 알림\n송신 허용",
-                    checked = notificationsGranted,
-                    onToggle = onNotificationsToggle,
-                )
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_mach,
+                        title = "통화 기록 접근",
+                        desc = "녹음된 통화의 발신 번호와 연락처 이름 자동 매칭 허용",
+                        checked = callLogGranted,
+                        onToggle = onCallLogToggle,
+                        textStartGap = 16.dp,
+                    )
+                }
             }
 
             Spacer(Modifier.weight(1f))
@@ -240,8 +237,8 @@ private fun PermissionContent(
                 onClick = onGranted,
                 enabled = canContinue,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 64.dp),
+                    .width(328.dp)
+                    .padding(bottom = 65.dp),
             )
         }
     }
@@ -309,6 +306,7 @@ private fun PermissionCard(
     desc: String,
     checked: Boolean,
     onToggle: () -> Unit,
+    textStartGap: Dp = 8.dp,
 ) {
     Surface(
         onClick = onToggle,
@@ -334,7 +332,7 @@ private fun PermissionCard(
                 )
             }
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(textStartGap))
 
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -362,10 +360,7 @@ private fun PermissionCard(
                     if (checked) R.drawable.icon_toggle_l_on else R.drawable.icon_toggle_l_off
                 ),
                 contentDescription = null,
-                modifier = Modifier.size(
-                    width = 48.dp,
-                    height = if (checked) 48.dp else 52.dp,
-                ),
+                modifier = Modifier.size(48.dp),
             )
         }
     }

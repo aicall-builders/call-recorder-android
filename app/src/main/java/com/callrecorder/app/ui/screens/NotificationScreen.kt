@@ -146,7 +146,7 @@ private fun AnalysisDoneNotification(call: Call, onClick: () -> Unit) {
         Image(
             painter = painterResource(R.drawable.icon_call_up),
             contentDescription = null,
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(24.dp),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
@@ -166,9 +166,9 @@ private fun AnalysisDoneNotification(call: Call, onClick: () -> Unit) {
 private fun ScheduleNotification(event: CalendarEvent) {
     NotificationCard {
         Image(
-            painter = painterResource(R.drawable.detail_icon_calendar_plus),
+            painter = painterResource(R.drawable.home_icon_add_calendar),
             contentDescription = null,
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(24.dp),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(

@@ -5,8 +5,8 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,16 +92,20 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize().background(Bg)) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
 
             Crossfade(
                 targetState = step,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 label = "onbStep",
             ) { s ->
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .background(Bg),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -113,36 +119,12 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 64.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Dots(current = step, onDotClick = { step = it })
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Primary)
-                        .clickable { next() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (step == PAGE_COUNT - 1) "시작하기" else "다음",
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary),
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .noRippleClickable { onFinish() },
-                ) {
-                    Text("건너뛰기", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Primary))
-                }
-            }
+            FooterSection(
+                step = step,
+                onDotClick = { step = it },
+                onNext = { next() },
+                onSkip = onFinish,
+            )
         }
     }
 }
@@ -187,7 +169,7 @@ private fun SectionPreviewImage(imageRes: Int) {
         contentDescription = null,
         modifier = Modifier
             .fillMaxWidth()
-            .height(400.dp),
+            .height(399.dp),
         contentScale = ContentScale.Fit,
     )
 }
@@ -195,6 +177,57 @@ private fun SectionPreviewImage(imageRes: Int) {
 // ─────────────────────────────────────────────────────────────
 // 공통 조각
 // ─────────────────────────────────────────────────────────────
+@Composable
+private fun FooterSection(
+    step: Int,
+    onDotClick: (Int) -> Unit,
+    onNext: () -> Unit,
+    onSkip: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Dots(current = step, onDotClick = onDotClick)
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(48.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Primary)
+                .clickable { onNext() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                if (step == PAGE_COUNT - 1) "시작하기" else "다음",
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.TextOnPrimary),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .noRippleClickable { onSkip() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "건너뛰기",
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Primary),
+            )
+        }
+    }
+}
+
 @Composable
 private fun Pill(text: String) {
     Row(
