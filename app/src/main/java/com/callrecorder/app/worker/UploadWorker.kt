@@ -87,6 +87,22 @@ class UploadWorker(
         private const val NOTIF_ID = 4001
         private const val MAX_CONCURRENT = 3
         const val UNIQUE_NAME = "upload_recordings"
+        private const val INITIAL_SCAN_UNIQUE_NAME = "initial_recent_recording_scan"
+
+        /** 최초/재진입 시 최근 7일 녹음 스캔을 즉시 1회 실행한다. */
+        fun enqueueInitialScan(context: Context) {
+            val req = OneTimeWorkRequestBuilder<ScanAndUploadWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                INITIAL_SCAN_UNIQUE_NAME, ExistingWorkPolicy.KEEP, req
+            )
+        }
 
         /** 즉시 1회 업로드 시도 (감지 직후 호출) */
         fun enqueueOneShot(context: Context) {
