@@ -203,9 +203,13 @@ class HomeViewModel : ViewModel() {
             val schedulesDeferred = async {
                 runCatching {
                     withTimeout(8_000L) {
-                        val serverEvents = calendarRepo.getEvents().getOrDefault(emptyList())
+                        val from = todayDateString()
+                        val to = dateStringAfter(days = 30)
+                        val serverEvents = calendarRepo
+                            .getEventsInRange(from = from, to = to, limit = 100)
+                            .getOrDefault(emptyList())
                         val manualEvents = calendarRepo
-                            .getManualEventsInRange(from = todayDateString(), to = dateStringAfter(days = 30))
+                            .getManualEventsInRange(from = from, to = to)
                             .getOrDefault(emptyList())
                             .map { it.toHomeCalendarEvent() }
 

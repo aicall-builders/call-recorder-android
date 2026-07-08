@@ -1192,13 +1192,7 @@ private fun FianoSettingsSubHeader(
             )
         }
         if (showAlarm) {
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(R.drawable.call_icon_alarm),
-                    contentDescription = "알림",
-                    modifier = Modifier.size(32.dp),
-                )
-            }
+            FianoHeaderAlarmButton()
         }
     }
 }

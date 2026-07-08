@@ -13,8 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -166,9 +164,9 @@ private fun PermissionContent(
                     modifier = Modifier.align(Alignment.CenterStart),
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.icon_onboarding_back),
+                        painter = painterResource(id = R.drawable.icon_header_back),
                         contentDescription = null,
-                        modifier = Modifier.padding(4.dp),
+                        modifier = Modifier.size(32.dp),
                     )
                 }
             }
@@ -359,20 +357,16 @@ private fun PermissionCard(
 
             Spacer(Modifier.width(8.dp))
 
-            Switch(
-                checked = checked,
-                onCheckedChange = { onToggle() },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = AppColors.FianoBlack900,
-                    checkedBorderColor = AppColors.FianoBlack900,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = ToggleOffTrack,
-                    uncheckedBorderColor = ToggleOffTrack,
+            Image(
+                painter = painterResource(
+                    if (checked) R.drawable.icon_toggle_l_on else R.drawable.icon_toggle_l_off
+                ),
+                contentDescription = null,
+                modifier = Modifier.size(
+                    width = 48.dp,
+                    height = if (checked) 48.dp else 52.dp,
                 ),
             )
         }
     }
 }
-
-private val ToggleOffTrack = AppColors.FianoBlack300

@@ -257,12 +257,13 @@ class CustomerViewModel : ViewModel() {
         }
     }
 
-    fun setPinned(customer: CustomerUiItem, pinned: Boolean) {
+    fun setPinned(customer: CustomerUiItem, pinned: Boolean, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val req = UpdateCustomerRequest(isPinned = pinned)
             runCatching { api.updateCustomer(customer.phone, req) }.onSuccess {
                 loadCustomers()
                 loadDetail(customer.phone)
+                onSuccess()
             }
         }
     }

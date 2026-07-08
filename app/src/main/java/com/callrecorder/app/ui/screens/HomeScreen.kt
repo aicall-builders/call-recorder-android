@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -157,25 +158,17 @@ fun HomeScreen(
             ) {
                 SectionHeader("주요 관리 고객", onSeeAll = onSeeAllCustomers)
                 val pinnedCustomers = state.pinnedCustomers
-                val customers = state.recentCalls.distinctBy { customerName(it) }.take(3)
-                if (pinnedCustomers.isEmpty() && customers.isEmpty()) {
+                if (pinnedCustomers.isEmpty()) {
                     EmptyBox("관리 중인 고객이 없어요")
                 } else {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (pinnedCustomers.isNotEmpty()) {
-                            pinnedCustomers.forEach { c ->
-                                PinnedCustomerCard(c, Modifier.weight(1f), onClick = onSeeAllCustomers)
-                            }
-                            repeat(3 - pinnedCustomers.size) { Spacer(Modifier.weight(1f)) }
-                        } else {
-                            customers.forEach { call ->
-                                CustomerCard(call, Modifier.weight(1f)) { onCallClick(call.id) }
-                            }
-                            repeat(3 - customers.size) { Spacer(Modifier.weight(1f)) }
+                        pinnedCustomers.forEach { c ->
+                            PinnedCustomerCard(c, Modifier.weight(1f), onClick = onSeeAllCustomers)
                         }
+                        repeat(3 - pinnedCustomers.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -354,7 +347,18 @@ private fun SectionHeader(title: String, onSeeAll: () -> Unit, emphasis: Boolean
             Text(title, style = TextStyle(fontSize = 16.sp, fontWeight = if (emphasis) FontWeight.ExtraBold else FontWeight.Bold, color = Navy))
         }
         Surface(onClick = onSeeAll, color = Color.Transparent) {
-            Text("전체보기 →", modifier = Modifier.padding(4.dp), style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy))
+            Row(
+                modifier = Modifier.padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("전체보기", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy))
+                Image(
+                    painter = painterResource(id = R.drawable.icon_go),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
         }
     }
 }

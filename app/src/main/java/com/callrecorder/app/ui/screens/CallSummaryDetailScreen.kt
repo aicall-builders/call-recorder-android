@@ -2,7 +2,6 @@ package com.callrecorder.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,7 +67,6 @@ private val BubbleBot  = AppColors.DeepBrown700
 private val BubbleCustomer = AppColors.DeepBrown50
 private val SpeakerLabel = AppColors.DeepBrown600
 private val TrackEmpty  = AppColors.DeepBrown300
-private val DetailStroke = Color(0xFF343659)
 
 private enum class DetailTab { ANALYSIS, TRANSCRIPT }
 
@@ -105,6 +103,7 @@ fun CallSummaryDetailScreen(
                     calendarMessage = state.calendarMessage,
                     connectedCalendars = state.connectedCalendars,
                     showCalendarPicker = state.showCalendarPicker,
+                    transcript = state.detail!!.transcript,
                     onBack = onBack,
                     onToggleCalendarPicker = { vm.toggleCalendarPicker() },
                     onAddToCalendar = { provider -> vm.addToCalendar(callId, provider) },
@@ -122,12 +121,14 @@ private fun DetailBody(
     calendarMessage: String?,
     connectedCalendars: List<String>,
     showCalendarPicker: Boolean,
+    transcript: String?,
     onBack: () -> Unit,
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
-    val messages = remember(call.sttResult) { SttParser.parse(call.sttResult) }
+    val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
+    val messages = remember(transcriptText) { SttParser.parse(transcriptText) }
     var tab by remember { mutableStateOf(DetailTab.ANALYSIS) }
 
     Column(Modifier.fillMaxSize()) {
@@ -166,7 +167,7 @@ private fun DetailBody(
                     onToggleCalendarPicker = onToggleCalendarPicker,
                     onAddToCalendar = onAddToCalendar,
                 )
-                DetailTab.TRANSCRIPT -> TranscriptTabContent(messages = messages, fullText = call.sttResult)
+                DetailTab.TRANSCRIPT -> TranscriptTabContent(messages = messages, fullText = transcriptText)
             }
         }
     }
@@ -192,13 +193,7 @@ private fun DetailTopBar(onBack: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text("통화 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
         }
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Image(
-                painter = painterResource(R.drawable.call_icon_alarm),
-                contentDescription = "알림",
-                modifier = Modifier.size(32.dp),
-            )
-        }
+        FianoHeaderAlarmButton()
     }
 }
 
@@ -577,26 +572,22 @@ private fun TranscriptTabContent(messages: List<SttMessage>, fullText: String?) 
             )
         }
 
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.Transparent,
-            border = BorderStroke(1.dp, DetailStroke),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (messages.isEmpty()) {
-                    Text(
-                        "통화 원문이 아직 준비되지 않았습니다.",
-                        style = TextStyle(fontSize = 13.sp, color = LabelGray),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    )
-                } else {
-                    messages.forEach { msg ->
-                        MessageBubble(msg)
-                    }
+            if (messages.isEmpty()) {
+                Text(
+                    "통화 원문이 아직 준비되지 않았습니다.",
+                    style = TextStyle(fontSize = 13.sp, color = LabelGray),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                )
+            } else {
+                messages.forEach { msg ->
+                    MessageBubble(msg)
                 }
             }
         }

@@ -826,6 +826,7 @@ private fun CallTypeIcon(call: Call) {
 }
 
 private fun callDirectionLabel(call: Call): String {
+    if (isManualUploadCall(call)) return "수동"
     return when (call.direction?.lowercase()) {
         "inbound", "incoming" -> "수신"
         "outbound", "outgoing" -> "발신"
@@ -835,12 +836,19 @@ private fun callDirectionLabel(call: Call): String {
 }
 
 private fun callTypeIconRes(call: Call): Int {
+    if (isManualUploadCall(call)) return R.drawable.icon_call_up
     return when (call.direction?.lowercase()) {
         "inbound", "incoming" -> R.drawable.icon_reception
         "outbound", "outgoing" -> R.drawable.icon_outgoing
         "manual", "upload", "uploaded" -> R.drawable.icon_call_up
         else -> R.drawable.call_icon_type_default
     }
+}
+
+private fun isManualUploadCall(call: Call): Boolean {
+    val direction = call.direction?.lowercase()
+    return direction in setOf("manual", "upload", "uploaded") ||
+        (call.callerName.isNullOrBlank() && call.callerNumber.isNullOrBlank() && !call.s3Key.isNullOrBlank())
 }
 
 @Composable

@@ -147,6 +147,7 @@ fun InternalCalendarScreen(
     onMemoImageClick: (callId: String, title: String) -> Unit = { _, _ -> },
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
+    onScheduleChanged: () -> Unit = {},
 ) {
     val calState by calVm.state.collectAsState()
 
@@ -247,6 +248,7 @@ fun InternalCalendarScreen(
                     selectedDay = normalizedDay
                     showAddDialog = false
                     editingManualEvent = null
+                    onScheduleChanged()
                 }
             },
         )

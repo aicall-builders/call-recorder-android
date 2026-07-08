@@ -1,7 +1,9 @@
 package com.callrecorder.app.ui.screens
 
+import android.app.NotificationManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -92,12 +94,29 @@ fun MainScreen(
     val container = CallRecorderApp.instance.container
     val recordingDao = container.recordingDao
     val homeState by homeVm.state.collectAsState()
-    val hasNotification = remember(homeState.recentCalls, homeState.schedules) {
+    var hasSystemNotification by remember { mutableStateOf(context.hasActiveFianoSummaryNotification()) }
+    val hasDataNotification = remember(homeState.recentCalls, homeState.schedules) {
         val today = mainTodayDate()
         homeState.recentCalls.any {
             it.status.equals("summarized", true) || !it.summary.isNullOrBlank()
         } || homeState.schedules.any {
             it.reminderEnabled && it.startAt?.startsWith(today) == true
+        }
+    }
+    val hasNotification = hasDataNotification || hasSystemNotification
+
+    LaunchedEffect(showNotifications, homeState.recentCalls, homeState.schedules) {
+        hasSystemNotification = context.hasActiveFianoSummaryNotification()
+    }
+
+    LaunchedEffect(selected, showApproval, showExternalCalendarSheet, showNotifications) {
+        if (
+            selected == BottomTab.HOME &&
+            !showApproval &&
+            !showExternalCalendarSheet &&
+            !showNotifications
+        ) {
+            homeVm.refresh(silent = true)
         }
     }
 
@@ -239,6 +258,7 @@ fun MainScreen(
                             onCallDetailClick = handleCallClick,
                             onNotificationClick = { showNotifications = true },
                             hasNotification = hasNotification,
+                            onCustomerPinnedChanged = { homeVm.refresh(silent = true) },
                         )
                         BottomTab.CALENDAR -> InternalCalendarScreen(
                             onCallDetailClick = handleCallClick,
@@ -248,6 +268,7 @@ fun MainScreen(
                             },
                             onNotificationClick = { showNotifications = true },
                             hasNotification = hasNotification,
+                            onScheduleChanged = { homeVm.refresh(silent = true) },
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
                             onBack = { selected = BottomTab.HOME },
@@ -473,4 +494,14 @@ private fun StrokeIcon(pathData: String, color: Color, modifier: Modifier = Modi
             )
         }
     }
+}
+
+private fun android.content.Context.hasActiveFianoSummaryNotification(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+    return runCatching {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.activeNotifications.any { notification ->
+            notification.notification.channelId == CallRecorderApp.CHANNEL_SUMMARY
+        }
+    }.getOrDefault(false)
 }

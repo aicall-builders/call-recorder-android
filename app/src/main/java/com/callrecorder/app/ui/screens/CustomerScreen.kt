@@ -100,6 +100,7 @@ fun CustomerScreen(
     onCallDetailClick: (String) -> Unit = {},
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
+    onCustomerPinnedChanged: () -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
@@ -112,6 +113,8 @@ fun CustomerScreen(
             vm = vm,
             onBack = { selectedCustomer = null },
             onCallDetailClick = onCallDetailClick,
+            onPinnedChanged = { updated -> selectedCustomer = updated },
+            onPinnedSaved = onCustomerPinnedChanged,
         )
         return
     }
@@ -298,6 +301,8 @@ fun CustomerDetailScreen(
     vm: CustomerViewModel,
     onBack: () -> Unit,
     onCallDetailClick: (String) -> Unit = {},
+    onPinnedChanged: (CustomerUiItem) -> Unit = {},
+    onPinnedSaved: () -> Unit = {},
 ) {
     val detail by vm.detail.collectAsState()
     var tab by remember { mutableStateOf(CustDetailTab.ANALYSIS) }
@@ -343,14 +348,7 @@ fun CustomerDetailScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("고객 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
                 }
-                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                    Image(
-                        painter = painterResource(R.drawable.call_icon_alarm),
-                        contentDescription = "알림",
-                        modifier = Modifier.size(32.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
+                FianoHeaderAlarmButton()
             }
 
             Column(
@@ -377,6 +375,14 @@ fun CustomerDetailScreen(
                                         style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
                                 }
                             }
+                            CustomerBookmarkButton(
+                                pinned = customer.isPinned,
+                                onClick = {
+                                    val updated = customer.copy(isPinned = !customer.isPinned)
+                                    onPinnedChanged(updated)
+                                    vm.setPinned(customer, updated.isPinned, onSuccess = onPinnedSaved)
+                                },
+                            )
                         }
                         Text(customer.phone, style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300))
                     }
@@ -426,6 +432,27 @@ fun CustomerDetailScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CustomerBookmarkButton(
+    pinned: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(if (pinned) R.drawable.icon_customer_bookmark_on else R.drawable.icon_customer_bookmark_off),
+            contentDescription = if (pinned) "주요 관리 고객 해제" else "주요 관리 고객 등록",
+            modifier = Modifier.size(32.dp),
+            contentScale = ContentScale.Fit,
+        )
     }
 }
 
@@ -1159,14 +1186,7 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                 Spacer(Modifier.width(8.dp))
                 Text("고객 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
             }
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(R.drawable.call_icon_alarm),
-                    contentDescription = "알림",
-                    modifier = Modifier.size(32.dp),
-                    contentScale = ContentScale.Fit,
-                )
-            }
+            FianoHeaderAlarmButton()
         }
 
         Column(

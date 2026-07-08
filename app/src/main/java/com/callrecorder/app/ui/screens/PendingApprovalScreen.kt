@@ -109,8 +109,6 @@ fun PendingApprovalScreen(
             } else if (state.recordings.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("✅", style = TextStyle(fontSize = 48.sp))
-                        Spacer(Modifier.height(12.dp))
                         Text(
                             "대기 중인 통화가 없어요",
                             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = AppColors.TextPrimary),

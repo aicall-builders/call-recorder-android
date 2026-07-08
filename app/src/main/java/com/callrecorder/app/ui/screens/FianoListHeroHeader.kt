@@ -53,21 +53,33 @@ fun FianoTopHeader(
             modifier = Modifier.size(width = 77.142852.dp, height = 36.dp),
             contentScale = ContentScale.Fit,
         )
-        Box(
-            Modifier
-                .size(32.dp)
-                .clickable { onNotificationClick() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(
-                    if (hasNotification) R.drawable.call_icon_alarm_on else R.drawable.call_icon_alarm
-                ),
-                contentDescription = "알림",
-                modifier = Modifier.size(32.dp),
-                contentScale = ContentScale.Fit,
-            )
-        }
+        FianoHeaderAlarmButton(
+            onClick = onNotificationClick,
+            hasNotification = hasNotification,
+        )
+    }
+}
+
+@Composable
+fun FianoHeaderAlarmButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {},
+    hasNotification: Boolean = false,
+) {
+    Box(
+        modifier
+            .size(32.dp)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(
+                if (hasNotification) R.drawable.call_icon_alarm_on else R.drawable.call_icon_alarm
+            ),
+            contentDescription = "알림",
+            modifier = Modifier.size(32.dp),
+            contentScale = ContentScale.Fit,
+        )
     }
 }
 
