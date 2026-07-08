@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.model.CallDetail
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,12 +37,14 @@ class CallSummaryDetailViewModel : ViewModel() {
     val state: StateFlow<CallSummaryDetailUiState> = _state.asStateFlow()
 
     fun load(callId: String) {
-        loadCalendars()
         viewModelScope.launch {
             _state.value = CallSummaryDetailUiState(loading = true)
 
-            // 1) 통화 상세
-            val detailResult = callRepo.getDetail(callId)
+            val detailDeferred = async { callRepo.getDetail(callId) }
+            val audioDeferred = async { callRepo.getAudioUrl(callId) }
+
+            // 상세 정보가 도착하면 먼저 화면을 연다. 음성 URL은 뒤이어 갱신된다.
+            val detailResult = detailDeferred.await()
             detailResult.fold(
                 onSuccess = { detail ->
                     _state.value = _state.value.copy(loading = false, detail = detail, error = null)
@@ -52,8 +55,7 @@ class CallSummaryDetailViewModel : ViewModel() {
                 },
             )
 
-            // 2) 음성 URL — 백엔드에 /calls/{id}/audio 엔드포인트 활성화됨
-            callRepo.getAudioUrl(callId).fold(
+            audioDeferred.await().fold(
                 onSuccess = { url -> _state.value = _state.value.copy(audioUrl = url) },
                 onFailure = { _state.value = _state.value.copy(audioUrl = null) },
             )
@@ -85,22 +87,33 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
     }
 
-    fun loadCalendars() {
+    private fun loadCalendars(openAfterLoad: Boolean = false) {
+        if (_state.value.calendarLoading) return
         viewModelScope.launch {
+            _state.value = _state.value.copy(calendarLoading = true)
             CallRecorderApp.instance.container.calendarRepo.getConnections().fold(
                 onSuccess = { connections ->
                     _state.value = _state.value.copy(
-                        connectedCalendars = connections.map { it.provider }
+                        calendarLoading = false,
+                        connectedCalendars = connections.map { it.provider },
+                        showCalendarPicker = openAfterLoad,
                     )
                 },
-                onFailure = {}
+                onFailure = {
+                    _state.value = _state.value.copy(calendarLoading = false)
+                }
             )
         }
     }
 
     fun toggleCalendarPicker() {
+        val nextOpen = !_state.value.showCalendarPicker
+        if (nextOpen && _state.value.connectedCalendars.isEmpty()) {
+            loadCalendars(openAfterLoad = true)
+            return
+        }
         _state.value = _state.value.copy(
-            showCalendarPicker = !_state.value.showCalendarPicker
+            showCalendarPicker = nextOpen
         )
     }
 

@@ -219,8 +219,7 @@ private fun DetailHero(call: Call, info: ExtractedInfo?, audioUrl: String?) {
 /* ─────────────── 발신자 정보 ─────────────── */
 @Composable
 private fun ContactBlock(call: Call, info: ExtractedInfo?) {
-    val displayPhone = call.callerName?.takeIf { it.isNotBlank() }
-        ?: call.callerNumber ?: info?.phone ?: "발신번호 없음"
+    val displayTitle = detailCallTitle(call, info)
     val timeLabel = formatCallDateTime(call.createdAt)
     val durationLabel = formatDuration(call.duration)
 
@@ -231,12 +230,12 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
-            painter = painterResource(R.drawable.call_icon_type_default),
+            painter = painterResource(detailCallTypeIconRes(call)),
             contentDescription = null,
             modifier = Modifier.size(36.dp),
         )
         Column(Modifier.weight(1f)) {
-            Text(displayPhone, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+            Text(displayTitle, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(timeLabel, style = TextStyle(fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f)))
@@ -251,6 +250,29 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
             contentDescription = "다운로드",
             modifier = Modifier.size(24.dp),
         )
+    }
+}
+
+private fun detailCallTitle(call: Call, info: ExtractedInfo?): String {
+    return call.callerName?.takeIf { it.isNotBlank() }
+        ?: call.callerNumber?.takeIf { it.isNotBlank() }
+        ?: info?.phone?.takeIf { it.isNotBlank() }
+        ?: call.s3Key?.substringAfterLast("/")?.takeIf { it.isNotBlank() }
+        ?: "업로드 음성 파일"
+}
+
+private fun detailCallTypeIconRes(call: Call): Int {
+    return when (call.direction?.lowercase()) {
+        "inbound", "incoming" -> R.drawable.icon_reception_white
+        "outbound", "outgoing" -> R.drawable.icon_outgoing_white
+        "manual", "upload", "uploaded" -> R.drawable.icon_call_up_white
+        else -> {
+            if (call.callerName.isNullOrBlank() && call.callerNumber.isNullOrBlank() && !call.s3Key.isNullOrBlank()) {
+                R.drawable.icon_call_up_white
+            } else {
+                R.drawable.call_icon_type_default
+            }
+        }
     }
 }
 
