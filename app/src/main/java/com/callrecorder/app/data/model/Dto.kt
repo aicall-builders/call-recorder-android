@@ -13,7 +13,11 @@ import kotlinx.serialization.json.decodeFromJsonElement
 @Serializable
 data class KakaoLoginRequest(
     @SerialName("provider_access_token")
-    val providerAccessToken: String
+    val providerAccessToken: String,
+    @SerialName("provider_user_id")
+    val providerUserId: String? = null,
+    val email: String? = null,
+    val nickname: String? = null,
 )
 @Serializable
 data class AuthResponse(

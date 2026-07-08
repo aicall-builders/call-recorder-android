@@ -17,11 +17,18 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import retrofit2.HttpException
 
 class AuthRepository(
     private val api: ApiService,
     private val tokenStore: TokenStore,
 ) {
+    private fun Throwable.readableAuthError(): Throwable {
+        if (this !is HttpException) return this
+        val body = response()?.errorBody()?.string()?.take(500).orEmpty()
+        val message = if (body.isNotBlank()) "HTTP ${code()}: $body" else "HTTP ${code()}"
+        return IllegalStateException(message, this)
+    }
 
     // ═══════════════════════════════════════════════
     // 카카오 로그인 (기존 유지)
@@ -37,9 +44,16 @@ class AuthRepository(
             }
         }
 
-        val resp = api.loginWithKakao(KakaoLoginRequest(
-            providerAccessToken = kakaoToken.accessToken,
-        ))
+        val resp = try {
+            api.loginWithKakao(KakaoLoginRequest(
+                providerAccessToken = kakaoToken.accessToken,
+                providerUserId = kakaoUser.id?.toString(),
+                email = kakaoUser.kakaoAccount?.email,
+                nickname = kakaoUser.kakaoAccount?.profile?.nickname,
+            ))
+        } catch (e: Throwable) {
+            throw e.readableAuthError()
+        }
         val customToken = resp.customToken
 
         val firebaseAuth = FirebaseAuth.getInstance()
@@ -83,9 +97,13 @@ class AuthRepository(
         // idToken도 Bearer로 사용 가능함
         SafeLog.i("AuthRepo", "Google idToken → backend /auth/google 호출")
 
-        val resp = api.loginWithGoogle(GoogleLoginRequest(
-            providerAccessToken = idToken,
-        ))
+        val resp = try {
+            api.loginWithGoogle(GoogleLoginRequest(
+                providerAccessToken = idToken,
+            ))
+        } catch (e: Throwable) {
+            throw e.readableAuthError()
+        }
         val customToken = resp.customToken
         SafeLog.i("AuthRepo", "Google backend login ok uid=${resp.uid}")
 
@@ -128,7 +146,11 @@ class AuthRepository(
 
         SafeLog.i("AuthRepo", "Naver accessToken 획득 완료")
 
-        val resp = api.loginWithNaver(NaverLoginRequest(providerAccessToken = naverToken))
+        val resp = try {
+            api.loginWithNaver(NaverLoginRequest(providerAccessToken = naverToken))
+        } catch (e: Throwable) {
+            throw e.readableAuthError()
+        }
         val customToken = resp.customToken
 
         val firebaseAuth = FirebaseAuth.getInstance()
