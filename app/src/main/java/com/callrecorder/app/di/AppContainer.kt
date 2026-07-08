@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.callrecorder.app.data.api.ApiClient
 import com.callrecorder.app.data.local.AppDb
+import com.callrecorder.app.data.local.MIGRATION_3_4
+import com.callrecorder.app.data.local.MIGRATION_4_5
 import com.callrecorder.app.data.local.TokenStore
 import com.callrecorder.app.data.repository.AuthRepository
 import com.callrecorder.app.data.repository.CallRepository
@@ -19,9 +21,11 @@ class AppContainer(context: Context) {
     val api = ApiClient.create(tokenStore)
 
     private val db = Room.databaseBuilder(context, AppDb::class.java, "callrec.db")
+        .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
         .fallbackToDestructiveMigration()
         .build()
     val recordingDao = db.recordingDao()
+    private val manualCalendarEventDao = db.manualCalendarEventDao()
 
     val scanner = RecordingScanner(context)
 
@@ -29,7 +33,7 @@ class AppContainer(context: Context) {
     val storeRepo = StoreRepository(api, tokenStore)
     val callRepo = CallRepository(api, recordingDao)
 
-    val calendarRepo = CalendarRepository(api)
+    val calendarRepo = CalendarRepository(api, manualCalendarEventDao)
 
     val notesRepo = NotesRepository(api)
 

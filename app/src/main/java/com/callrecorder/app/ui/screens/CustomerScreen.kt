@@ -98,6 +98,8 @@ private enum class CustFilter { ALL, VIP, REGULAR, NORMAL, NEW }
 fun CustomerScreen(
     vm: CustomerViewModel = viewModel(),
     onCallDetailClick: (String) -> Unit = {},
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
@@ -148,6 +150,8 @@ fun CustomerScreen(
                     title = "고객 데이터를 정리해두었어요.",
                     searchText = searchText,
                     onSearchTextChange = { searchText = it },
+                    onNotificationClick = onNotificationClick,
+                    hasNotification = hasNotification,
                 )
             }
 

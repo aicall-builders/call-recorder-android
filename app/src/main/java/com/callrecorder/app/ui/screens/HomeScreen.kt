@@ -1,6 +1,7 @@
 package com.callrecorder.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -63,10 +64,10 @@ private val Navy        = AppColors.DeepBrown900
 private val OnDark      = Color(0xFFFFFFFF)
 private val OnDarkSub   = Color(0xFFFFFFFF)
 private val TimeBlue    = AppColors.SignalRed500
-private val SchedTimeHi = AppColors.SignalRed500
-private val SchedTimeSm = AppColors.DeepBrown500
-private val SchedMeta   = AppColors.DeepBrown500
-private val Connector   = AppColors.DeepBrown200
+private val SchedTimeHi = Color(0xFFF11800)
+private val SchedTimeSm = Color(0xFF6B7078)
+private val SchedMeta   = Color(0xFF454C55)
+private val Connector   = AppColors.FianoBlack200
 private val AvatarBg    = AppColors.DeepBrown50
 private val AvatarText  = AppColors.DeepBrown700
 private val AccentBlue  = AppColors.SignalRed500
@@ -83,6 +84,8 @@ fun HomeScreen(
     onSeeAllCalls: () -> Unit = {},
     onSeeAllSchedules: () -> Unit = {},
     onSeeAllCustomers: () -> Unit = {},
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     tourController: FeatureTourController,
     vm: HomeViewModel = viewModel(),
 ) {
@@ -110,6 +113,8 @@ fun HomeScreen(
             onUploadClick = onUploadClick,
             onRefresh = { vm.refresh() },
             onUploadingClick = { showUploadSheet = true },
+            onNotificationClick = onNotificationClick,
+            hasNotification = hasNotification,
             tourController = tourController,
         )
 
@@ -226,11 +231,16 @@ private fun Hero(
     onUploadClick: () -> Unit,
     onRefresh: () -> Unit,
     onUploadingClick: () -> Unit,
+    onNotificationClick: () -> Unit,
+    hasNotification: Boolean,
     tourController: FeatureTourController,
 ) {
     val today = remember { todayFullDateLabel() }
     Column(Modifier.fillMaxWidth()) {
-        FianoTopHeader()
+        FianoTopHeader(
+            onNotificationClick = onNotificationClick,
+            hasNotification = hasNotification,
+        )
 
         Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)) {
             Text(today, style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = OnDark))
@@ -439,20 +449,86 @@ private fun PinnedCustomerCard(customer: CustomerListItem, modifier: Modifier = 
 
 @Composable
 private fun ScheduleTimelineItem(event: CalendarEvent, isFirst: Boolean, isLast: Boolean) {
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+    val itemHeight = if (isFirst) 86.dp else 66.dp
+    val timeFontSize = if (isFirst) 14.sp else 12.sp
+    val titleFontSize = if (isFirst) 14.sp else 12.sp
+    val detailFontSize = if (isFirst) 12.sp else 10.sp
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(itemHeight)
+            .padding(horizontal = 8.dp),
+    ) {
         Column(Modifier.width(20.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(if (isFirst) 14.dp else 12.dp).clip(CircleShape).background(if (isFirst) SchedTimeHi else Connector))
+            if (isFirst) {
+                Image(
+                    painter = painterResource(id = R.drawable.call_icon_timeline_marker),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            } else {
+                Box(Modifier.size(12.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .border(1.dp, Connector, CircleShape)
+                            .clip(CircleShape),
+                    )
+                }
+            }
             if (!isLast) Box(Modifier.width(2.dp).weight(1f).background(Connector))
         }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f).padding(bottom = if (isLast) 4.dp else 20.dp)) {
-            Text(event.time, style = TextStyle(fontSize = if (isFirst) 14.sp else 12.sp, fontWeight = FontWeight.Bold, color = if (isFirst) SchedTimeHi else SchedTimeSm))
-            Spacer(Modifier.height(6.dp))
-            Text(event.title, style = TextStyle(fontSize = if (isFirst) 14.sp else 12.sp, fontWeight = FontWeight.Bold, color = Navy, lineHeight = (if (isFirst) 18 else 16).sp))
-            Spacer(Modifier.height(4.dp))
-            Text(event.description.takeIf { it.isNotBlank() } ?: "통화 자동 등록", style = TextStyle(fontSize = 10.sp, color = SchedMeta))
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(
+                    start = 0.dp,
+                    top = if (isFirst) 2.dp else 0.dp,
+                    bottom = if (isFirst) 24.dp else 16.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                listOfNotNull(scheduleDateLabel(event), event.time.takeIf { it.isNotBlank() }).joinToString("  "),
+                style = TextStyle(
+                    fontSize = timeFontSize,
+                    lineHeight = timeFontSize,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isFirst) SchedTimeHi else SchedTimeSm,
+                ),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    event.title,
+                    style = TextStyle(
+                        fontSize = titleFontSize,
+                        fontWeight = FontWeight.Bold,
+                        color = Navy,
+                        lineHeight = if (isFirst) 18.sp else 16.sp,
+                    ),
+                )
+                Text(
+                    event.description.takeIf { it.isNotBlank() } ?: "통화 자동 등록",
+                    style = TextStyle(
+                        fontSize = detailFontSize,
+                        lineHeight = if (isFirst) 16.sp else 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = SchedMeta,
+                    ),
+                )
+            }
         }
     }
+}
+
+private fun scheduleDateLabel(event: CalendarEvent): String? {
+    val raw = event.startAt?.takeIf { it.isNotBlank() } ?: return null
+    val datePart = raw.substringBefore("T").substringBefore(" ")
+    val parts = datePart.split("-")
+    if (parts.size < 3) return datePart.takeIf { it.isNotBlank() }
+    val month = parts[1].toIntOrNull() ?: return datePart
+    val day = parts[2].toIntOrNull() ?: return datePart
+    return "${parts[0]}년 ${month}월 ${day}일"
 }
 
 @Composable

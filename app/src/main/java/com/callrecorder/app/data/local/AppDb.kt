@@ -1,6 +1,8 @@
 package com.callrecorder.app.data.local
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 import kotlinx.coroutines.flow.Flow
 
@@ -27,6 +29,20 @@ data class RecordingEntity(
     val category: String = CallCategory.UNCLASSIFIED,     // BUSINESS / PERSONAL / UNCLASSIFIED (개인정보 보호용 분류)
     val serverCallId: String? = null,                     // Long? → String? (서버 UUID)
     val errorMessage: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "manual_calendar_events")
+data class ManualCalendarEventEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val date: String, // YYYY-MM-DD
+    val time: String,
+    val description: String = "",
+    val chip: String = "",
+    val imageUris: String = "",
+    val reminderEnabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -185,10 +201,57 @@ interface RecordingDao {
     suspend fun deleteOne(id: Long)
 }
 
-// version 2 → 3 (스키마 변경: category 컬럼 추가)
-// fallbackToDestructiveMigration 설정되어 있어 자동으로 DB 재생성됨
-// → 기존 78건 데이터 삭제됨 (의도된 것: 발표 전 깨끗한 상태로 시작)
-@Database(entities = [RecordingEntity::class], version = 3, exportSchema = false)
+@Dao
+interface ManualCalendarEventDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(event: ManualCalendarEventEntity)
+
+    @Query("""
+        SELECT * FROM manual_calendar_events
+        WHERE date BETWEEN :fromDate AND :toDate
+        ORDER BY date ASC, time ASC, title ASC
+    """)
+    suspend fun getInRange(fromDate: String, toDate: String): List<ManualCalendarEventEntity>
+
+    @Query("DELETE FROM manual_calendar_events WHERE id = :id")
+    suspend fun deleteById(id: String)
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `manual_calendar_events` (
+                `id` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `date` TEXT NOT NULL,
+                `time` TEXT NOT NULL,
+                `description` TEXT NOT NULL,
+                `chip` TEXT NOT NULL,
+                `imageUris` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `manual_calendar_events` ADD COLUMN `reminderEnabled` INTEGER NOT NULL DEFAULT 1"
+        )
+    }
+}
+
+@Database(
+    entities = [RecordingEntity::class, ManualCalendarEventEntity::class],
+    version = 5,
+    exportSchema = false,
+)
 abstract class AppDb : RoomDatabase() {
     abstract fun recordingDao(): RecordingDao
+    abstract fun manualCalendarEventDao(): ManualCalendarEventDao
 }

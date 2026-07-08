@@ -3,6 +3,7 @@ package com.callrecorder.app.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.local.RecordingStatus
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
@@ -202,7 +203,14 @@ class HomeViewModel : ViewModel() {
             val schedulesDeferred = async {
                 runCatching {
                     withTimeout(8_000L) {
-                        calendarRepo.getEvents().getOrThrow()
+                        val serverEvents = calendarRepo.getEvents().getOrDefault(emptyList())
+                        val manualEvents = calendarRepo
+                            .getManualEventsInRange(from = todayDateString(), to = dateStringAfter(days = 30))
+                            .getOrDefault(emptyList())
+                            .map { it.toHomeCalendarEvent() }
+
+                        (serverEvents + manualEvents)
+                            .sortedWith(compareBy<CalendarEvent> { it.startAt.orEmpty() }.thenBy { it.time })
                     }
                 }
             }
@@ -364,4 +372,32 @@ class HomeViewModel : ViewModel() {
         }
         return null
     }
+
+    private fun todayDateString(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    private fun dateStringAfter(days: Int): String {
+        val cal = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, days)
+        }
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
+
+    private fun ManualCalendarEventEntity.toHomeCalendarEvent(): CalendarEvent {
+        val normalizedTime = time.ifBlank { "00:00" }
+        val startAt = "$date ${normalizedTime.withSeconds()}"
+        return CalendarEvent(
+            id = "manual-$id",
+            provider = "manual",
+            title = title,
+            time = normalizedTime,
+            category = chip,
+            description = description.ifBlank { "수동 등록 일정" },
+            startAt = startAt,
+            reminderEnabled = reminderEnabled,
+        )
+    }
+
+    private fun String.withSeconds(): String =
+        if (count { it == ':' } >= 2) this else "$this:00"
 }

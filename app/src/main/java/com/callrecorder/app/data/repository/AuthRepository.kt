@@ -29,7 +29,7 @@ class AuthRepository(
     suspend fun loginWithKakao(context: Context): Result<Unit> = runCatching {
         val kakaoToken = kakaoLogin(context)
 
-        suspendCancellableCoroutine<com.kakao.sdk.user.model.User> { cont ->
+        val kakaoUser = suspendCancellableCoroutine<com.kakao.sdk.user.model.User> { cont ->
             UserApiClient.instance.me { user, error ->
                 if (error != null) cont.resumeWithException(error)
                 else if (user != null) cont.resume(user)
@@ -52,6 +52,10 @@ class AuthRepository(
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
         )
+        tokenStore.saveLoginProfile(
+            provider = "kakao",
+            email = resp.user?.email ?: kakaoUser.kakaoAccount?.email,
+        )
     }
 
     // ═══════════════════════════════════════════════
@@ -70,6 +74,7 @@ class AuthRepository(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         val firebaseAuth = FirebaseAuth.getInstance()
         firebaseAuth.signInWithCredential(credential).await()
+        val googleEmail = firebaseAuth.currentUser?.email
         SafeLog.i("AuthRepo", "Google Firebase credential sign-in ok")
 
         // idToken을 그대로 백엔드에 전달
@@ -94,6 +99,10 @@ class AuthRepository(
             refresh = resp.refreshToken,
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
+        )
+        tokenStore.saveLoginProfile(
+            provider = "google",
+            email = resp.user?.email ?: googleEmail,
         )
     }
 
@@ -131,6 +140,10 @@ class AuthRepository(
             refresh = resp.refreshToken,
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
+        )
+        tokenStore.saveLoginProfile(
+            provider = "naver",
+            email = resp.user?.email,
         )
     }
 

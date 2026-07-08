@@ -3,6 +3,7 @@ package com.callrecorder.app.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,8 @@ data class SettingsUiState(
     val storeCategory: String = "",
     val userName: String = "",
     val userPhone: String = "",
+    val loginProvider: String = "",
+    val accountEmail: String = "",
     val smsEnabled: Boolean = true,
     val memberCount: Int = 1,
     val error: String? = null,
@@ -41,6 +44,7 @@ class SettingsViewModel : ViewModel() {
 
     init {
         loadPrefs()
+        loadAccountInfo()
         loadSettings()
     }
 
@@ -66,6 +70,35 @@ class SettingsViewModel : ViewModel() {
                 _state.value = _state.value.copy(loading = false, error = it.message)
             }
             _state.value = _state.value.copy(loading = false)
+        }
+    }
+
+    private fun loadAccountInfo() {
+        viewModelScope.launch {
+            val tokenStore = container.tokenStore
+            val storedProvider = tokenStore.getLoginProvider().orEmpty()
+            val storedEmail = tokenStore.getAccountEmail().orEmpty()
+            val firebaseUser = FirebaseAuth.getInstance().currentUser
+            val firebaseEmail = firebaseUser?.email.orEmpty()
+            val inferredProvider = inferLoginProvider()
+
+            _state.value = _state.value.copy(
+                loginProvider = storedProvider.ifBlank { inferredProvider },
+                accountEmail = storedEmail.ifBlank { firebaseEmail },
+            )
+        }
+    }
+
+    private fun inferLoginProvider(): String {
+        val providerIds = FirebaseAuth.getInstance().currentUser
+            ?.providerData
+            ?.map { it.providerId }
+            .orEmpty()
+        return when {
+            providerIds.any { it.contains("google", ignoreCase = true) } -> "google"
+            providerIds.any { it.contains("kakao", ignoreCase = true) } -> "kakao"
+            providerIds.any { it.contains("naver", ignoreCase = true) } -> "naver"
+            else -> ""
         }
     }
 

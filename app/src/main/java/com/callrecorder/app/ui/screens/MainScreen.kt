@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +64,9 @@ import com.callrecorder.app.ui.theme.AppColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 private val NavBarBg = AppColors.DeepBrown900
@@ -80,11 +85,21 @@ fun MainScreen(
     var noteEditTitle by remember { mutableStateOf("통화 메모") }
     var approvalRefreshKey by remember { mutableStateOf(0) }
     var showExternalCalendarSheet by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val container = CallRecorderApp.instance.container
     val recordingDao = container.recordingDao
+    val homeState by homeVm.state.collectAsState()
+    val hasNotification = remember(homeState.recentCalls, homeState.schedules) {
+        val today = mainTodayDate()
+        homeState.recentCalls.any {
+            it.status.equals("summarized", true) || !it.summary.isNullOrBlank()
+        } || homeState.schedules.any {
+            it.reminderEnabled && it.startAt?.startsWith(today) == true
+        }
+    }
 
     // ── 기능 투어 컨트롤러 ──
     val tourController = rememberFeatureTourController(HomeTourSteps)
@@ -171,7 +186,18 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(top = padding.calculateTopPadding()),
             ) {
-                if (noteEditCallId != null) {
+                if (showNotifications) {
+                    NotificationScreen(
+                        onBack = { showNotifications = false },
+                        onCallClick = { callId ->
+                            showNotifications = false
+                            noteEditCallId = null
+                            selected = BottomTab.CALLS
+                            callDetailId = callId
+                        },
+                        vm = homeVm,
+                    )
+                } else if (noteEditCallId != null) {
                     CallNoteEditScreen(
                         callId = noteEditCallId!!,
                         callTitle = noteEditTitle,
@@ -191,6 +217,8 @@ fun MainScreen(
                             onSeeAllCalls = { selected = BottomTab.CALLS },
                             onSeeAllSchedules = { selected = BottomTab.CALENDAR },
                             onSeeAllCustomers = { selected = BottomTab.CUSTOMERS },
+                            onNotificationClick = { showNotifications = true },
+                            hasNotification = hasNotification,
                             tourController = tourController,
                         )
                         BottomTab.CALLS -> {
@@ -202,39 +230,51 @@ fun MainScreen(
                             } else {
                                 CallSummaryListScreen(
                                     onCallClick = { callId -> callDetailId = callId },
+                                    onNotificationClick = { showNotifications = true },
+                                    hasNotification = hasNotification,
                                 )
                             }
                         }
-                        BottomTab.CUSTOMERS -> CustomerScreen(onCallDetailClick = handleCallClick)
+                        BottomTab.CUSTOMERS -> CustomerScreen(
+                            onCallDetailClick = handleCallClick,
+                            onNotificationClick = { showNotifications = true },
+                            hasNotification = hasNotification,
+                        )
                         BottomTab.CALENDAR -> InternalCalendarScreen(
                             onCallDetailClick = handleCallClick,
                             onMemoImageClick = { callId, title ->
                                 noteEditCallId = callId
                                 noteEditTitle = title.ifBlank { "통화 메모" }
                             },
+                            onNotificationClick = { showNotifications = true },
+                            hasNotification = hasNotification,
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
                             onBack = { selected = BottomTab.HOME },
                             onChangeStore = onChangeStore,
                             onLoggedOut = onLoggedOut,
                             onExternalCalendarClick = { showExternalCalendarSheet = true },
+                            onNotificationClick = { showNotifications = true },
+                            hasNotification = hasNotification,
                         )
                     }
                 }
             }
         }
 
-        BottomTabBar(
-            selected = selected,
-            onSelect = { tab ->
-                noteEditCallId = null
-                selected = tab
-                if (tab != BottomTab.CALLS) callDetailId = null
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .tourTarget(tourController, TourKeys.BOTTOM_NAV),
-        )
+        if (!showNotifications) {
+            BottomTabBar(
+                selected = selected,
+                onSelect = { tab ->
+                    noteEditCallId = null
+                    selected = tab
+                    if (tab != BottomTab.CALLS) callDetailId = null
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .tourTarget(tourController, TourKeys.BOTTOM_NAV),
+            )
+        }
 
         if (showApproval) {
             Box(
@@ -273,7 +313,7 @@ fun MainScreen(
         }
 
         // ── 기능 투어 오버레이 (최상단) ──
-        if (!showApproval && !showExternalCalendarSheet) {
+        if (!showApproval && !showExternalCalendarSheet && !showNotifications) {
             FeatureTourOverlay(
                 controller = tourController,
                 onFinish = { context.markFeatureTourDone() },
@@ -297,6 +337,9 @@ private fun readAudioDurationSeconds(path: String): Int {
         }
     }.getOrDefault(0)
 }
+
+private fun mainTodayDate(): String =
+    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
 enum class BottomTab(val label: String, val pathData: String) {
     HOME("홈", IconPaths.HOME),
@@ -350,7 +393,12 @@ private fun BottomTabBar(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable { onSelect(tab) },
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+                        if (!isSelected) onSelect(tab)
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 if (isSelected) {

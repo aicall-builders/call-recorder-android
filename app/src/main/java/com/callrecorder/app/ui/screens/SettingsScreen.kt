@@ -58,6 +58,7 @@ private val FianoSettingsText = AppColors.DeepBrown900
 private val FianoSettingsSubText = Color(0xFF99A1B0)
 private val FianoSettingsLine = AppColors.DeepBrown200
 private val FianoSettingsAvatar = AppColors.DeepBrown50
+private val FianoSettingsMutedBg = AppColors.DeepBrown100
 
 /* ─────────────────────────────────────────────────────
  * 업종 프리셋
@@ -96,12 +97,13 @@ fun SettingsScreen(
     onChangeStore: () -> Unit,
     onLoggedOut: () -> Unit,
     onExternalCalendarClick: (() -> Unit)? = null,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     auth: AuthViewModel = viewModel(),
     vm: SettingsViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
     var currentSubScreen by remember { mutableStateOf<SettingsSubScreen?>(null) }
-    var showWithdrawDialog by remember { mutableStateOf(false) }
     var showCalendarSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -139,7 +141,10 @@ fun SettingsScreen(
                 .padding(padding)
                 .background(FianoSettingsBg),
         ) {
-            FianoTopHeader()
+            FianoTopHeader(
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
 
             Row(
                 modifier = Modifier
@@ -241,18 +246,13 @@ fun SettingsScreen(
                     item {
                         SettingsMainSection(verticalPadding = 8.dp) {
                             SettingsMainRow(
-                                title = "회원 정보 수정",
+                                title = "계정 정보",
                                 onClick = { currentSubScreen = SettingsSubScreen.USER_INFO },
                                 trailing = { SettingsChevron() },
                             )
                             SettingsMainRow(
                                 title = "구독 및 결제",
                                 onClick = { currentSubScreen = SettingsSubScreen.SUBSCRIPTION },
-                                trailing = { SettingsChevron() },
-                            )
-                            SettingsMainRow(
-                                title = "회원 탈퇴",
-                                onClick = { showWithdrawDialog = true },
                                 trailing = { SettingsChevron() },
                             )
                             OutlinedButton(
@@ -280,24 +280,6 @@ fun SettingsScreen(
     if (showCalendarSheet) {
         ExternalCalendarBottomSheetOverlay(
             onDismiss = { showCalendarSheet = false },
-        )
-    }
-
-    if (showWithdrawDialog) {
-        AlertDialog(
-            onDismissRequest = { showWithdrawDialog = false },
-            title = { Text("회원 탈퇴", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) },
-            text = { Text("탈퇴 시 모든 통화 데이터와 계정 정보가 삭제됩니다.\n정말 탈퇴하시겠어요?") },
-            confirmButton = {
-                Button(
-                    onClick = { showWithdrawDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                ) { Text("탈퇴하기") }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showWithdrawDialog = false }) { Text("취소") }
-            },
-            containerColor = Color.White,
         )
     }
 
@@ -554,43 +536,7 @@ fun CallFilterScreen(
             contentPadding = PaddingValues(0.dp),
         ) {
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.detail_icon_back),
-                            contentDescription = "뒤로",
-                            modifier = Modifier.size(32.dp).clickable { onBack() },
-                        )
-                        Text(
-                            "통화 필터링 관리",
-                            style = TextStyle(
-                                fontSize = 18.sp,
-                                lineHeight = 24.sp,
-                                fontWeight = FontWeight.Normal,
-                                color = Color.White,
-                                letterSpacing = (-0.5).sp,
-                            ),
-                        )
-                    }
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.call_icon_alarm),
-                            contentDescription = "알림",
-                            modifier = Modifier.size(32.dp),
-                        )
-                    }
-                }
+                FianoSettingsSubHeader(title = "통화 필터링 관리", onBack = onBack)
             }
 
             item {
@@ -899,25 +845,25 @@ private fun KeywordFlowRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SimpleSubScreen(title: String, message: String, onBack: () -> Unit) {
-    Scaffold(
-        containerColor = LightBg,
-        topBar = {
-            TopAppBar(
-                title = { Text(title, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로", tint = OnDarkPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkNavy),
-            )
-        },
-    ) { padding ->
-        Box(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-            contentAlignment = Alignment.Center,
+    Scaffold(containerColor = FianoSettingsBg) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(FianoSettingsBg),
         ) {
-            Text(message, style = TextStyle(fontSize = 14.sp, color = OnLightSub, lineHeight = 22.sp))
+            FianoSettingsSubHeader(title = title, onBack = onBack)
+            FianoSettingsSheet(modifier = Modifier.weight(1f)) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        message,
+                        style = TextStyle(fontSize = 14.sp, color = AppColors.DeepBrown500, lineHeight = 22.sp),
+                    )
+                }
+            }
         }
     }
 }
@@ -929,105 +875,127 @@ private fun SimpleSubScreen(title: String, message: String, onBack: () -> Unit) 
 @Composable
 fun UserInfoScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     val state by vm.state.collectAsState()
-    var name by remember { mutableStateOf(state.userName) }
-    var phone by remember { mutableStateOf(state.userPhone) }
-    var currentPw by remember { mutableStateOf("") }
-    var newPw by remember { mutableStateOf("") }
-    var showSuccess by remember { mutableStateOf(false) }
+    var showWithdrawDialog by remember { mutableStateOf(false) }
+    val loginProvider = loginProviderLabel(state.loginProvider)
+    val accountEmail = state.accountEmail.ifBlank { "이메일 정보 없음" }
 
-    Scaffold(
-        containerColor = LightBg,
-        topBar = {
-            TopAppBar(
-                title = { Text("회원 정보 수정", style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로", tint = OnDarkPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkNavy),
-            )
-        },
-    ) { padding ->
+    Scaffold(containerColor = FianoSettingsBg) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .background(FianoSettingsBg),
         ) {
-            if (showSuccess) {
-                Surface(color = Color(0xFFECFDF5), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text("✅ 저장되었습니다.", modifier = Modifier.padding(12.dp),
-                        style = TextStyle(fontSize = 13.sp, color = Color(0xFF059669)))
-                }
-            }
-            if (state.error != null) {
-                Surface(color = Color(0xFFFEE2E2), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text("오류: ${state.error}", modifier = Modifier.padding(12.dp),
-                        style = TextStyle(fontSize = 13.sp, color = Color(0xFFB91C1C)))
-                }
-            }
+            FianoSettingsSubHeader(title = "계정 정보", onBack = onBack)
+            FianoSettingsSheet(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    if (state.error != null) {
+                        Surface(color = AppColors.SignalRed50, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                "오류: ${state.error}",
+                                modifier = Modifier.padding(12.dp),
+                                style = TextStyle(fontSize = 13.sp, color = AppColors.SignalRed700),
+                            )
+                        }
+                    }
 
-            SettingInputSection("기본 정보") {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it },
-                    label = { Text("이름", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.Person, null, modifier = Modifier.size(20.dp)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = settingTextFieldColors(),
-                )
-                OutlinedTextField(
-                    value = phone, onValueChange = { phone = it },
-                    label = { Text("연락처", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.Phone, null, modifier = Modifier.size(20.dp)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = settingTextFieldColors(),
-                )
-            }
+                    AccountInfoCard {
+                        AccountInfoRow(label = "로그인 방식", value = loginProvider)
+                        SettingsMainDivider()
+                        AccountInfoRow(label = "계정 이메일", value = accountEmail)
+                    }
 
-            SettingInputSection("비밀번호 변경") {
-                OutlinedTextField(
-                    value = currentPw, onValueChange = { currentPw = it },
-                    label = { Text("현재 비밀번호", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.Lock, null, modifier = Modifier.size(20.dp)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = settingTextFieldColors(),
-                )
-                OutlinedTextField(
-                    value = newPw, onValueChange = { newPw = it },
-                    label = { Text("새 비밀번호", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.LockOpen, null, modifier = Modifier.size(20.dp)) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = settingTextFieldColors(),
-                )
-            }
+                    Text(
+                        "이메일과 프로필 정보는 가입한 간편 로그인 계정에서 변경할 수 있습니다.",
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = AppColors.DeepBrown500,
+                        ),
+                    )
 
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = {
-                    vm.updateUserName(name)
-                    vm.updateUserPhone(phone)
-                    vm.saveUserInfo { showSuccess = true }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(vertical = 14.dp),
-                enabled = !state.loading,
-            ) {
-                if (state.loading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("저장", style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                    Surface(
+                        onClick = { showWithdrawDialog = true },
+                        color = Color.White,
+                        border = BorderStroke(1.dp, FianoSettingsBg),
+                        shape = RoundedCornerShape(999.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                "회원 탈퇴",
+                                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsBg),
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    if (showWithdrawDialog) {
+        AlertDialog(
+            onDismissRequest = { showWithdrawDialog = false },
+            title = { Text("회원 탈퇴", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) },
+            text = { Text("탈퇴 시 모든 통화 데이터와 계정 정보가 삭제됩니다.\n정말 탈퇴하시겠어요?") },
+            confirmButton = {
+                Button(
+                    onClick = { showWithdrawDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.SignalRed700),
+                ) { Text("탈퇴하기") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showWithdrawDialog = false }) { Text("취소") }
+            },
+            containerColor = Color.White,
+        )
+    }
+}
+
+private fun loginProviderLabel(provider: String): String = when (provider.lowercase()) {
+    "kakao" -> "카카오"
+    "google" -> "Google"
+    "naver" -> "네이버"
+    else -> "간편 로그인"
+}
+
+@Composable
+private fun AccountInfoCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, FianoSettingsLine),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun AccountInfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.width(88.dp),
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, color = AppColors.DeepBrown500),
+        )
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+        )
     }
 }
 
@@ -1078,107 +1046,182 @@ private fun PermissionSettingsScreen(onBack: () -> Unit) {
         settingsLauncher.launch(intent)
     }
 
-    Scaffold(
-        containerColor = LightBg,
-        topBar = {
-            TopAppBar(
-                title = { Text("권한 설정", style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold, color = OnDarkPrimary)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "뒤로", tint = OnDarkPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkNavy),
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    Scaffold(containerColor = FianoSettingsBg) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(FianoSettingsBg),
         ) {
-            // 안내
-            item {
-                Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-                        Icon(Icons.Filled.Info, null, tint = AccentBlue, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "통화 녹음·발신자 이름 매칭에 필요한 권한이에요.\n" +
-                                    "권한을 켜거나 끄려면 토글을 누르면 시스템 설정 화면으로 바로 이동해요.",
-                            style = TextStyle(fontSize = 12.sp, color = AccentBlue, lineHeight = 18.sp),
-                        )
-                    }
-                }
-            }
+            FianoSettingsSubHeader(title = "권한 설정", onBack = onBack)
+            FianoSettingsSheet(modifier = Modifier.weight(1f)) {
+                Text(
+                    "통화 녹음과 고객 정보 정리를 위해 필요한 권한을 관리합니다.",
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = AppColors.DeepBrown500),
+                )
 
-            // 권한 토글 목록 — 토글을 누르면 곧장 OS 앱 설정으로 이동
-            item {
-                Surface(color = WhiteCard, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+                Surface(color = FianoSettingsMutedBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column {
                         statuses.forEachIndexed { index, s ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(s.label, style = TextStyle(fontSize = 14.sp, color = OnLightPrimary))
-                                    Text(
-                                        if (s.granted) "허용됨" else "거부됨",
-                                        style = TextStyle(
-                                            fontSize = 11.sp,
-                                            color = if (s.granted) Color(0xFF059669) else Color(0xFFEF4444),
-                                        ),
-                                    )
-                                }
-                                Switch(
-                                    checked = s.granted,
-                                    onCheckedChange = { wantOn ->
-                                        if (wantOn) {
-                                            // 켤 때: 이동 없이 바로 시스템 권한 요청
-                                            requestLauncher.launch(arrayOf(s.permission))
-                                        } else {
-                                            // 끌 때: 앱에서 해제 불가 → OS 앱 설정으로 이동
-                                            openAppSettings()
-                                        }
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.White,
-                                        checkedTrackColor = AppColors.FianoBlack900,
-                                        checkedBorderColor = AppColors.FianoBlack900,
-                                        uncheckedThumbColor = Color.White,
-                                        uncheckedTrackColor = AppColors.FianoBlack300,
-                                        uncheckedBorderColor = AppColors.FianoBlack300,
-                                    ),
-                                )
-                            }
+                            SettingsPermissionRow(
+                                status = s,
+                                onCheckedChange = { wantOn ->
+                                    if (wantOn) {
+                                        requestLauncher.launch(arrayOf(s.permission))
+                                    } else {
+                                        openAppSettings()
+                                    }
+                                },
+                            )
                             if (index < statuses.lastIndex) {
-                                HorizontalDivider(color = DividerLight, thickness = 0.5.dp, modifier = Modifier.padding(start = 16.dp))
+                                HorizontalDivider(
+                                    color = FianoSettingsLine,
+                                    thickness = 1.dp,
+                                    modifier = Modifier.padding(start = 68.dp),
+                                )
                             }
                         }
                     }
                 }
-            }
 
-            // 전체 앱 설정 바로가기
-            item {
-                OutlinedButton(
+                Surface(
                     onClick = { openAppSettings() },
-                    modifier = Modifier.fillMaxWidth(),
-                    border = BorderStroke(1.5.dp, AccentBlue),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(vertical = 14.dp),
+                    color = Color.White,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, FianoSettingsBg),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                 ) {
-                    Text("앱 설정 열기", style = TextStyle(fontSize = 15.sp, color = AccentBlue))
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "앱 설정 열기",
+                            style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium, color = FianoSettingsBg),
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@DrawableRes
+private fun permissionIconRes(permission: String): Int = when (permission) {
+    Manifest.permission.RECORD_AUDIO -> R.drawable.icon_access_file
+    Manifest.permission.READ_CONTACTS -> R.drawable.icon_access_num
+    Manifest.permission.READ_CALL_LOG,
+    Manifest.permission.READ_PHONE_STATE -> R.drawable.icon_access_mach
+    Manifest.permission.POST_NOTIFICATIONS -> R.drawable.icon_access_alarm
+    else -> R.drawable.icon_access_file
+}
+
+@Composable
+private fun SettingsPermissionRow(
+    status: PermStatus,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Image(
+            painter = painterResource(permissionIconRes(status.permission)),
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                status.label,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (status.granted) "허용됨" else "허용 필요",
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    color = if (status.granted) AppColors.DeepBrown600 else AppColors.SignalRed500,
+                ),
+            )
+        }
+        FianoSettingToggle(
+            checked = status.granted,
+            onCheckedChange = onCheckedChange,
+        )
     }
 }
 /* ─────────────────────────────────────────────────────
  * 공통 컴포넌트
  * ───────────────────────────────────────────────────── */
 enum class SettingsSubScreen { USER_INFO, CALL_FILTER, SUBSCRIPTION, CALENDAR, PERMISSION }
+
+@Composable
+private fun FianoSettingsSubHeader(
+    title: String,
+    onBack: () -> Unit,
+    showAlarm: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(start = 20.dp, end = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.detail_icon_back),
+                contentDescription = "뒤로",
+                modifier = Modifier.size(32.dp).clickable { onBack() },
+            )
+            Text(
+                title,
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = Color.White,
+                ),
+                maxLines = 1,
+            )
+        }
+        if (showAlarm) {
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = painterResource(R.drawable.call_icon_alarm),
+                    contentDescription = "알림",
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FianoSettingsSheet(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        color = FianoSettingsContent,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            content = content,
+        )
+    }
+}
 
 @Composable
 private fun SettingsMainSection(
@@ -1398,9 +1441,9 @@ private fun SettingRowBadge(
 @Composable
 private fun SettingInputSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column {
-        Text(title, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = OnLightSub),
+        Text(title, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.DeepBrown600),
             modifier = Modifier.padding(bottom = 8.dp))
-        Surface(color = WhiteCard, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Surface(color = FianoSettingsMutedBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
         }
     }
@@ -1408,8 +1451,13 @@ private fun SettingInputSection(title: String, content: @Composable ColumnScope.
 
 @Composable
 private fun settingTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = AccentBlue,
-    unfocusedBorderColor = DividerLight,
+    focusedBorderColor = FianoSettingsBg,
+    unfocusedBorderColor = Color.Transparent,
     focusedContainerColor = Color.White,
     unfocusedContainerColor = Color.White,
+    cursorColor = FianoSettingsBg,
+    focusedLabelColor = FianoSettingsBg,
+    unfocusedLabelColor = AppColors.DeepBrown500,
+    focusedTextColor = FianoSettingsText,
+    unfocusedTextColor = FianoSettingsText,
 )

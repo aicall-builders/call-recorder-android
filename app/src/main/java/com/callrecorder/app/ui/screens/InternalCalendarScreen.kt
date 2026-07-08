@@ -1,13 +1,16 @@
 package com.callrecorder.app.ui.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -28,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,12 +39,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.R
+import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.model.CallCategoryCode
 import com.callrecorder.app.data.model.CallCategoryLabel
 import com.callrecorder.app.data.model.CalendarEvent as ApiEvent
 import com.callrecorder.app.ui.theme.AppColors
 import coil.compose.AsyncImage
+import java.io.File
 import java.util.Calendar
+import java.util.UUID
 
 // ─────────────────────────────────────────────────────
 // 다크 2-tone 색상
@@ -79,6 +87,7 @@ private data class CalEvent(
     val dateLabel: String = "",
     val hasAttachments: Boolean = false,
     val imageUris: List<Uri> = emptyList(),
+    val reminderEnabled: Boolean = true,
 )
 
 /** API CalendarEvent → 화면용 CalEvent 변환 */
@@ -98,6 +107,31 @@ private fun ApiEvent.toCalEvent(): CalEvent? {
         description = description.ifBlank { title },
         callId = callId,
         dateLabel = startAt.toEventDateLabel(day),
+        reminderEnabled = true,
+    )
+}
+
+private fun ManualCalendarEventEntity.toCalEvent(): CalEvent? {
+    val day = date.substringAfterLast("-").toIntOrNull() ?: return null
+    val chipValue = ScheduleChip.values().firstOrNull {
+        it.name == chip || it.label == chip
+    } ?: ScheduleChip.OTHER
+    return CalEvent(
+        id = id,
+        title = title,
+        date = day,
+        time = time,
+        type = EventType.MANUAL,
+        chip = chipValue,
+        description = description,
+        dateLabel = date.replace("-", "."),
+        hasAttachments = imageUris.isNotBlank(),
+        imageUris = imageUris
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .map { Uri.parse(it) }
+            .toList(),
+        reminderEnabled = reminderEnabled,
     )
 }
 
@@ -111,6 +145,8 @@ fun InternalCalendarScreen(
     calVm: CalendarViewModel = viewModel(),
     onCallDetailClick: (String) -> Unit = {},
     onMemoImageClick: (callId: String, title: String) -> Unit = { _, _ -> },
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     val calState by calVm.state.collectAsState()
 
@@ -122,14 +158,14 @@ fun InternalCalendarScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingManualEvent by remember { mutableStateOf<CalEvent?>(null) }
 
-    // 수동 추가 일정 (로컬 보관)
-    val manualEvents = remember { mutableStateListOf<CalEvent>() }
-
-    // API 일정 + 수동 일정 병합
+    // API 일정 + 저장된 수동 일정 병합
     val apiEvents = remember(calState.events) {
         calState.events.mapNotNull { it.toCalEvent() }
     }
-    val allEvents = remember(apiEvents, manualEvents.toList()) {
+    val manualEvents = remember(calState.manualEvents) {
+        calState.manualEvents.mapNotNull { it.toCalEvent() }
+    }
+    val allEvents = remember(apiEvents, manualEvents) {
         apiEvents + manualEvents
     }
 
@@ -140,7 +176,10 @@ fun InternalCalendarScreen(
                 .background(DarkNavy)
                 .padding(padding),
         ) {
-            FianoTopHeader()
+            FianoTopHeader(
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
             CalendarHero()
             InternalCalendarTab(
                 year = currentYear,
@@ -183,28 +222,32 @@ fun InternalCalendarScreen(
                 showAddDialog = false
                 editingManualEvent = null
             },
-            onConfirm = { title, time, day, description, chip, imageUris ->
-                val savedEvent = CalEvent(
+            onConfirm = { title, time, day, description, chip, imageUris, reminderEnabled ->
+                val savedEvent = ManualCalendarEventEntity(
                     id = editingManualEvent?.id ?: System.currentTimeMillis().toString(),
                     title = title,
-                    date = day,
+                    date = "%04d-%02d-%02d".format(
+                        currentYear,
+                        currentMonth,
+                        day.coerceIn(1, daysInMonth(currentYear, currentMonth)),
+                    ),
                     time = time,
-                    type = EventType.MANUAL,
-                    chip = chip,
+                    chip = chip.name,
                     description = description,
-                    dateLabel = "%04d.%02d.%02d".format(currentYear, currentMonth, day),
-                    hasAttachments = imageUris.isNotEmpty(),
-                    imageUris = imageUris,
+                    imageUris = imageUris.joinToString(separator = "\n") { it.toString() },
+                    reminderEnabled = reminderEnabled,
+                    updatedAt = System.currentTimeMillis(),
                 )
-                val editingIndex = manualEvents.indexOfFirst { it.id == savedEvent.id }
-                if (editingIndex >= 0) {
-                    manualEvents[editingIndex] = savedEvent
-                } else {
-                    manualEvents.add(savedEvent)
+                val normalizedDay = day.coerceIn(1, daysInMonth(currentYear, currentMonth))
+                calVm.saveManualEvent(
+                    event = savedEvent,
+                    year = currentYear,
+                    month = currentMonth,
+                ) {
+                    selectedDay = normalizedDay
+                    showAddDialog = false
+                    editingManualEvent = null
                 }
-                selectedDay = day.coerceIn(1, daysInMonth(currentYear, currentMonth))
-                showAddDialog = false
-                editingManualEvent = null
             },
         )
     }
@@ -855,19 +898,30 @@ private fun AddEventDialog(
     defaultDay: Int,
     initialEvent: CalEvent? = null,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, time: String, day: Int, description: String, chip: ScheduleChip, imageUris: List<Uri>) -> Unit,
+    onConfirm: (title: String, time: String, day: Int, description: String, chip: ScheduleChip, imageUris: List<Uri>, reminderEnabled: Boolean) -> Unit,
 ) {
     val initialKey = initialEvent?.id ?: "new-$defaultDay"
+    val context = LocalContext.current
     var title by remember(initialKey) { mutableStateOf(initialEvent?.title.orEmpty()) }
     var time by remember(initialKey) { mutableStateOf(initialEvent?.time.orEmpty()) }
     var dayText by remember(initialKey) { mutableStateOf((initialEvent?.date ?: defaultDay).toString()) }
     var description by remember(initialKey) { mutableStateOf(initialEvent?.description.orEmpty()) }
     var selectedChip by remember(initialKey) { mutableStateOf(initialEvent?.chip ?: ScheduleChip.RESERVATION) }
     var imageUris by remember(initialKey) { mutableStateOf(initialEvent?.imageUris.orEmpty()) }
+    var reminderEnabled by remember(initialKey) { mutableStateOf(initialEvent?.reminderEnabled ?: true) }
+    var imageError by remember(initialKey) { mutableStateOf<String?>(null) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
     ) { uris ->
-        imageUris = (imageUris + uris).distinct()
+        val copiedUris = uris.mapNotNull { uri ->
+            copyScheduleImageToAppStorage(context, uri)
+                .onFailure { imageError = "이미지를 불러오지 못했어요. 다른 이미지를 선택해 주세요." }
+                .getOrNull()
+        }
+        if (copiedUris.isNotEmpty()) {
+            imageError = null
+            imageUris = (imageUris + copiedUris).distinct()
+        }
     }
 
     AlertDialog(
@@ -900,18 +954,40 @@ private fun AddEventDialog(
                     Spacer(Modifier.width(6.dp))
                     Text(if (imageUris.isEmpty()) "이미지 추가" else "이미지 추가 (${imageUris.size})")
                 }
+                imageError?.let { message ->
+                    Text(
+                        message,
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.SignalRed600),
+                    )
+                }
                 if (imageUris.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        imageUris.take(3).forEach { uri ->
-                            AsyncImage(
-                                model = uri,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFFEFEFEF)),
-                            )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        imageUris.forEach { uri ->
+                            Box(modifier = Modifier.size(100.dp)) {
+                                AsyncImage(
+                                    model = uri,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color(0xFFEFEFEF)),
+                                )
+                                Image(
+                                    painter = painterResource(R.drawable.customer_icon_cancel),
+                                    contentDescription = "이미지 삭제",
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .align(Alignment.TopEnd)
+                                        .clickable {
+                                            deleteLocalScheduleImage(uri)
+                                            imageUris = imageUris.filterNot { it == uri }
+                                        },
+                                )
+                            }
                         }
                     }
                 }
@@ -924,6 +1000,30 @@ private fun AddEventDialog(
                             onClick = { selectedChip = chip },
                         )
                     }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(AppColors.DeepBrown50)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "일정 알림",
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary),
+                        )
+                        Text(
+                            "오늘 일정 알림 페이지에 표시",
+                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = OnLightSub),
+                        )
+                    }
+                    Switch(
+                        checked = reminderEnabled,
+                        onCheckedChange = { reminderEnabled = it },
+                    )
                 }
             }
         },
@@ -943,7 +1043,7 @@ private fun AddEventDialog(
                     type = PopupActionType.FILL,
                     onClick = {
                         val day = dayText.toIntOrNull() ?: defaultDay
-                        if (title.isNotBlank()) onConfirm(title, time.ifBlank { "00:00" }, day, description, selectedChip, imageUris)
+                        if (title.isNotBlank()) onConfirm(title, time.ifBlank { "00:00" }, day, description, selectedChip, imageUris, reminderEnabled)
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -952,6 +1052,30 @@ private fun AddEventDialog(
         containerColor = Color.White,
         shape = RoundedCornerShape(24.dp),
     )
+}
+
+private fun copyScheduleImageToAppStorage(context: Context, sourceUri: Uri): Result<Uri> = runCatching {
+    val dir = File(context.filesDir, "manual_schedule_images").apply { mkdirs() }
+    val extension = context.contentResolver.getType(sourceUri)
+        ?.substringAfterLast("/")
+        ?.takeIf { it.length in 2..5 }
+        ?.replace("jpeg", "jpg")
+        ?: "jpg"
+    val destFile = File(dir, "schedule_${System.currentTimeMillis()}_${UUID.randomUUID()}.$extension")
+    val input = context.contentResolver.openInputStream(sourceUri)
+        ?: error("Cannot open selected image")
+    input.use { inStream ->
+        destFile.outputStream().use { outStream ->
+            inStream.copyTo(outStream)
+        }
+    }
+    Uri.fromFile(destFile)
+}
+
+private fun deleteLocalScheduleImage(uri: Uri) {
+    if (uri.scheme == "file") {
+        runCatching { File(uri.path.orEmpty()).delete() }
+    }
 }
 
 @Composable

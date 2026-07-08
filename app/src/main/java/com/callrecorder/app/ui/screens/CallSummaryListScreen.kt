@@ -79,6 +79,8 @@ private enum class AnalysisTab { PENDING, DONE }
 @Composable
 fun CallSummaryListScreen(
     onCallClick: (String) -> Unit,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     vm: HomeViewModel = viewModel(),
     approvalVm: PendingApprovalViewModel = viewModel(),
 ) {
@@ -98,6 +100,8 @@ fun CallSummaryListScreen(
             vm.refresh(silent = true)
         },
         onPendingTabVisible = { approvalVm.load() },
+        onNotificationClick = onNotificationClick,
+        hasNotification = hasNotification,
     )
 }
 
@@ -112,6 +116,8 @@ private fun CallSummaryListContent(
     onDeleteRecording: (Long) -> Unit,
     onPendingTabVisible: () -> Unit = {},
     initialTab: AnalysisTab = AnalysisTab.DONE,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     val context = LocalContext.current
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
@@ -185,177 +191,182 @@ private fun CallSummaryListContent(
     }
 
     Scaffold(containerColor = ScreenBg) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(ScreenBg)
                 .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
-            contentPadding = PaddingValues(0.dp),
         ) {
             // ═══ 헤더 (ScreenBg 위) ═══
-            item {
-                FianoListHeroHeader(
-                    title = "통화 분석 내역을 확인해보세요.",
-                    searchText = searchText,
-                    onSearchTextChange = { searchText = it },
-                )
-            }
+            FianoListHeroHeader(
+                title = "통화 분석 내역을 확인해보세요.",
+                searchText = searchText,
+                onSearchTextChange = { searchText = it },
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
 
             // ═══ 분석 대기 / 완료 탭 (시트 상단, 라운드) ═══
-            item {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
-                ) {
-                    AnalysisTabButton(
-                        text = "분석 대기",
-                        selected = tab == AnalysisTab.PENDING,
-                        modifier = Modifier.weight(1f),
-                    ) { tab = AnalysisTab.PENDING; filter = CallFilter.ALL }
-                    AnalysisTabButton(
-                        text = "분석 완료",
-                        selected = tab == AnalysisTab.DONE,
-                        modifier = Modifier.weight(1f),
-                    ) { tab = AnalysisTab.DONE; filter = CallFilter.ALL }
-                }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+            ) {
+                AnalysisTabButton(
+                    text = "분석 대기",
+                    selected = tab == AnalysisTab.PENDING,
+                    modifier = Modifier.weight(1f),
+                ) { tab = AnalysisTab.PENDING; filter = CallFilter.ALL }
+                AnalysisTabButton(
+                    text = "분석 완료",
+                    selected = tab == AnalysisTab.DONE,
+                    modifier = Modifier.weight(1f),
+                ) { tab = AnalysisTab.DONE; filter = CallFilter.ALL }
             }
 
-            // ═══ 본문 (흰 시트) ═══
-            // 필터 칩
-            if (tab == AnalysisTab.DONE) {
-                item {
-                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            FilterChip("전체 $totalCount", filter == CallFilter.ALL) { filter = CallFilter.ALL }
-                            FilterChip("예약 $resCount", filter == CallFilter.RESERVATION) { filter = CallFilter.RESERVATION }
-                            FilterChip("문의 $inqCount", filter == CallFilter.INQUIRY) { filter = CallFilter.INQUIRY }
-                            FilterChip("기타 $otherCount", filter == CallFilter.OTHER) { filter = CallFilter.OTHER }
-                        }
-                    }
-                }
-            }
-
-            if (state.loading && filtered.isEmpty() && awaitingApprovals.isEmpty()) {
-                item {
-                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AccentBlue)
-                        }
-                    }
-                }
-            } else if (filtered.isEmpty() && awaitingApprovals.isEmpty()) {
-                item {
-                    Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
-                        Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
-                            Text(
-                                if (tab == AnalysisTab.PENDING) "분석 대기 중인 통화가 없어요" else "해당하는 통화가 없어요",
-                                modifier = Modifier.padding(top = 40.dp),
-                                style = TextStyle(fontSize = 13.sp, color = PlaceholderGray),
-                            )
-                        }
-                    }
-                }
-            } else {
-                if (tab == AnalysisTab.PENDING && awaitingApprovals.isNotEmpty()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(SheetBg),
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                // ═══ 본문 (흰 시트) ═══
+                // 필터 칩
+                if (tab == AnalysisTab.DONE) {
                     item {
                         Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                "업로드 승인 대기",
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
-                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
-                            )
+                            Row(
+                                Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip("전체 $totalCount", filter == CallFilter.ALL) { filter = CallFilter.ALL }
+                                FilterChip("예약 $resCount", filter == CallFilter.RESERVATION) { filter = CallFilter.RESERVATION }
+                                FilterChip("문의 $inqCount", filter == CallFilter.INQUIRY) { filter = CallFilter.INQUIRY }
+                                FilterChip("기타 $otherCount", filter == CallFilter.OTHER) { filter = CallFilter.OTHER }
+                            }
                         }
                     }
-                    items(awaitingApprovals, key = { "approval-${it.id}" }) { recording ->
+                }
+
+                if (state.loading && filtered.isEmpty() && awaitingApprovals.isEmpty()) {
+                    item {
                         Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                            Box(
-                                Modifier
-                                    .background(SheetBg)
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                            ) {
-                                PendingApprovalCallCard(
-                                    recording = recording,
-                                    isDuplicate = recording.id in approvalState.duplicateIds,
-                                    onApprove = { onApproveRecording(recording.id) },
-                                    onDelete = { onDeleteRecording(recording.id) },
+                            Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = AccentBlue)
+                            }
+                        }
+                    }
+                } else if (filtered.isEmpty() && awaitingApprovals.isEmpty()) {
+                    item {
+                        Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
+                            Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
+                                Text(
+                                    if (tab == AnalysisTab.PENDING) "분석 대기 중인 통화가 없어요" else "해당하는 통화가 없어요",
+                                    modifier = Modifier.padding(top = 40.dp),
+                                    style = TextStyle(fontSize = 13.sp, color = PlaceholderGray),
                                 )
                             }
                         }
                     }
-                }
-                grouped.forEach { (dateLabel, calls) ->
-                    item {
-                        Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                dateLabel,
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
-                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
-                            )
-                        }
-                    }
-                    items(calls, key = { it.id }) { call ->
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { value ->
-                                if (value == SwipeToDismissBoxValue.EndToStart) {
-                                    onDeleteCall(call.id)
-                                    true
-                                } else false
+                } else {
+                    if (tab == AnalysisTab.PENDING && awaitingApprovals.isNotEmpty()) {
+                        item {
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "업로드 승인 대기",
+                                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
+                                )
                             }
-                        )
-                        Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                            SwipeToDismissBox(
-                                state = dismissState,
-                                enableDismissFromStartToEnd = false,
-                                enableDismissFromEndToStart = true,
-                                backgroundContent = {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(Color(0xFFE53E3E)),
-                                        contentAlignment = Alignment.CenterEnd,
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Delete, "삭제",
-                                            tint = Color.White,
-                                            modifier = Modifier.padding(end = 20.dp).size(24.dp),
-                                        )
-                                    }
-                                },
-                            ) {
+                        }
+                        items(awaitingApprovals, key = { "approval-${it.id}" }) { recording ->
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
                                 Box(
                                     Modifier
                                         .background(SheetBg)
                                         .padding(horizontal = 16.dp, vertical = 4.dp),
                                 ) {
-                                    if (tab == AnalysisTab.PENDING) {
-                                        PendingCallCard(
-                                            call = call,
-                                            onClick = { onCallClick(call.id) },
-                                            onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
-                                        )
-                                    } else {
-                                        CallListCard(
-                                            call = call,
-                                            onClick = { onCallClick(call.id) },
-                                            onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
-                                        )
+                                    PendingApprovalCallCard(
+                                        recording = recording,
+                                        isDuplicate = recording.id in approvalState.duplicateIds,
+                                        onApprove = { onApproveRecording(recording.id) },
+                                        onDelete = { onDeleteRecording(recording.id) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    grouped.forEach { (dateLabel, calls) ->
+                        item {
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    dateLabel,
+                                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
+                                )
+                            }
+                        }
+                        items(calls, key = { it.id }) { call ->
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value == SwipeToDismissBoxValue.EndToStart) {
+                                        onDeleteCall(call.id)
+                                        true
+                                    } else false
+                                }
+                            )
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    enableDismissFromStartToEnd = false,
+                                    enableDismissFromEndToStart = true,
+                                    backgroundContent = {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(Color(0xFFE53E3E)),
+                                            contentAlignment = Alignment.CenterEnd,
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete, "삭제",
+                                                tint = Color.White,
+                                                modifier = Modifier.padding(end = 20.dp).size(24.dp),
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .background(SheetBg)
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    ) {
+                                        if (tab == AnalysisTab.PENDING) {
+                                            PendingCallCard(
+                                                call = call,
+                                                onClick = { onCallClick(call.id) },
+                                                onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
+                                            )
+                                        } else {
+                                            CallListCard(
+                                                call = call,
+                                                onClick = { onCallClick(call.id) },
+                                                onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            item {
-                Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                    Spacer(Modifier.height(84.dp))
+                item {
+                    Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                        Spacer(Modifier.height(84.dp))
+                    }
                 }
             }
         }

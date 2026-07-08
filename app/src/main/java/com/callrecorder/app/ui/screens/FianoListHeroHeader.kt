@@ -3,6 +3,7 @@ package com.callrecorder.app.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +35,8 @@ import com.callrecorder.app.ui.theme.AppColors
 @Composable
 fun FianoTopHeader(
     modifier: Modifier = Modifier,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     Row(
         modifier
@@ -50,9 +53,16 @@ fun FianoTopHeader(
             modifier = Modifier.size(width = 77.142852.dp, height = 36.dp),
             contentScale = ContentScale.Fit,
         )
-        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .clickable { onNotificationClick() },
+            contentAlignment = Alignment.Center,
+        ) {
             Image(
-                painter = painterResource(R.drawable.call_icon_alarm),
+                painter = painterResource(
+                    if (hasNotification) R.drawable.call_icon_alarm_on else R.drawable.call_icon_alarm
+                ),
                 contentDescription = "알림",
                 modifier = Modifier.size(32.dp),
                 contentScale = ContentScale.Fit,
@@ -68,13 +78,18 @@ fun FianoListHeroHeader(
     onSearchTextChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "전화번호 또는 요약 검색",
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     Column(
         modifier
             .fillMaxWidth()
             .background(AppColors.DeepBrown900),
     ) {
-        FianoTopHeader()
+        FianoTopHeader(
+            onNotificationClick = onNotificationClick,
+            hasNotification = hasNotification,
+        )
 
         Column(
             Modifier

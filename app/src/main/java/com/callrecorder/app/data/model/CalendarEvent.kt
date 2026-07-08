@@ -18,6 +18,7 @@ data class CalendarEvent(
     @SerialName("event_url") val eventUrl: String? = null,
     @SerialName("start_at") val startAt: String? = null, // "2026-06-11 14:00:00"
     @SerialName("end_at") val endAt: String? = null,
+    val reminderEnabled: Boolean = true,
 ) {
     /** start_at 에서 "일(day)"만 추출. 파싱 실패 시 null */
     val dayOfMonth: Int?
