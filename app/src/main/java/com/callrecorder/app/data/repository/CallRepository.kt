@@ -109,8 +109,7 @@ class CallRepository(
 
         // 2) S3 PUT 업로드
         val body = file.asRequestBody(mime.toMediaTypeOrNull())
-        val headers = urlResp.uploadHeaders.toMutableMap()
-        if (!headers.containsKey("Content-Type")) headers["Content-Type"] = mime
+        val headers = urlResp.uploadHeaders.filterValues { it.isNotBlank() }
         SafeLog.i("CallRepo", "📤 S3 PUT headers: $headers")
         SafeLog.i("CallRepo", "📤 S3 PUT mime: $mime, file: ${file.name}, size: ${file.length()}")
         val s3Resp = api.uploadToS3(urlResp.uploadUrl, headers, body)
