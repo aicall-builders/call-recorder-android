@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Calendar
 
 data class CalendarUiState(
@@ -21,6 +22,11 @@ data class CalendarUiState(
     val error: String? = null,
 )
 
+private data class CalendarMonthCache(
+    val events: List<CalendarEvent>,
+    val manualEvents: List<ManualCalendarEventEntity>,
+)
+
 class CalendarViewModel : ViewModel() {
     private val container = CallRecorderApp.instance.container
     private val calendarRepo = container.calendarRepo
@@ -29,6 +35,8 @@ class CalendarViewModel : ViewModel() {
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
     private var loadedMonthKey: String? = null
     private var loadingMonthKey: String? = null
+    private val monthCache = mutableMapOf<String, CalendarMonthCache>()
+    private var hasExternalCalendarConnection: Boolean? = null
 
     init {
         // 현재 월 전체 일정 로드
@@ -41,6 +49,7 @@ class CalendarViewModel : ViewModel() {
             _state.value = _state.value.copy(loading = true, error = null)
             calendarRepo.getConnections().fold(
                 onSuccess = { connections ->
+                    hasExternalCalendarConnection = connections.isNotEmpty()
                     _state.value = _state.value.copy(loading = false, connections = connections)
                 },
                 onFailure = {
@@ -53,10 +62,26 @@ class CalendarViewModel : ViewModel() {
     /** 해당 연/월의 1일~말일 범위 일정 로드 */
     fun loadMonthEvents(year: Int, month: Int, force: Boolean = false) {
         val monthKey = "%04d-%02d".format(year, month)
+        val cached = monthCache[monthKey]
+        if (!force && cached != null) {
+            loadedMonthKey = monthKey
+            _state.value = _state.value.copy(
+                eventsLoading = false,
+                events = cached.events,
+                manualEvents = cached.manualEvents,
+                error = null,
+            )
+            return
+        }
         if (!force && (loadedMonthKey == monthKey || loadingMonthKey == monthKey)) return
         loadingMonthKey = monthKey
         viewModelScope.launch {
-            _state.value = _state.value.copy(eventsLoading = true)
+            _state.value = _state.value.copy(
+                eventsLoading = true,
+                events = emptyList(),
+                manualEvents = emptyList(),
+                error = null,
+            )
 
             try {
                 val cal = Calendar.getInstance().apply { set(year, month - 1, 1) }
@@ -65,21 +90,80 @@ class CalendarViewModel : ViewModel() {
                 val to = "%04d-%02d-%02d".format(year, month, lastDay)
 
                 val manualResult = calendarRepo.getManualEventsInRange(from = from, to = to)
-                calendarRepo.getEventsInRange(from = from, to = to, limit = 200).fold(
+                val manualEvents = manualResult.getOrDefault(emptyList())
+                _state.value = _state.value.copy(
+                    manualEvents = manualEvents,
+                    error = manualResult.exceptionOrNull()?.message,
+                )
+
+                val hasExternalConnection = hasExternalCalendarConnection ?: run {
+                    val connectionsResult = withTimeoutOrNull(2_000) {
+                        calendarRepo.getConnections()
+                    }
+                    val connections = connectionsResult?.getOrDefault(emptyList()).orEmpty()
+                    hasExternalCalendarConnection = connections.isNotEmpty()
+                    _state.value = _state.value.copy(connections = connections)
+                    connections.isNotEmpty()
+                }
+
+                if (!hasExternalConnection) {
+                    loadedMonthKey = monthKey
+                    monthCache[monthKey] = CalendarMonthCache(
+                        events = emptyList(),
+                        manualEvents = manualEvents,
+                    )
+                    _state.value = _state.value.copy(
+                        eventsLoading = false,
+                        events = emptyList(),
+                        manualEvents = manualEvents,
+                        error = manualResult.exceptionOrNull()?.message,
+                    )
+                    return@launch
+                }
+
+                val serverResult = withTimeoutOrNull(8_000) {
+                    calendarRepo.getEventsInRange(from = from, to = to, limit = 200)
+                }
+
+                if (serverResult == null) {
+                    loadedMonthKey = monthKey
+                    monthCache[monthKey] = CalendarMonthCache(
+                        events = emptyList(),
+                        manualEvents = manualEvents,
+                    )
+                    _state.value = _state.value.copy(
+                        eventsLoading = false,
+                        events = emptyList(),
+                        manualEvents = manualEvents,
+                        error = "외부 캘린더 응답이 지연되고 있어요.",
+                    )
+                    return@launch
+                }
+
+                serverResult.fold(
                     onSuccess = { events ->
                         loadedMonthKey = monthKey
+                        monthCache[monthKey] = CalendarMonthCache(
+                            events = events,
+                            manualEvents = manualEvents,
+                        )
                         _state.value = _state.value.copy(
                             eventsLoading = false,
                             events = events,
-                            manualEvents = manualResult.getOrDefault(emptyList()),
+                            manualEvents = manualEvents,
                             error = manualResult.exceptionOrNull()?.message,
                         )
                     },
                     onFailure = {
                         loadedMonthKey = monthKey
+                        monthCache[monthKey] = CalendarMonthCache(
+                            events = emptyList(),
+                            manualEvents = manualEvents,
+                        )
                         _state.value = _state.value.copy(
                             eventsLoading = false,
-                            manualEvents = manualResult.getOrDefault(emptyList()),
+                            events = emptyList(),
+                            manualEvents = manualEvents,
                             error = it.message,
                         )
                     }
@@ -139,7 +223,12 @@ class CalendarViewModel : ViewModel() {
     fun completeOAuth(provider: String, code: String, redirectUri: String, state: String) {
         viewModelScope.launch {
             calendarRepo.completeOAuth(provider, code, redirectUri, state).fold(
-                onSuccess = { loadConnections() },
+                onSuccess = {
+                    hasExternalCalendarConnection = true
+                    monthCache.clear()
+                    loadedMonthKey = null
+                    loadConnections()
+                },
                 onFailure = { _state.value = _state.value.copy(error = it.message) }
             )
         }
@@ -148,7 +237,12 @@ class CalendarViewModel : ViewModel() {
     fun disconnect(provider: String) {
         viewModelScope.launch {
             calendarRepo.disconnect(provider).fold(
-                onSuccess = { loadConnections() },
+                onSuccess = {
+                    hasExternalCalendarConnection = null
+                    monthCache.clear()
+                    loadedMonthKey = null
+                    loadConnections()
+                },
                 onFailure = { _state.value = _state.value.copy(error = it.message) }
             )
         }

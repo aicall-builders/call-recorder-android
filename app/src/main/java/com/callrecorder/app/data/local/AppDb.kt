@@ -161,12 +161,12 @@ interface RecordingDao {
     @Query("SELECT COUNT(*) FROM recordings WHERE status = :status")
     suspend fun countByStatus(status: String): Int
 
-    /** 진행 중(대기/업로드/서버분석) 개수 실시간 관찰 — 홈 진행 칩용 */
-    @Query("SELECT COUNT(*) FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING')")
+    /** 진행 중/실패 목록 개수 실시간 관찰 — 홈 진행 칩용 */
+    @Query("SELECT COUNT(*) FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING','FAILED')")
     fun observeActiveUploadCount(): Flow<Int>
 
-    /** 진행 중 목록 실시간 관찰 — 홈 진행 시트용 */
-    @Query("SELECT * FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING') ORDER BY createdAt ASC")
+    /** 진행 중/실패 목록 실시간 관찰 — 분석 대기 UI용 */
+    @Query("SELECT * FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING','FAILED') ORDER BY createdAt ASC")
     fun observeActiveUploads(): Flow<List<RecordingEntity>>
 
     /** 서버 처리 중(업로드 완료~분석)인 로컬 녹음 — 완료 동기화용 */
@@ -191,14 +191,22 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE status = 'AWAITING_APPROVAL' ORDER BY createdAt DESC")
     suspend fun getAwaitingApproval(): List<RecordingEntity>
 
-    @Query("SELECT COUNT(*) FROM recordings WHERE fileName = :fileName AND fileSize = :fileSize")
-    suspend fun countByFileNameAndSize(fileName: String, fileSize: Long): Int
+    @Query("""
+        SELECT COUNT(*) FROM recordings
+        WHERE fileName = :fileName
+          AND fileSize = :fileSize
+          AND status NOT IN ('CANCELED', 'FAILED')
+    """)
+    suspend fun countActiveByFileNameAndSize(fileName: String, fileSize: Long): Int
 
     @Query("UPDATE recordings SET status = 'PENDING', updatedAt = :now WHERE id = :id")
     suspend fun approveOne(id: Long, now: Long = System.currentTimeMillis())
 
     @Query("DELETE FROM recordings WHERE id = :id")
     suspend fun deleteOne(id: Long)
+
+    @Query("DELETE FROM recordings WHERE serverCallId = :callId")
+    suspend fun deleteByServerCallId(callId: String)
 }
 
 @Dao

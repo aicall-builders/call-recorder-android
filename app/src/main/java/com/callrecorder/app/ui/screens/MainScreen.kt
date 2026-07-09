@@ -88,6 +88,7 @@ fun MainScreen(
     var approvalRefreshKey by remember { mutableStateOf(0) }
     var showExternalCalendarSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
+    var openCallsOnPendingTab by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -222,7 +223,15 @@ fun MainScreen(
                                 showApproval = true
                             },
                             onUploadClick = { uploadLauncher.launch("audio/*") },
-                            onSeeAllCalls = { selected = BottomTab.CALLS },
+                            onUploadingClick = {
+                                callDetailId = null
+                                openCallsOnPendingTab = true
+                                selected = BottomTab.CALLS
+                            },
+                            onSeeAllCalls = {
+                                openCallsOnPendingTab = false
+                                selected = BottomTab.CALLS
+                            },
                             onSeeAllSchedules = { selected = BottomTab.CALENDAR },
                             onSeeAllCustomers = { selected = BottomTab.CUSTOMERS },
                             onNotificationClick = { showNotifications = true },
@@ -240,6 +249,8 @@ fun MainScreen(
                                     onCallClick = { callId -> callDetailId = callId },
                                     onNotificationClick = { showNotifications = true },
                                     hasNotification = hasNotification,
+                                    startOnPendingTab = openCallsOnPendingTab,
+                                    vm = homeVm,
                                 )
                             }
                         }
@@ -277,6 +288,7 @@ fun MainScreen(
                 selected = selected,
                 onSelect = { tab ->
                     noteEditCallId = null
+                    if (tab == BottomTab.CALLS) openCallsOnPendingTab = false
                     selected = tab
                     if (tab != BottomTab.CALLS) callDetailId = null
                 },

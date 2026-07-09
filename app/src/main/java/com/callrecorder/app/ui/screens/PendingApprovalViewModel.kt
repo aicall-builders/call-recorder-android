@@ -29,7 +29,7 @@ class PendingApprovalViewModel : ViewModel() {
             _state.value = _state.value.copy(loading = true)
             val recordings = recordingDao.getAwaitingApproval()
             val duplicateIds = recordings
-                .filter { recordingDao.countByFileNameAndSize(it.fileName, it.fileSize) > 1 }
+                .filter { recordingDao.countActiveByFileNameAndSize(it.fileName, it.fileSize) > 1 }
                 .map { it.id }
                 .toSet()
             _state.value = PendingApprovalUiState(

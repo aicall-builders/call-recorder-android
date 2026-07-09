@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 
 object PhotoUtils {
 
@@ -34,6 +35,22 @@ object PhotoUtils {
             rotated.compress(Bitmap.CompressFormat.JPEG, quality, out)
             rotated.recycle()
             out.toByteArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun copyUriToCustomerImageFile(context: Context, uri: Uri, fileName: String): String? {
+        return try {
+            val dir = File(context.filesDir, "customer_images").apply { mkdirs() }
+            val safeName = fileName.ifBlank { "customer_${System.currentTimeMillis()}.jpg" }
+            val file = File(dir, safeName)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(file).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            file.toURI().toString()
         } catch (e: Exception) {
             null
         }

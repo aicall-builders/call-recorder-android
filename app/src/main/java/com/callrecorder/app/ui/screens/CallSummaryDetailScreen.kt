@@ -2,6 +2,7 @@ package com.callrecorder.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -101,12 +102,15 @@ fun CallSummaryDetailScreen(
                     audioUrl = state.audioUrl,
                     calendarLoading = state.calendarLoading,
                     calendarMessage = state.calendarMessage,
+                    summarySaving = state.summarySaving,
+                    summaryMessage = state.summaryMessage,
                     connectedCalendars = state.connectedCalendars,
                     showCalendarPicker = state.showCalendarPicker,
                     transcript = state.detail!!.transcript,
                     onBack = onBack,
-                    onToggleCalendarPicker = { vm.toggleCalendarPicker() },
+                    onToggleCalendarPicker = { vm.toggleCalendarPicker(callId) },
                     onAddToCalendar = { provider -> vm.addToCalendar(callId, provider) },
+                    onSummarySave = { summary -> vm.updateSummary(callId, summary) },
                 )
             }
         }
@@ -119,12 +123,15 @@ private fun DetailBody(
     audioUrl: String?,
     calendarLoading: Boolean,
     calendarMessage: String?,
+    summarySaving: Boolean,
+    summaryMessage: String?,
     connectedCalendars: List<String>,
     showCalendarPicker: Boolean,
     transcript: String?,
     onBack: () -> Unit,
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
+    onSummarySave: (String) -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
@@ -163,9 +170,12 @@ private fun DetailBody(
                     connectedCalendars = connectedCalendars,
                     calendarLoading = calendarLoading,
                     calendarMessage = calendarMessage,
+                    summarySaving = summarySaving,
+                    summaryMessage = summaryMessage,
                     showCalendarPicker = showCalendarPicker,
                     onToggleCalendarPicker = onToggleCalendarPicker,
                     onAddToCalendar = onAddToCalendar,
+                    onSummarySave = onSummarySave,
                 )
                 DetailTab.TRANSCRIPT -> TranscriptTabContent(messages = messages, fullText = transcriptText)
             }
@@ -425,10 +435,16 @@ private fun AnalysisTabContent(
     connectedCalendars: List<String>,
     calendarLoading: Boolean,
     calendarMessage: String?,
+    summarySaving: Boolean,
+    summaryMessage: String?,
     showCalendarPicker: Boolean,
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
+    onSummarySave: (String) -> Unit,
 ) {
+    var editingSummary by remember(call.id, call.summary) { mutableStateOf(false) }
+    var summaryDraft by remember(call.id, call.summary) { mutableStateOf(call.summary.orEmpty()) }
+
     // internal_keywords → 라벨/값 줄
     val keywordRows: List<Pair<String, String>> = remember(call.internalKeywordsRaw) {
         val raw = call.internalKeywordsString()
@@ -456,8 +472,24 @@ private fun AnalysisTabContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("✦ AI 요약", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
-                ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
-                    onToggleCalendarPicker()
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (!call.summary.isNullOrBlank() && !editingSummary) {
+                        TextButton(
+                            onClick = {
+                                summaryDraft = call.summary.orEmpty()
+                                editingSummary = true
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(
+                                "수정",
+                                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink),
+                            )
+                        }
+                    }
+                    ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
+                        onToggleCalendarPicker()
+                    }
                 }
             }
 
@@ -511,8 +543,64 @@ private fun AnalysisTabContent(
                 }
             }
 
-            // 요약문
-            if (!call.summary.isNullOrBlank()) {
+            summaryMessage?.let {
+                Text(
+                    it,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    style = TextStyle(fontSize = 11.sp, color = LabelGrayActive),
+                )
+            }
+
+            if (editingSummary) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
+                ) {
+                    OutlinedTextField(
+                        value = summaryDraft,
+                        onValueChange = { summaryDraft = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 132.dp),
+                        textStyle = TextStyle(fontSize = 14.sp, color = Ink, lineHeight = 21.sp),
+                        placeholder = {
+                            Text("요약 내용을 입력해 주세요.", style = TextStyle(fontSize = 14.sp, color = LabelGray))
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Ink,
+                            unfocusedTextColor = Ink,
+                            focusedBorderColor = Ink,
+                            unfocusedBorderColor = AppColors.DeepBrown200,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            cursorColor = Ink,
+                        ),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        SummaryEditButton(
+                            label = "취소",
+                            filled = false,
+                            enabled = !summarySaving,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            summaryDraft = call.summary.orEmpty()
+                            editingSummary = false
+                        }
+                        SummaryEditButton(
+                            label = if (summarySaving) "저장 중" else "저장",
+                            filled = true,
+                            enabled = !summarySaving,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            onSummarySave(summaryDraft)
+                        }
+                    }
+                }
+            } else if (!call.summary.isNullOrBlank()) {
                 Text(
                     call.summary!!,
                     modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
@@ -543,6 +631,36 @@ private fun ActionCircle(
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
         } else {
             Image(painter = painterResource(iconRes), contentDescription = null, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SummaryEditButton(
+    label: String,
+    filled: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        color = if (filled) Ink else Color.Transparent,
+        shape = RoundedCornerShape(999.dp),
+        border = if (filled) null else BorderStroke(1.dp, Ink),
+        modifier = modifier.height(44.dp),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (filled) Color.White else Ink,
+                ),
+            )
         }
     }
 }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 통화 상세 화면(시안 7)용 ViewModel.
@@ -27,6 +28,8 @@ data class CallSummaryDetailUiState(
     val calendarLoading: Boolean = false,
     val connectedCalendars: List<String> = emptyList(),
     val showCalendarPicker: Boolean = false,
+    val summarySaving: Boolean = false,
+    val summaryMessage: String? = null,
 )
 
 class CallSummaryDetailViewModel : ViewModel() {
@@ -61,14 +64,44 @@ class CallSummaryDetailViewModel : ViewModel() {
             )
         }
     }
+
+    fun updateSummary(callId: String, summary: String) {
+        val trimmed = summary.trim()
+        if (trimmed.isBlank()) {
+            _state.value = _state.value.copy(summaryMessage = "요약 내용을 입력해 주세요.")
+            return
+        }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(summarySaving = true, summaryMessage = null)
+            callRepo.updateSummary(callId, trimmed).fold(
+                onSuccess = {
+                    val current = _state.value.detail
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약을 저장했어요.",
+                        detail = current?.copy(call = current.call.copy(summary = trimmed)),
+                    )
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약 저장에 실패했어요. ${it.message.orEmpty()}".trim(),
+                    )
+                },
+            )
+        }
+    }
+
     fun addToCalendar(callId: String, provider: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
             runCatching {
-                CallRecorderApp.instance.container.api.addCalendarEvent(
-                    callId,
-                    mapOf("provider" to provider)
-                )
+                withTimeoutOrNull(12_000) {
+                    CallRecorderApp.instance.container.api.addCalendarEvent(
+                        callId,
+                        mapOf("provider" to provider)
+                    )
+                } ?: error("캘린더 등록 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.")
             }
                 .fold(
                 onSuccess = { resp ->
@@ -87,33 +120,72 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
     }
 
-    private fun loadCalendars(openAfterLoad: Boolean = false) {
+    private fun loadCalendars(callId: String? = null, openAfterLoad: Boolean = false) {
         if (_state.value.calendarLoading) return
         viewModelScope.launch {
-            _state.value = _state.value.copy(calendarLoading = true)
-            CallRecorderApp.instance.container.calendarRepo.getConnections().fold(
+            _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null)
+            val result = withTimeoutOrNull(12_000) {
+                CallRecorderApp.instance.container.calendarRepo.getConnections()
+            }
+            if (result == null) {
+                _state.value = _state.value.copy(
+                    calendarLoading = false,
+                    showCalendarPicker = false,
+                    calendarMessage = "캘린더 연결 조회가 지연되고 있어요. 잠시 후 다시 시도해 주세요.",
+                )
+                return@launch
+            }
+            result.fold(
                 onSuccess = { connections ->
+                    val providers = connections.map { it.provider }.filter { it.isNotBlank() }
+                    if (providers.isEmpty()) {
+                        _state.value = _state.value.copy(
+                            calendarLoading = false,
+                            connectedCalendars = emptyList(),
+                            showCalendarPicker = false,
+                            calendarMessage = "설정에서 외부 캘린더를 먼저 연동해 주세요.",
+                        )
+                        return@fold
+                    }
+                    if (callId != null && providers.size == 1) {
+                        _state.value = _state.value.copy(
+                            calendarLoading = false,
+                            connectedCalendars = providers,
+                            showCalendarPicker = false,
+                        )
+                        addToCalendar(callId, providers.first())
+                        return@fold
+                    }
                     _state.value = _state.value.copy(
                         calendarLoading = false,
-                        connectedCalendars = connections.map { it.provider },
+                        connectedCalendars = providers,
                         showCalendarPicker = openAfterLoad,
                     )
                 },
                 onFailure = {
-                    _state.value = _state.value.copy(calendarLoading = false)
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        showCalendarPicker = false,
+                        calendarMessage = "캘린더 연결 정보를 불러오지 못했어요.",
+                    )
                 }
             )
         }
     }
 
-    fun toggleCalendarPicker() {
+    fun toggleCalendarPicker(callId: String) {
         val nextOpen = !_state.value.showCalendarPicker
         if (nextOpen && _state.value.connectedCalendars.isEmpty()) {
-            loadCalendars(openAfterLoad = true)
+            loadCalendars(callId = callId, openAfterLoad = true)
+            return
+        }
+        if (nextOpen && _state.value.connectedCalendars.size == 1) {
+            addToCalendar(callId, _state.value.connectedCalendars.first())
             return
         }
         _state.value = _state.value.copy(
-            showCalendarPicker = nextOpen
+            showCalendarPicker = nextOpen,
+            calendarMessage = null,
         )
     }
 

@@ -982,17 +982,25 @@ private fun AddEventDialog(
                                         .clip(RoundedCornerShape(16.dp))
                                         .background(Color(0xFFEFEFEF)),
                                 )
-                                Image(
-                                    painter = painterResource(R.drawable.customer_icon_cancel),
-                                    contentDescription = "이미지 삭제",
+                                Box(
                                     modifier = Modifier
-                                        .size(22.dp)
                                         .align(Alignment.TopEnd)
+                                        .padding(6.dp)
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.5f))
                                         .clickable {
                                             deleteLocalScheduleImage(uri)
                                             imageUris = imageUris.filterNot { it == uri }
                                         },
-                                )
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.customer_icon_cancel),
+                                        contentDescription = "이미지 삭제",
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }

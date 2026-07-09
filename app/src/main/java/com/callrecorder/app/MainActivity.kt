@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -87,8 +89,18 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val nav = rememberNavController()
     val auth: AuthViewModel = viewModel()
-    val token by auth.isLoggedIn.collectAsState(initial = null)
+    val token by auth.isLoggedIn.collectAsState(initial = AuthTokenState.Checking)
     val state by auth.state.collectAsState()
+
+    if (token == AuthTokenState.Checking) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     // 콜드 스타트: 로그인 안 됐으면 INTRO, 로그인됐으면 권한 게이트(PERMISSION) → 자동 통과 시 바로 메인
     val start = if (token.isNullOrBlank()) Routes.INTRO else Routes.PERMISSION
@@ -163,6 +175,10 @@ private fun AppRoot() {
             )
         }
     }
+}
+
+private object AuthTokenState {
+    const val Checking = "__checking__"
 }
 
 /**

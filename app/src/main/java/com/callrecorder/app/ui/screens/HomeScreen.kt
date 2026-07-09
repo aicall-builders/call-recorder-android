@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -85,13 +89,13 @@ fun HomeScreen(
     onSeeAllCalls: () -> Unit = {},
     onSeeAllSchedules: () -> Unit = {},
     onSeeAllCustomers: () -> Unit = {},
+    onUploadingClick: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     tourController: FeatureTourController,
     vm: HomeViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
-    var showUploadSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.syncSettingsFromPrefs()
@@ -102,37 +106,56 @@ fun HomeScreen(
             .fillMaxSize()
             .background(ScreenBg),
     ) {
-        // ── 히어로 (그레이) ──
-        Hero(
-            pendingCount = state.pendingApprovalCount,
-            autoSummaryOn = state.autoSummaryEnabled,
-            importantFilterOn = state.importantFilterEnabled,
-            uploadingCount = state.uploadingCount,
-            onAutoSummaryChange = { vm.setAutoSummary(it) },
-            onImportantFilterChange = { vm.setImportantFilter(it) },
-            onApprovalClick = onApprovalClick,
-            onUploadClick = onUploadClick,
-            onRefresh = { vm.refresh() },
-            onUploadingClick = { showUploadSheet = true },
+        FianoTopHeader(
             onNotificationClick = onNotificationClick,
             hasNotification = hasNotification,
-            tourController = tourController,
         )
 
-        // ── 흰색 컨텐츠 (그레이 위로 라운드) ──
-        Column(
+        BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(ContentBg)
-                .verticalScroll(rememberScrollState()),
+                .weight(1f),
         ) {
+            val density = LocalDensity.current
+            var heroHeight by remember { mutableStateOf(0.dp) }
+            val sheetMinHeight = if (maxHeight > heroHeight) maxHeight - heroHeight else 0.dp
+
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                // ── 히어로 (그레이) ──
+                Hero(
+                    pendingCount = state.pendingApprovalCount,
+                    autoSummaryOn = state.autoSummaryEnabled,
+                    importantFilterOn = state.importantFilterEnabled,
+                    uploadingCount = state.uploadingCount,
+                    onAutoSummaryChange = { vm.setAutoSummary(it) },
+                    onImportantFilterChange = { vm.setImportantFilter(it) },
+                    onApprovalClick = onApprovalClick,
+                    onUploadClick = onUploadClick,
+                    onRefresh = { vm.refresh() },
+                    onUploadingClick = onUploadingClick,
+                    tourController = tourController,
+                    modifier = Modifier.onGloballyPositioned {
+                        heroHeight = with(density) { it.size.height.toDp() }
+                    },
+                )
+
+                // ── 흰색 컨텐츠 (그레이 위로 라운드) ──
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = sheetMinHeight)
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .background(ContentBg),
+                ) {
             // 최근 분석 통화
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
                     .tourTarget(tourController, TourKeys.RECENT_CALLS),
             ) {
                 SectionHeader("최근 분석 통화", onSeeAll = onSeeAllCalls)
@@ -154,21 +177,23 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(SectionAltBg)
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp),
             ) {
                 SectionHeader("주요 관리 고객", onSeeAll = onSeeAllCustomers)
-                val pinnedCustomers = state.pinnedCustomers
+                val pinnedCustomers = state.pinnedCustomers.take(20)
                 if (pinnedCustomers.isEmpty()) {
                     EmptyBox("관리 중인 고객이 없어요")
                 } else {
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, bottom = 16.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        pinnedCustomers.forEach { c ->
-                            PinnedCustomerCard(c, Modifier.weight(1f), onClick = onSeeAllCustomers)
+                        items(pinnedCustomers, key = { it.phone }) { customer ->
+                            PinnedCustomerCard(customer, Modifier.width(96.dp), onClick = onSeeAllCustomers)
                         }
-                        repeat(3 - pinnedCustomers.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
@@ -184,13 +209,13 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                         .background(ContentBg)
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp),
                 ) {
                     SectionHeader("다가오는 일정", onSeeAll = onSeeAllSchedules, emphasis = true)
                     if (state.schedules.isEmpty()) {
                         EmptyBox("예정된 일정이 없어요")
                     } else {
-                        Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                        Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp)) {
                             state.schedules.forEachIndexed { idx, ev ->
                                 ScheduleTimelineItem(ev, isFirst = idx == 0, isLast = idx == state.schedules.lastIndex)
                             }
@@ -199,16 +224,9 @@ fun HomeScreen(
                     Spacer(Modifier.height(64.dp))
                 }
             }
+            }
         }
-    }
-
-    if (showUploadSheet) {
-        UploadSheet(
-            items = state.activeUploads,
-            onDismiss = { showUploadSheet = false },
-            onDelete = { id -> vm.deleteUpload(id) },
-            onDeleteAll = { vm.deleteAllUploads() },
-        )
+        }
     }
 }
 
@@ -224,17 +242,11 @@ private fun Hero(
     onUploadClick: () -> Unit,
     onRefresh: () -> Unit,
     onUploadingClick: () -> Unit,
-    onNotificationClick: () -> Unit,
-    hasNotification: Boolean,
     tourController: FeatureTourController,
+    modifier: Modifier = Modifier,
 ) {
     val today = remember { todayFullDateLabel() }
-    Column(Modifier.fillMaxWidth()) {
-        FianoTopHeader(
-            onNotificationClick = onNotificationClick,
-            hasNotification = hasNotification,
-        )
-
+    Column(modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)) {
             Text(today, style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = OnDark))
             Spacer(Modifier.height(16.dp))

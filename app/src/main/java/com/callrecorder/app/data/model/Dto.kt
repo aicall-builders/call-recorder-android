@@ -119,8 +119,9 @@ data class Call(
 /** 발신자 정보 수정 요청 (PATCH /calls/{id}) */
 @Serializable
 data class UpdateCallRequest(
-    @SerialName("caller_number") val callerNumber: String,
-    @SerialName("caller_name") val callerName: String,
+    @SerialName("caller_number") val callerNumber: String? = null,
+    @SerialName("caller_name") val callerName: String? = null,
+    val summary: String? = null,
 )
 
 /** 통화 상태 상수 (백엔드 소문자 응답에 맞춤)
@@ -387,6 +388,7 @@ data class CustomerProfileResponse(
 /** PATCH /customers/{phone} 요청 */
 @Serializable
 data class UpdateCustomerRequest(
+    val name: String? = null,
     val email: String? = null,
     val tendency: String? = null,
     val medical: String? = null,

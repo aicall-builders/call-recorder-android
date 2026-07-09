@@ -11,17 +11,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +75,7 @@ fun CallSummaryListScreen(
     onCallClick: (String) -> Unit,
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
+    startOnPendingTab: Boolean = false,
     vm: HomeViewModel = viewModel(),
     approvalVm: PendingApprovalViewModel = viewModel(),
 ) {
@@ -100,6 +95,8 @@ fun CallSummaryListScreen(
             vm.refresh(silent = true)
         },
         onPendingTabVisible = { approvalVm.load() },
+        initialTab = if (startOnPendingTab) AnalysisTab.PENDING else AnalysisTab.DONE,
+        startOnPendingTab = startOnPendingTab,
         onNotificationClick = onNotificationClick,
         hasNotification = hasNotification,
     )
@@ -116,6 +113,7 @@ private fun CallSummaryListContent(
     onDeleteRecording: (Long) -> Unit,
     onPendingTabVisible: () -> Unit = {},
     initialTab: AnalysisTab = AnalysisTab.DONE,
+    startOnPendingTab: Boolean = false,
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
 ) {
@@ -123,6 +121,13 @@ private fun CallSummaryListContent(
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CallFilter.ALL) }
     var tab by remember { mutableStateOf(initialTab) }
+
+    LaunchedEffect(startOnPendingTab) {
+        if (startOnPendingTab) {
+            tab = AnalysisTab.PENDING
+            filter = CallFilter.ALL
+        }
+    }
 
     val uniqueCalls = remember(state.recentCalls) { state.recentCalls.distinctBy { it.id } }
 
@@ -173,8 +178,18 @@ private fun CallSummaryListContent(
             }
         }
     }
+    val activeUploads = remember(state.activeUploads, searchText.text, tab) {
+        if (tab != AnalysisTab.PENDING) {
+            emptyList()
+        } else {
+            val q = searchText.text.trim()
+            state.activeUploads.filter { upload ->
+                q.isBlank() || upload.name.contains(q, ignoreCase = true) || upload.phase.contains(q, ignoreCase = true)
+            }
+        }
+    }
     // 카운트 (현재 탭 기준)
-    val totalCount = tabCalls.size + if (tab == AnalysisTab.PENDING) awaitingApprovals.size else 0
+    val totalCount = tabCalls.size + if (tab == AnalysisTab.PENDING) awaitingApprovals.size + activeUploads.size else 0
     val resCount = tabCalls.count { it.category == CallCategoryLabel.RESERVATION }
     val inqCount = tabCalls.count { it.category == CallCategoryLabel.INQUIRY }
     val otherCount = tabCalls.count {
@@ -249,7 +264,7 @@ private fun CallSummaryListContent(
                     }
                 }
 
-                if (state.loading && filtered.isEmpty() && awaitingApprovals.isEmpty()) {
+                if (state.loading && filtered.isEmpty() && awaitingApprovals.isEmpty() && activeUploads.isEmpty()) {
                     item {
                         Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
                             Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
@@ -257,7 +272,7 @@ private fun CallSummaryListContent(
                             }
                         }
                     }
-                } else if (filtered.isEmpty() && awaitingApprovals.isEmpty()) {
+                } else if (filtered.isEmpty() && awaitingApprovals.isEmpty() && activeUploads.isEmpty()) {
                     item {
                         Surface(color = SheetBg, modifier = Modifier.fillParentMaxHeight().fillMaxWidth()) {
                             Box(Modifier.fillMaxSize().padding(40.dp), contentAlignment = Alignment.TopCenter) {
@@ -297,6 +312,28 @@ private fun CallSummaryListContent(
                             }
                         }
                     }
+                    if (tab == AnalysisTab.PENDING && activeUploads.isNotEmpty()) {
+                        item {
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "업로드·분석 중",
+                                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
+                                )
+                            }
+                        }
+                        items(activeUploads, key = { "active-upload-${it.id}" }) { upload ->
+                            Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
+                                Box(
+                                    Modifier
+                                        .background(SheetBg)
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                ) {
+                                    ActiveUploadCallCard(upload = upload)
+                                }
+                            }
+                        }
+                    }
                     grouped.forEach { (dateLabel, calls) ->
                         item {
                             Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
@@ -308,40 +345,17 @@ private fun CallSummaryListContent(
                             }
                         }
                         items(calls, key = { it.id }) { call ->
-                            val dismissState = rememberSwipeToDismissBoxState(
-                                confirmValueChange = { value ->
-                                    if (value == SwipeToDismissBoxValue.EndToStart) {
-                                        onDeleteCall(call.id)
-                                        true
-                                    } else false
-                                }
-                            )
                             Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                                SwipeToDismissBox(
-                                    state = dismissState,
-                                    enableDismissFromStartToEnd = false,
-                                    enableDismissFromEndToStart = true,
-                                    backgroundContent = {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                                .clip(RoundedCornerShape(14.dp))
-                                                .background(Color(0xFFE53E3E)),
-                                            contentAlignment = Alignment.CenterEnd,
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.Delete, "삭제",
-                                                tint = Color.White,
-                                                modifier = Modifier.padding(end = 20.dp).size(24.dp),
-                                            )
-                                        }
-                                    },
+                                SwipeRevealDeleteBox(
+                                    onDelete = { onDeleteCall(call.id) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
                                 ) {
                                     Box(
                                         Modifier
                                             .background(SheetBg)
-                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            .fillMaxWidth(),
                                     ) {
                                         if (tab == AnalysisTab.PENDING) {
                                             PendingCallCard(
@@ -629,6 +643,56 @@ private fun PendingApprovalActionButton(
     }
 }
 
+@Composable
+private fun ActiveUploadCallCard(upload: UploadItem) {
+    Surface(
+        color = SheetBg,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Image(
+                    painter = painterResource(id = R.drawable.icon_call_up),
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                )
+
+                Column(Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            upload.name,
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
+                            maxLines = 1,
+                        )
+                        PhaseBadge(upload.phase.toPendingPhase())
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (upload.phase != "실패") {
+                            CircularProgressIndicator(
+                                color = AccentBlue,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        Text(
+                            when (upload.phase) {
+                                "대기중" -> "업로드를 준비하고 있어요."
+                                "업로드중" -> "파일을 업로드하고 있어요."
+                                "실패" -> "업로드에 실패했어요. 네트워크 연결 후 다시 시도됩니다."
+                                else -> "분석이 끝나면 알려드릴게요."
+                            },
+                            style = TextStyle(fontSize = 13.sp, color = if (upload.phase == "실패") AppColors.SignalRed500 else LabelGray),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 /* ── 분석 대기 카드 ── */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -719,6 +783,15 @@ private fun PhaseBadge(phase: PendingPhase) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = phase.fg),
         )
+    }
+}
+
+private fun String.toPendingPhase(): PendingPhase {
+    return when (this) {
+        "대기중" -> PendingPhase("대기중", Color(0xFFE8EBF3), SubInk, showProgress = true)
+        "업로드중" -> PendingPhase("업로드중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
+        "실패" -> PendingPhase("실패", Color(0xFFFBE3E3), AppColors.SignalRed500, showProgress = false, isError = true)
+        else -> PendingPhase("분석중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
     }
 }
 

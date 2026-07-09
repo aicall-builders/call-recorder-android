@@ -23,6 +23,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import org.json.JSONArray
 
 data class UploadItem(
     val id: Long,
@@ -54,6 +55,8 @@ class HomeViewModel : ViewModel() {
     private val recordingDao = container.recordingDao
     private val calendarRepo = container.calendarRepo
     private val api = container.api
+    private val manualCustomerPrefs = CallRecorderApp.instance
+        .getSharedPreferences("manual_customers", android.content.Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -66,6 +69,7 @@ class HomeViewModel : ViewModel() {
     private var _allCalls: List<Call> = emptyList()
     private var pollJob: Job? = null
     private val retriedUploadedProcessIds = mutableSetOf<String>()
+    private var hasExternalCalendarConnection: Boolean? = null
 
     init {
         syncSettingsFromPrefs()
@@ -84,6 +88,7 @@ class HomeViewModel : ViewModel() {
                         phase = when (it.status) {
                             RecordingStatus.PENDING -> "대기중"
                             RecordingStatus.UPLOADING -> "업로드중"
+                            RecordingStatus.FAILED -> "실패"
                             else -> "분석중"   // UPLOADED / PROCESSING
                         },
                     )
@@ -190,47 +195,69 @@ class HomeViewModel : ViewModel() {
 
     fun refresh(silent: Boolean = false) {
         viewModelScope.launch {
-            if (!silent) _state.value = _state.value.copy(loading = true, error = null)
+            if (!silent) _state.value = _state.value.copy(loading = false, error = null)
             val storeId = storeRepo.activeStoreId()
 
             val callsDeferred = async {
                 runCatching {
-                    withTimeout(20_000L) {
+                    withTimeout(10_000L) {
                         callRepo.listCalls(storeId).getOrThrow()
                     }
                 }
             }
-            val schedulesDeferred = async {
-                runCatching {
+            viewModelScope.launch {
+                val schedulesResult = runCatching {
                     val from = todayDateString()
                     val to = dateStringAfter(days = 30)
                     val manualEvents = calendarRepo
                         .getManualEventsInRange(from = from, to = to)
                         .getOrDefault(emptyList())
                         .map { it.toHomeCalendarEvent() }
-                    val serverEvents = runCatching {
-                        withTimeout(6_000L) {
-                            calendarRepo
-                            .getEventsInRange(from = from, to = to, limit = 100)
-                            .getOrDefault(emptyList())
-                        }
-                    }.getOrDefault(emptyList())
+                    val hasExternalConnection = hasExternalCalendarConnection ?: run {
+                        val connections = runCatching {
+                            withTimeout(2_000L) {
+                                calendarRepo.getConnections().getOrDefault(emptyList())
+                            }
+                        }.getOrDefault(emptyList())
+                        hasExternalCalendarConnection = connections.isNotEmpty()
+                        connections.isNotEmpty()
+                    }
+                    val serverEvents = if (hasExternalConnection) {
+                        runCatching {
+                            withTimeout(6_000L) {
+                                calendarRepo
+                                .getEventsInRange(from = from, to = to, limit = 100)
+                                .getOrDefault(emptyList())
+                            }
+                        }.getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
 
                     (serverEvents + manualEvents)
+                        .filter { it.isUpcoming() }
                         .sortedWith(compareBy<CalendarEvent> { it.startAt.orEmpty() }.thenBy { it.time })
                 }
+                _state.value = _state.value.copy(
+                    schedules = schedulesResult.getOrDefault(emptyList()),
+                )
             }
-            val customersDeferred = async {
-                runCatching {
-                    withTimeout(8_000L) {
+            viewModelScope.launch {
+                val customersResult = runCatching {
+                    withTimeout(2_000L) {
                         api.listCustomers().customers
                     }
                 }
+                val serverCustomers = customersResult.getOrDefault(emptyList())
+                _state.value = _state.value.copy(
+                    pinnedCustomers = mergeManualPinnedCustomers(serverCustomers)
+                        .filter { it.isPinned }
+                        .sortedWith(compareByDescending<CustomerListItem> { it.callCount }.thenByDescending { it.lastCallAt ?: "" })
+                        .take(3),
+                )
             }
 
             val callsResult = callsDeferred.await()
-            val schedulesResult = schedulesDeferred.await()
-            val customersResult = customersDeferred.await()
 
             callsResult.fold(
                 onSuccess = { allCalls ->
@@ -266,11 +293,6 @@ class HomeViewModel : ViewModel() {
                             CallRecorderApp.instance.notifyAnalysisDone(doneCount)
                         }
                     }
-                    // 안전장치: 매칭 실패/서버 지연으로 2분 넘게 분석중인 건은 강제로 칩에서 내림
-                    recordingDao.markStaleProcessingDone(
-                        System.currentTimeMillis() - 2 * 60 * 1000L
-                    )
-
                     val categories = getImportantCategories()
                     val filtered = if (_state.value.importantFilterEnabled) {
                         calls.filter { it.category in categories }
@@ -283,12 +305,7 @@ class HomeViewModel : ViewModel() {
                         todaySummarized = countTodaySummarized(calls),
                         todayScheduled = countTodayScheduled(calls),
                         recentCalls = filtered.take(20),
-                        pinnedCustomers = customersResult.getOrDefault(emptyList())
-                            .filter { it.isPinned }
-                            .sortedWith(compareByDescending<CustomerListItem> { it.callCount }.thenByDescending { it.lastCallAt ?: "" })
-                            .take(3),
                         pendingApprovalCount = awaitingCount,
-                        schedules = schedulesResult.getOrDefault(emptyList()),
                     )
                 },
                 onFailure = {
@@ -297,6 +314,52 @@ class HomeViewModel : ViewModel() {
             )
         }
     }
+
+    private fun mergeManualPinnedCustomers(serverCustomers: List<CustomerListItem>): List<CustomerListItem> {
+        val manualCustomers = loadManualCustomers()
+        val manualByKey = manualCustomers.associateBy { it.phone.normalizedPhoneKey() }
+        val mergedServer = serverCustomers.map { server ->
+            val local = manualByKey[server.phone.normalizedPhoneKey()]
+            if (local == null) {
+                server
+            } else {
+                server.copy(
+                    name = server.name?.takeIf { it.isNotBlank() } ?: local.name,
+                    callCount = maxOf(server.callCount, local.callCount),
+                    lastCallAt = server.lastCallAt ?: local.lastCallAt,
+                    latestSummary = server.latestSummary ?: local.latestSummary,
+                    isPinned = server.isPinned || local.isPinned,
+                )
+            }
+        }
+        val serverKeys = mergedServer.map { it.phone.normalizedPhoneKey() }.toSet()
+        return mergedServer + manualCustomers.filter { it.phone.normalizedPhoneKey() !in serverKeys }
+    }
+
+    private fun loadManualCustomers(): List<CustomerListItem> {
+        val raw = manualCustomerPrefs.getString("items", null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val phone = item.optString("phone").takeIf { it.isNotBlank() } ?: continue
+                    add(
+                        CustomerListItem(
+                            phone = phone,
+                            name = item.optString("name").takeIf { it.isNotBlank() },
+                            callCount = item.optInt("callCount", 0),
+                            lastCallAt = item.optString("lastCallAt").takeIf { it.isNotBlank() },
+                            latestSummary = item.optString("lastSummary").takeIf { it.isNotBlank() },
+                            isPinned = item.optBoolean("isPinned", false),
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun String.normalizedPhoneKey(): String = filter { it.isDigit() }
 
     private suspend fun retryStuckUploadedCalls(calls: List<Call>) {
         val uploadedIds = calls
@@ -387,6 +450,47 @@ class HomeViewModel : ViewModel() {
             add(Calendar.DAY_OF_YEAR, days)
         }
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
+
+    private fun CalendarEvent.isUpcoming(): Boolean {
+        val start = parseScheduleStart(this) ?: return true
+        return start.time >= System.currentTimeMillis()
+    }
+
+    private fun parseScheduleStart(event: CalendarEvent): Date? {
+        event.startAt?.takeIf { it.isNotBlank() }?.let { raw ->
+            parseScheduleDate(raw)?.let { return it }
+        }
+
+        val datePart = event.startAt
+            ?.substringBefore("T")
+            ?.substringBefore(" ")
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val timePart = event.time.takeIf { it.isNotBlank() } ?: "00:00"
+        return parseScheduleDate("$datePart ${timePart.withSeconds()}")
+    }
+
+    private fun parseScheduleDate(raw: String): Date? {
+        val normalized = raw.trim()
+        val patterns = listOf(
+            "yyyy-MM-dd" to null,
+            "yyyy-MM-dd HH:mm:ss" to null,
+            "yyyy-MM-dd HH:mm" to null,
+            "yyyy-MM-dd'T'HH:mm:ss" to null,
+            "yyyy-MM-dd'T'HH:mm" to null,
+            "yyyy-MM-dd'T'HH:mm:ss'Z'" to TimeZone.getTimeZone("UTC"),
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" to TimeZone.getTimeZone("UTC"),
+        )
+        for ((pattern, zone) in patterns) {
+            try {
+                return SimpleDateFormat(pattern, Locale.US)
+                    .apply { zone?.let { timeZone = it } }
+                    .parse(normalized) ?: continue
+            } catch (_: Exception) {
+            }
+        }
+        return null
     }
 
     private fun ManualCalendarEventEntity.toHomeCalendarEvent(): CalendarEvent {

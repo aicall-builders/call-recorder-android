@@ -43,6 +43,13 @@ class CallRepository(
             Unit
         }
 
+    /** AI 요약문 사용자 수정 저장 (PATCH /calls/{id}) */
+    suspend fun updateSummary(callId: String, summary: String): Result<Unit> =
+        runCatching {
+            api.updateCall(callId, UpdateCallRequest(summary = summary))
+            Unit
+        }
+
     /** 외부에서 명시적으로 FAILED 마킹 (예: 파일 삭제됨) */
     suspend fun markAsFailed(id: Long, reason: String) {
         dao.setError(id, RecordingStatus.FAILED, reason)
@@ -152,7 +159,12 @@ class CallRepository(
     }
 
     suspend fun deleteCall(callId: String): Result<Unit> = runCatching {
-        api.deleteCall(callId)
+        val response = api.deleteCall(callId)
+        if (!response.isSuccessful) {
+            error("delete call failed: HTTP ${response.code()}")
+        }
+        dao.deleteByServerCallId(callId)
+        Unit
     }
 
     suspend fun listCalls(storeId: String?): Result<List<Call>> = runCatching {

@@ -1,6 +1,11 @@
 package com.callrecorder.app.ui.screens
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.ContactsContract
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -28,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
@@ -37,6 +45,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.callrecorder.app.R
@@ -51,10 +61,14 @@ import com.callrecorder.app.ui.theme.AppColors
 import com.callrecorder.app.util.PhotoUtils
 import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /* ── 색상: FIANO 0705 디자인 시스템 ── */
 private val ScreenBg   = AppColors.DeepBrown900
@@ -106,6 +120,44 @@ fun CustomerScreen(
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CustFilter.ALL) }
     var selectedCustomer by remember { mutableStateOf<CustomerUiItem?>(null) }
+    var importingContact by remember { mutableStateOf(false) }
+    var showContactSheet by remember { mutableStateOf(false) }
+    var contactChoices by remember { mutableStateOf<List<ContactChoice>>(emptyList()) }
+    var selectedContactKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    fun openContactSheet() {
+        importingContact = true
+        scope.launch {
+            contactChoices = withContext(Dispatchers.IO) { readDeviceContacts(context) }
+            selectedContactKeys = emptySet()
+            importingContact = false
+            if (contactChoices.isEmpty()) {
+                Toast.makeText(context, "선택할 연락처가 없어요", Toast.LENGTH_SHORT).show()
+            } else {
+                showContactSheet = true
+            }
+        }
+    }
+
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            openContactSheet()
+        } else {
+            Toast.makeText(context, "연락처 권한이 필요해요", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun startContactImport() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            openContactSheet()
+        } else {
+            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
 
     if (selectedCustomer != null) {
         CustomerDetailScreen(
@@ -141,11 +193,11 @@ fun CustomerScreen(
         }
     }
 
-    Scaffold(containerColor = ScreenBg) { padding ->
+    Scaffold(containerColor = SheetBg) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(ScreenBg)
-                .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
-            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.fillMaxSize().background(SheetBg)
+                .padding(top = padding.calculateTopPadding()),
+            contentPadding = PaddingValues(bottom = padding.calculateBottomPadding()),
         ) {
             // ═══ 헤더 (ScreenBg) ═══
             item {
@@ -160,20 +212,39 @@ fun CustomerScreen(
 
             // ═══ 흰 시트 헤더 (라운드) + 필터 칩 ═══
             item {
-                Surface(
-                    color = SheetBg,
-                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(ScreenBg),
                 ) {
-                    Row(
-                        Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Surface(
+                        color = SheetBg,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        GradeFilterChip("전체$totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
-                        GradeFilterChip("VIP$vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
-                        GradeFilterChip("단골$regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
-                        GradeFilterChip("일반$normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
-                        GradeFilterChip("신규$newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
+                        Column(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 12.dp)) {
+                            Row(
+                                Modifier.padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                GradeFilterChip("전체$totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
+                                GradeFilterChip("VIP$vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
+                                GradeFilterChip("단골$regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
+                                GradeFilterChip("일반$normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
+                                GradeFilterChip("신규$newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AddCustomerFromContactButton(
+                                    loading = importingContact,
+                                    onClick = { if (!importingContact) startContactImport() },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -202,13 +273,52 @@ fun CustomerScreen(
             }
             items(filtered, key = { it.phone }) { customer ->
                 Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                    Box(Modifier.padding(horizontal = 16.dp)) {
-                        CustomerCard(customer = customer, onClick = { selectedCustomer = customer })
+                    SwipeRevealDeleteBox(
+                        onDelete = { vm.deleteCustomer(customer) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .background(SheetBg)
+                                .fillMaxWidth(),
+                        ) {
+                            CustomerCard(customer = customer, onClick = { selectedCustomer = customer })
+                        }
                     }
                 }
             }
             item { Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) { Spacer(Modifier.height(80.dp)) } }
         }
+    }
+
+    if (showContactSheet) {
+        ContactMultiSelectBottomSheet(
+            contacts = contactChoices,
+            selectedKeys = selectedContactKeys,
+            onSelectedKeysChange = { selectedContactKeys = it },
+            onDismiss = { showContactSheet = false },
+            onConfirm = {
+                val selected = contactChoices.filter { it.key in selectedContactKeys }
+                if (selected.isEmpty()) {
+                    Toast.makeText(context, "추가할 연락처를 선택해주세요", Toast.LENGTH_SHORT).show()
+                    return@ContactMultiSelectBottomSheet
+                }
+                showContactSheet = false
+                importingContact = true
+                vm.addCustomersFromContacts(
+                    contacts = selected.map { CustomerContactInput(name = it.name, phone = it.phone) },
+                ) { success, message ->
+                    importingContact = false
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    if (success) {
+                        searchText = TextFieldValue("")
+                        filter = CustFilter.ALL
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -226,6 +336,239 @@ private fun GradeFilterChip(label: String, selected: Boolean, onClick: () -> Uni
             style = TextStyle(fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                 color = if (selected) Color.White else Ink))
     }
+}
+
+@Composable
+private fun AddCustomerFromContactButton(
+    loading: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = !loading,
+        color = Ink,
+        shape = RoundedCornerShape(999.dp),
+    ) {
+        Row(
+            modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White,
+                )
+            } else {
+                Text("+", style = TextStyle(fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
+            }
+            Text(
+                if (loading) "추가 중" else "고객 추가",
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContactMultiSelectBottomSheet(
+    contacts: List<ContactChoice>,
+    selectedKeys: Set<String>,
+    onSelectedKeysChange: (Set<String>) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        sheetMaxWidth = Dp.Unspecified,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+        ) {
+            Text(
+                "연락처에서 고객 추가",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = Ink),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${selectedKeys.size}명 선택됨",
+                modifier = Modifier.padding(horizontal = 24.dp),
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = MutedText),
+            )
+            Spacer(Modifier.height(16.dp))
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            ) {
+                items(contacts, key = { it.key }) { contact ->
+                    val selected = contact.key in selectedKeys
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onSelectedKeysChange(
+                                    if (selected) selectedKeys - contact.key else selectedKeys + contact.key,
+                                )
+                            }
+                            .padding(horizontal = 4.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Checkbox(
+                            checked = selected,
+                            onCheckedChange = {
+                                onSelectedKeysChange(
+                                    if (selected) selectedKeys - contact.key else selectedKeys + contact.key,
+                                )
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Ink,
+                                uncheckedColor = AppColors.DeepBrown300,
+                                checkmarkColor = Color.White,
+                            ),
+                        )
+                        Box(
+                            Modifier.size(40.dp).clip(CircleShape).background(AvatarBg),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                contact.name.take(1).ifBlank { "#" },
+                                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AvatarFg),
+                            )
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                contact.name.ifBlank { contact.phone },
+                                style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink),
+                                maxLines = 1,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                contact.phone,
+                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = PhoneGray),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = Divider, thickness = 0.7.dp)
+                }
+            }
+            ContactSheetButtonBar(
+                onCancel = onDismiss,
+                onConfirm = onConfirm,
+                confirmEnabled = selectedKeys.isNotEmpty(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ContactSheetButtonBar(
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmEnabled: Boolean,
+) {
+    Surface(color = Color.White, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FianoSheetActionButton(
+                label = "취소",
+                primary = false,
+                enabled = true,
+                onClick = onCancel,
+                modifier = Modifier.weight(1f),
+            )
+            FianoSheetActionButton(
+                label = "추가",
+                primary = true,
+                enabled = confirmEnabled,
+                onClick = onConfirm,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun FianoSheetActionButton(
+    label: String,
+    primary: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        color = when {
+            primary && enabled -> Ink
+            primary -> AppColors.DeepBrown200
+            else -> Color.White
+        },
+        shape = RoundedCornerShape(12.dp),
+        border = if (primary) null else androidx.compose.foundation.BorderStroke(1.dp, Divider),
+        modifier = modifier.height(52.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (primary) Color.White else Ink,
+                ),
+            )
+        }
+    }
+}
+
+private data class ContactChoice(
+    val key: String,
+    val name: String,
+    val phone: String,
+)
+
+private fun readDeviceContacts(context: Context): List<ContactChoice> {
+    val choices = mutableListOf<ContactChoice>()
+    context.contentResolver.query(
+        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+        arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+        ),
+        null,
+        null,
+        "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC",
+    )?.use { cursor ->
+        val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val phoneIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+        while (cursor.moveToNext()) {
+            val name = cursor.getString(nameIndex).orEmpty()
+            val rawPhone = cursor.getString(phoneIndex).orEmpty()
+            val normalized = rawPhone.filter { it.isDigit() || it == '+' }
+            val key = normalized.filter { it.isDigit() }
+            if (key.length >= 7) {
+                choices += ContactChoice(
+                    key = key,
+                    name = name,
+                    phone = normalized,
+                )
+            }
+        }
+    }
+    return choices.distinctBy { it.key }
 }
 
 /* ── 고객 카드 (시안: 아바타 + 이름·통화수 + 등급배지 + 번호 + AI 한줄) ── */
@@ -395,9 +738,11 @@ fun CustomerDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
-                    val text = detail.analysis?.analysis ?: customer.lastSummary
+                    val text = remember(detail.profile, detail.manualHistory, detail.analysis, customer.lastSummary) {
+                        customerComprehensiveAnalysis(detail, customer)
+                    }
                     Text(
-                        if (!text.isNullOrBlank()) text else "통화가 쌓이면 고객 분석을 자동으로 정리해드려요.",
+                        text,
                         style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300),
                         maxLines = 2,
                     )
@@ -417,7 +762,8 @@ fun CustomerDetailScreen(
                     .fillMaxSize()
                     .background(SheetBg)
                     .verticalScroll(rememberScrollState())
-                    .padding(top = 24.dp, bottom = 80.dp),
+                    .imePadding()
+                    .padding(top = 24.dp, bottom = 120.dp),
             ) {
                 when (tab) {
                     CustDetailTab.ANALYSIS -> AnalysisTab(customer = customer, detail = detail, vm = vm)
@@ -502,6 +848,13 @@ private fun CustTabButton(text: String, selected: Boolean, modifier: Modifier = 
 }
 
 /* ── 고객 정보 탭: 주요 정보 + 관련 이미지 + 추가 정보 ── */
+private data class CustomerInfoEditRow(
+    val id: String,
+    val label: String,
+    val value: String,
+    val removable: Boolean,
+)
+
 @Composable
 private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, vm: CustomerViewModel) {
     val profile = detail.profile
@@ -511,19 +864,40 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
     var editing by remember { mutableStateOf(false) }
     var imageEditing by remember { mutableStateOf(false) }
     var additionalInfoEditing by remember { mutableStateOf(false) }
-    var email by remember(profile) { mutableStateOf(profile?.email ?: "") }
-    var tendency by remember(profile) { mutableStateOf(profile?.tendency ?: "") }
-    var medical by remember(profile) { mutableStateOf(profile?.medical ?: "") }
-    var special by remember(profile) { mutableStateOf(profile?.specialNotes ?: "") }
+    val customFieldMap = remember(profile) { profile.customFieldMap() }
+    var infoRows by remember(profile) {
+        mutableStateOf(
+            buildCustomerInfoRows(profile, customFieldMap)
+        )
+    }
+    var additionalMemo by remember(detail.manualHistory) {
+        mutableStateOf(detail.manualHistory.combinedAdditionalMemo())
+    }
     val relatedPhotos = detail.manualPhotos
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            val localUrl = withContext(Dispatchers.IO) {
+                PhotoUtils.copyUriToCustomerImageFile(
+                    context = context,
+                    uri = uri,
+                    fileName = "customer_${System.currentTimeMillis()}.jpg",
+                )
+            }
+            if (localUrl == null) {
+                Toast.makeText(context, "이미지를 불러올 수 없어요", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            vm.addLocalRelatedPhoto(customer, localUrl)
             val bytes = withContext(Dispatchers.IO) {
                 PhotoUtils.uriToCompressedBytes(context, uri)
-            } ?: return@launch
+            }
+            if (bytes == null) {
+                Toast.makeText(context, "이미지 업로드용 변환에 실패했어요", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
             vm.uploadManualPhoto(
                 customer = customer,
                 fileName = "customer_${System.currentTimeMillis()}.jpg",
@@ -561,7 +935,24 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
             style = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, color = PhoneGray),
             modifier = Modifier.clickable {
                 if (editing) {
-                    vm.saveProfile(customer.phone, email, tendency, medical, special)
+                    val byId = infoRows.associateBy { it.id }
+                    val extraFields = infoRows
+                        .filter { it.removable && it.label.isNotBlank() }
+                        .associate { it.label to it.value }
+                    val customFields = buildMap {
+                        put("label_email", byId["email"]?.label.orEmpty().ifBlank { "이메일" })
+                        put("label_tendency", byId["tendency"]?.label.orEmpty().ifBlank { "고객성향" })
+                        put("label_special", byId["special"]?.label.orEmpty().ifBlank { "특이사항" })
+                        putAll(extraFields)
+                    }
+                    vm.saveProfile(
+                        phone = customer.phone,
+                        email = byId["email"]?.value.orEmpty(),
+                        tendency = byId["tendency"]?.value.orEmpty(),
+                        medical = "",
+                        specialNotes = byId["special"]?.value.orEmpty(),
+                        customFields = customFields,
+                    )
                 }
                 editing = !editing
             },
@@ -574,21 +965,52 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
             .padding(start = 24.dp, top = 8.dp, end = 24.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CustomerInfoField("이메일", email, editing, onChange = { email = it }, onClear = { email = "" })
-        CustomerInfoField("고객성향", tendency, editing, onChange = { tendency = it }, onClear = { tendency = "" })
-        CustomerInfoField("병력", medical, editing, onChange = { medical = it }, onClear = { medical = "" })
-        CustomerInfoField("특이사항", special, editing, onChange = { special = it }, onClear = { special = "" })
+        infoRows.forEachIndexed { index, row ->
+            CustomerInfoField(
+                label = row.label,
+                value = row.value,
+                editing = editing,
+                removable = row.removable,
+                onLabelChange = { label ->
+                    infoRows = infoRows.toMutableList().also { it[index] = it[index].copy(label = label) }
+                },
+                onChange = { value ->
+                    infoRows = infoRows.toMutableList().also { it[index] = it[index].copy(value = value) }
+                },
+                onClear = {
+                    infoRows = infoRows.toMutableList().also { it[index] = it[index].copy(value = "") }
+                },
+                onRemove = {
+                    infoRows = infoRows.filterIndexed { rowIndex, _ -> rowIndex != index }
+                },
+            )
+        }
+        if (editing) {
+            FigmaAddFieldRow(
+                text = "필드추가",
+                enabled = true,
+                onClick = {
+                    infoRows = infoRows + CustomerInfoEditRow(
+                        id = "custom_${System.currentTimeMillis()}",
+                        label = "",
+                        value = "",
+                        removable = true,
+                    )
+                },
+                horizontalPadding = 0.dp,
+            )
+        }
     }
 
-    detail.saveMessage?.let {
-        Spacer(Modifier.height(8.dp))
-        Text(it, style = TextStyle(fontSize = 12.sp, color = SubInk))
-    }
+    SectionStatusMessage(
+        message = detail.saveMessage.takeIf { detail.saveMessageSection == CustomerDetailMessageSection.PROFILE },
+    )
 
     RelatedImagesSection(
         photos = relatedPhotos,
         editing = imageEditing,
         saving = detail.saving,
+        message = detail.saveMessage.takeIf { detail.saveMessageSection == CustomerDetailMessageSection.RELATED_IMAGES },
         onToggleEditing = { imageEditing = !imageEditing },
         onAddClick = { imagePicker.launch("image/*") },
         onDeleteClick = { photo -> vm.deleteManualPhoto(customer, photo) },
@@ -599,20 +1021,193 @@ private fun AnalysisTab(customer: CustomerUiItem, detail: CustomerDetailState, v
         editing = additionalInfoEditing,
         saving = detail.saving,
         onToggleEditing = { additionalInfoEditing = !additionalInfoEditing },
+        additionalMemo = additionalMemo,
+        onAdditionalMemoChange = { additionalMemo = it },
+        onSaveMemo = {
+            vm.saveAdditionalInfoMemo(customer, additionalMemo)
+            additionalInfoEditing = false
+        },
+        message = detail.saveMessage.takeIf { detail.saveMessageSection == CustomerDetailMessageSection.ADDITIONAL_INFO },
         onAddImageClick = { additionalInfoImagePicker.launch("image/*") },
+        onDeleteImageClick = { photo -> vm.deleteAdditionalInfoPhoto(customer, photo) },
     )
 }
+
+private fun List<CustomerHistoryItem>.combinedAdditionalMemo(): String {
+    val primaryMemo = firstOrNull { it.id == "local_memo_primary" }
+        ?.memo
+        .cleanCustomerAnalysisPart()
+        .takeIf(String::isNotBlank)
+    if (primaryMemo != null) return primaryMemo
+
+    return mapNotNull { it.memo.cleanCustomerAnalysisPart().takeIf(String::isNotBlank) }
+        .distinct()
+        .joinToString("\n")
+}
+
+data class AdditionalInfoPhotoItem(
+    val memoId: String,
+    val photoId: String,
+    val url: String,
+)
+
+@Composable
+private fun SectionStatusMessage(message: String?) {
+    if (message.isNullOrBlank()) return
+    Text(
+        message,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        style = TextStyle(fontSize = 12.sp, color = SubInk),
+    )
+}
+
+private fun buildCustomerInfoRows(
+    profile: CustomerProfile?,
+    customFields: Map<String, String>,
+): List<CustomerInfoEditRow> {
+    val defaultRows = listOf(
+        CustomerInfoEditRow("email", customFields["label_email"] ?: "이메일", profile?.email.orEmpty(), removable = false),
+        CustomerInfoEditRow("tendency", customFields["label_tendency"] ?: "고객성향", profile?.tendency.orEmpty(), removable = false),
+        CustomerInfoEditRow("special", customFields["label_special"] ?: "특이사항", profile?.specialNotes.orEmpty(), removable = false),
+    )
+    val extraRows = customFields
+        .filterKeys { !it.startsWith("label_") }
+        .map { (label, value) ->
+            CustomerInfoEditRow(
+                id = "custom_$label",
+                label = label,
+                value = value,
+                removable = true,
+            )
+        }
+    return defaultRows + extraRows
+}
+
+private fun CustomerProfile?.customFieldMap(): Map<String, String> {
+    val objectValue = this?.customFields as? JsonObject ?: return emptyMap()
+    return objectValue.mapValues { (_, value) ->
+        value.jsonPrimitive.contentOrNull.orEmpty()
+    }
+}
+
+private fun customerComprehensiveAnalysis(detail: CustomerDetailState, customer: CustomerUiItem): String {
+    val profile = detail.profile
+    val customFields = profile.customFieldMap()
+    val serverAnalysis = detail.analysis?.analysis
+        .cleanCustomerAnalysisPart()
+        .stripCustomerAnalysisName(customer)
+    val latestSummary = customer.lastSummary
+        .cleanCustomerAnalysisPart()
+        .stripCustomerAnalysisName(customer)
+    val supportingSignals = buildList {
+        add(profile?.tendency.cleanCustomerAnalysisPart())
+        add(profile?.specialNotes.cleanCustomerAnalysisPart())
+        addAll(
+            customFields
+                .filterKeys { !it.startsWith("label_") }
+                .filterValues { it.cleanCustomerAnalysisPart().isNotBlank() }
+                .values
+                .map { it.cleanCustomerAnalysisPart() }
+        )
+        addAll(
+            detail.manualHistory
+                .mapNotNull { it.memo?.cleanCustomerAnalysisPart()?.takeIf(String::isNotBlank) }
+        )
+        addAll(customer.calls.analysisContextParts())
+        add(latestSummary)
+    }
+        .map { it.stripCustomerAnalysisName(customer) }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    if (serverAnalysis.isNotBlank()) {
+        val support = supportingSignals
+            .filterNot { serverAnalysis.contains(it) || it.contains(serverAnalysis) }
+            .firstOrNull()
+        return if (support.isNullOrBlank() || serverAnalysis.length >= 72) {
+            serverAnalysis.limitCustomerAnalysisText()
+        } else {
+            "$serverAnalysis ${support.toFollowUpSentence()}".limitCustomerAnalysisText()
+        }
+    }
+
+    if (latestSummary.isNotBlank()) {
+        return latestSummary.limitCustomerAnalysisText()
+    }
+
+    if (supportingSignals.isNotEmpty()) {
+        return supportingSignals.first().toFollowUpSentence().limitCustomerAnalysisText()
+    }
+
+    return "누적통화 0건의 고객입니다. 지금부터 고객님의 히스토리를 정리할 수 있어요."
+}
+
+private fun List<Call>.analysisContextParts(): List<String> {
+    val analyzedCalls = filter { !it.summary.isNullOrBlank() || !it.category.isNullOrBlank() }
+    val recentSummary = analyzedCalls
+        .sortedByDescending { it.createdAt.orEmpty() }
+        .mapNotNull { it.summary.cleanCustomerAnalysisPart().takeIf(String::isNotBlank) }
+        .firstOrNull()
+    val scheduleCategories = analyzedCalls
+        .mapNotNull { it.category.cleanCustomerAnalysisPart().takeIf(String::isNotBlank) }
+        .filter { it.contains("예약") || it.contains("일정") || it.contains("방문") || it.contains("계약") }
+        .distinct()
+        .take(2)
+    val actionCount = analyzedCalls.count { it.actionRequired == 1 }
+
+    return buildList {
+        if (!recentSummary.isNullOrBlank()) add(recentSummary)
+        if (scheduleCategories.isNotEmpty()) add("${scheduleCategories.joinToString(", ")} 관련 일정이 있습니다")
+        if (actionCount > 0) add("후속 확인이 필요한 통화가 ${actionCount}건 있습니다")
+    }
+}
+
+private fun String?.cleanCustomerAnalysisPart(): String =
+    this.orEmpty()
+        .replace("\n", " ")
+        .replace(Regex("^\\s*\\[[^\\]]+\\]\\s*"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+private fun String.stripCustomerAnalysisName(customer: CustomerUiItem): String {
+    val names = listOfNotNull(customer.name, customer.phone)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+    return names.fold(this) { text, name ->
+        text
+            .replace(Regex("^${Regex.escape(name)}\\s*(고객님|고객|님)?(은|는|이|가)?\\s*"), "")
+            .replace(Regex("\\b${Regex.escape(name)}\\s*(고객님|고객|님)?\\b"), "")
+    }
+        .replace(Regex("\\s+"), " ")
+        .trimStart(',', '.', ' ')
+        .trim()
+}
+
+private fun String.toFollowUpSentence(): String {
+    val text = trimEnd('.', ',', ' ')
+    return when {
+        text.endsWith("필요") || text.endsWith("필요함") -> "$text."
+        text.contains("일정") || text.contains("예약") || text.contains("방문") || text.contains("계약") ->
+            "$text 후속 일정을 함께 챙겨야 합니다."
+        else -> "$text 내용을 참고해 다음 응대 방향을 정리해야 합니다."
+    }
+}
+
+private fun String.limitCustomerAnalysisText(maxLength: Int = 96): String =
+    if (length <= maxLength) this else take(maxLength).trimEnd() + "..."
 
 @Composable
 private fun RelatedImagesSection(
     photos: List<CustomerManualPhoto>,
     editing: Boolean,
     saving: Boolean,
+    message: String?,
     onToggleEditing: () -> Unit,
     onAddClick: () -> Unit,
     onDeleteClick: (CustomerManualPhoto) -> Unit,
 ) {
     val inspectionMode = LocalInspectionMode.current
+    var fullImageUrl by remember { mutableStateOf<String?>(null) }
 
     Spacer(Modifier.height(24.dp))
     Row(
@@ -645,7 +1240,8 @@ private fun RelatedImagesSection(
                 modifier = Modifier
                     .size(100.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFEFEFEF)),
+                    .background(Color(0xFFEFEFEF))
+                    .clickable { fullImageUrl = photo.url },
             ) {
                 CustomerImageThumbnail(
                     url = photo.url,
@@ -653,27 +1249,11 @@ private fun RelatedImagesSection(
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (editing) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(6.dp)
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xCC101418))
-                            .clickable { onDeleteClick(photo) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (inspectionMode) {
-                            Text("x", style = TextStyle(fontSize = 14.sp, lineHeight = 14.sp, color = Color.White))
-                        } else {
-                            Image(
-                                painter = painterResource(R.drawable.customer_icon_cancel),
-                                contentDescription = "이미지 삭제",
-                                modifier = Modifier.size(18.dp),
-                                contentScale = ContentScale.Fit,
-                            )
-                        }
-                    }
+                    CustomerImageDeleteButton(
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                        inspectionMode = inspectionMode,
+                        onClick = { onDeleteClick(photo) },
+                    )
                 }
             }
         }
@@ -694,13 +1274,47 @@ private fun RelatedImagesSection(
         }
     }
 
+    SectionStatusMessage(message)
+
     if (editing) {
         Spacer(Modifier.height(8.dp))
         FigmaAddFieldRow(
-            text = if (saving) "처리 중" else "이미지 추가",
+            text = "이미지 추가",
             enabled = !saving,
             onClick = onAddClick,
         )
+    }
+
+    FullImageDialog(
+        url = fullImageUrl,
+        onDismiss = { fullImageUrl = null },
+    )
+}
+
+@Composable
+private fun CustomerImageDeleteButton(
+    modifier: Modifier = Modifier,
+    inspectionMode: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.5f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (inspectionMode) {
+            Text("x", style = TextStyle(fontSize = 14.sp, lineHeight = 14.sp, color = Ink))
+        } else {
+            Image(
+                painter = painterResource(R.drawable.customer_icon_cancel),
+                contentDescription = "이미지 삭제",
+                modifier = Modifier.size(24.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
     }
 }
 
@@ -711,9 +1325,25 @@ private fun ManualMemoHistoryBlock(
     editing: Boolean,
     saving: Boolean,
     onToggleEditing: () -> Unit,
+    additionalMemo: String,
+    onAdditionalMemoChange: (String) -> Unit,
+    onSaveMemo: () -> Unit,
+    message: String?,
     onAddImageClick: () -> Unit,
+    onDeleteImageClick: (AdditionalInfoPhotoItem) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    val editBlockRequester = remember { BringIntoViewRequester() }
     val memos = items.filter { !it.memo.isNullOrBlank() || it.photos.isNotEmpty() }.take(5)
+    val combinedMemo = memos.combinedAdditionalMemo()
+    val memoPhotos = memos.flatMap { item ->
+        val memoId = item.id.orEmpty()
+        item.photos.mapNotNull { photo ->
+            val photoId = photo.id ?: return@mapNotNull null
+            val url = photo.url ?: return@mapNotNull null
+            AdditionalInfoPhotoItem(memoId = memoId, photoId = photoId, url = url)
+        }
+    }.distinctBy { it.url }
 
     Spacer(Modifier.height(24.dp))
     Row(
@@ -730,7 +1360,9 @@ private fun ManualMemoHistoryBlock(
         Text(
             if (editing) "저장" else "편집",
             style = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, color = PhoneGray),
-            modifier = Modifier.clickable { onToggleEditing() },
+            modifier = Modifier.clickable {
+                if (editing) onSaveMemo() else onToggleEditing()
+            },
         )
     }
 
@@ -740,17 +1372,16 @@ private fun ManualMemoHistoryBlock(
             .padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        if (memos.isEmpty() && !editing) {
+        if (combinedMemo.isBlank() && memoPhotos.isEmpty() && !editing) {
             AdditionalInfoTextRow("추가된 정보가 없어요", color = PlaceholderGray)
         }
-        memos.forEach { item ->
+        if ((!editing && combinedMemo.isNotBlank()) || memoPhotos.isNotEmpty()) {
             Surface(color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    item.memo?.takeIf { it.isNotBlank() }?.let { memo ->
-                        AdditionalInfoTextRow(memo)
+                    if (!editing && combinedMemo.isNotBlank()) {
+                        AdditionalInfoTextRow(combinedMemo)
                     }
-                    val photos = item.photos.mapNotNull { it.url }
-                    if (photos.isNotEmpty()) {
+                    if (memoPhotos.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier
@@ -758,15 +1389,24 @@ private fun ManualMemoHistoryBlock(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            photos.forEach { url ->
-                                CustomerImageThumbnail(
-                                    url = url,
-                                    contentDescription = "추가정보 이미지",
-                                    modifier = Modifier
-                                        .size(100.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(PhotoBg),
-                                )
+                            memoPhotos.forEach { photo ->
+                                Box {
+                                    CustomerImageThumbnail(
+                                        url = photo.url,
+                                        contentDescription = "추가정보 이미지",
+                                        modifier = Modifier
+                                            .size(100.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(PhotoBg),
+                                    )
+                                    if (editing) {
+                                        CustomerImageDeleteButton(
+                                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                                            inspectionMode = false,
+                                            onClick = { onDeleteImageClick(photo) },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -774,13 +1414,76 @@ private fun ManualMemoHistoryBlock(
             }
         }
         if (editing) {
-            FigmaAddFieldRow(
-                text = if (saving) "처리 중" else "이미지 추가",
-                enabled = !saving,
-                onClick = onAddImageClick,
-                horizontalPadding = 0.dp,
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(editBlockRequester),
+            ) {
+                AdditionalInfoInputRow(
+                    value = additionalMemo,
+                    onValueChange = onAdditionalMemoChange,
+                    onFocused = {
+                        scope.launch {
+                            delay(350)
+                            editBlockRequester.bringIntoView()
+                        }
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                FigmaAddFieldRow(
+                    text = "이미지 추가",
+                    enabled = !saving,
+                    onClick = onAddImageClick,
+                    horizontalPadding = 0.dp,
+                )
+            }
         }
+    }
+    SectionStatusMessage(message)
+}
+
+@Composable
+private fun AdditionalInfoInputRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onFocused: () -> Unit = {},
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 120.dp)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            "ㆍ",
+            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = Ink),
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = Ink),
+            cursorBrush = SolidColor(Ink),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusEvent { state ->
+                    if (state.isFocused) {
+                        onFocused()
+                    }
+                },
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxWidth()) {
+                    if (value.isBlank()) {
+                        Text(
+                            "추가정보를 적어주세요.",
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = PlaceholderGray),
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
     }
 }
 
@@ -840,19 +1543,44 @@ private fun CustomerInfoField(
     label: String,
     value: String,
     editing: Boolean,
+    removable: Boolean = false,
+    onLabelChange: (String) -> Unit = {},
     onChange: (String) -> Unit,
     onClear: () -> Unit,
+    onRemove: () -> Unit = {},
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = if (editing) 22.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            label,
-            modifier = Modifier.width(56.dp),
-            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PhoneGray),
-        )
+        if (editing) {
+            BasicTextField(
+                value = label,
+                onValueChange = onLabelChange,
+                textStyle = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PhoneGray),
+                cursorBrush = SolidColor(Ink),
+                singleLine = true,
+                modifier = Modifier.width(72.dp),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth()) {
+                        if (label.isBlank()) {
+                            Text(
+                                "항목",
+                                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PlaceholderGray),
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+        } else {
+            Text(
+                label,
+                modifier = Modifier.width(72.dp),
+                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = PhoneGray),
+            )
+        }
         if (editing) {
             BasicTextField(
                 value = value,
@@ -868,12 +1596,21 @@ private fun CustomerInfoField(
                     }
                 },
             )
-            Image(
-                painter = painterResource(R.drawable.customer_icon_cancel),
-                contentDescription = "내용 지우기",
-                modifier = Modifier.size(22.dp).clickable { onClear() },
-                contentScale = ContentScale.Fit,
-            )
+            if (removable) {
+                Image(
+                    painter = painterResource(R.drawable.customer_icon_cancel),
+                    contentDescription = "행 삭제",
+                    modifier = Modifier.size(22.dp).clickable { onRemove() },
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.customer_icon_cancel),
+                    contentDescription = "내용 지우기",
+                    modifier = Modifier.size(22.dp).clickable { onClear() },
+                    contentScale = ContentScale.Fit,
+                )
+            }
         } else {
             Text(
                 value.ifBlank { "-" },
@@ -1105,6 +1842,45 @@ private fun CustomerImageThumbnail(
     }
 }
 
+@Composable
+private fun FullImageDialog(
+    url: String?,
+    onDismiss: () -> Unit,
+) {
+    if (url.isNullOrBlank()) return
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 320.dp, max = 620.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black)
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = url,
+                contentDescription = "전체 이미지",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x99000000))
+                    .clickable { onDismiss() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("x", style = TextStyle(fontSize = 16.sp, lineHeight = 16.sp, color = Color.White))
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────
 // 유틸
 // ─────────────────────────────────────────────────────
@@ -1281,7 +2057,6 @@ private fun CustomerDetailAnalysisPreviewContent(detail: CustomerDetailState) {
     ) {
         CustomerInfoField("이메일", profile.email.orEmpty(), editing = false, onChange = {}, onClear = {})
         CustomerInfoField("고객성향", profile.tendency.orEmpty(), editing = false, onChange = {}, onClear = {})
-        CustomerInfoField("병력", profile.medical.orEmpty(), editing = false, onChange = {}, onClear = {})
         CustomerInfoField("특이사항", profile.specialNotes.orEmpty(), editing = false, onChange = {}, onClear = {})
     }
 
@@ -1289,6 +2064,7 @@ private fun CustomerDetailAnalysisPreviewContent(detail: CustomerDetailState) {
         photos = detail.manualPhotos,
         editing = true,
         saving = false,
+        message = null,
         onToggleEditing = {},
         onAddClick = {},
         onDeleteClick = {},
@@ -1299,7 +2075,12 @@ private fun CustomerDetailAnalysisPreviewContent(detail: CustomerDetailState) {
         editing = true,
         saving = false,
         onToggleEditing = {},
+        additionalMemo = "",
+        onAdditionalMemoChange = {},
+        onSaveMemo = {},
+        message = null,
         onAddImageClick = {},
+        onDeleteImageClick = {},
     )
 }
 
@@ -1340,7 +2121,7 @@ private fun previewCustomerDetail() = CustomerDetailState(
     profile = CustomerProfile(
         email = "minjun.kim@example.com",
         tendency = "일정 확정 전 세부 조건을 꼼꼼히 확인",
-        medical = "해당 없음",
+        medical = null,
         specialNotes = "오전 통화를 선호하며 계약서 초안 사전 공유 요청",
     ),
     analysis = CustomerAnalysis(

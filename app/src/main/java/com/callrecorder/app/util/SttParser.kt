@@ -41,7 +41,7 @@ object SttParser {
     }
 
     private val LABEL_REGEX = Regex(
-        pattern = """(?:\[?\s*(화자\s*\d+|발신자|수신자|고객|상담원|직원|비서)\s*]?\s*[:：])""",
+        pattern = """(?:\[?\s*((?:화자|speaker|spk|참여자)\s*[_-]?\s*\d+|발신자|수신자|고객|상담원|직원|비서|agent|customer|caller|receiver|sender)\s*]?\s*[:：])""",
         option = RegexOption.IGNORE_CASE,
     )
 
@@ -53,7 +53,13 @@ object SttParser {
             if (parsed.isNotEmpty()) return parsed
         }
 
-        // [화자N]: 라벨이 하나라도 있으면 라벨 기준 분할
+        return parseLabeledOrPlainTranscript(normalized)
+    }
+
+    private fun parseLabeledOrPlainTranscript(raw: String): List<SttMessage> {
+        val normalized = raw.unescapeTranscriptText().trim()
+        if (normalized.isBlank()) return emptyList()
+
         val matches = LABEL_REGEX.findAll(normalized).toList()
         if (matches.isEmpty()) return splitPlainTranscript(normalized)
 
@@ -94,7 +100,7 @@ object SttParser {
                 if (segmentArray != null) {
                     segmentArray.flatMap { extractMessages(it) }
                 } else {
-                    val nested = firstObject(element, "result", "data", "response")
+                val nested = firstObject(element, "result", "data", "response")
                     if (nested != null) {
                         extractMessages(nested)
                     } else {
@@ -109,7 +115,13 @@ object SttParser {
                         if (text.isNullOrBlank()) {
                             emptyList()
                         } else {
-                            listOf(SttMessage(element.speakerValue().toSpeaker(), text.trim()))
+                            val speaker = element.speakerValue().toSpeaker()
+                            val normalizedText = text.unescapeTranscriptText().trim()
+                            if (LABEL_REGEX.containsMatchIn(normalizedText) || speaker == SttSpeaker.UNKNOWN) {
+                                parseLabeledOrPlainTranscript(normalizedText)
+                            } else {
+                                listOf(SttMessage(speaker, normalizedText))
+                            }
                         }
                     }
                 }
@@ -134,6 +146,10 @@ object SttParser {
             "speaker_label",
             "speakerName",
             "speaker_name",
+            "speakerId",
+            "speaker_id",
+            "speakerTag",
+            "speaker_tag",
             "role",
             "channel",
             "label",
@@ -147,8 +163,18 @@ object SttParser {
 
     private fun String?.toSpeaker(): SttSpeaker {
         val value = this?.trim()?.lowercase().orEmpty().replace(" ", "")
+        val speakerNumber = Regex("""(?:화자|speaker|spk|참여자)[_-]?0*(\d+)""")
+            .find(value)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
         return when {
             value.isBlank() -> SttSpeaker.UNKNOWN
+            speakerNumber == 0 -> SttSpeaker.CUSTOMER
+            speakerNumber == 1 -> SttSpeaker.BOT
+            speakerNumber == 2 -> SttSpeaker.CUSTOMER
+            value == "0" || value.contains("speaker0") || value.contains("spk0") ||
+                value.contains("speaker_00") || value.contains("speaker00") -> SttSpeaker.CUSTOMER
             value == "1" || value.contains("화자1") || value.contains("speaker1") -> SttSpeaker.BOT
             value == "2" || value.contains("화자2") || value.contains("speaker2") -> SttSpeaker.CUSTOMER
             value.contains("수신") || value.contains("상담") || value.contains("직원") ||
@@ -208,7 +234,7 @@ object SttParser {
             val text = message.text.trim()
             if (text.isBlank()) return@forEach
             val last = result.lastOrNull()
-            if (last != null && last.speaker == message.speaker) {
+            if (last != null && last.speaker == message.speaker && message.speaker != SttSpeaker.UNKNOWN) {
                 result[result.lastIndex] = last.copy(text = "${last.text}\n$text")
             } else {
                 result += message.copy(text = text)
