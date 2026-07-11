@@ -133,6 +133,9 @@ interface ApiService {
     @DELETE("calls/{id}")
     suspend fun deleteCall(@Path("id") callId: String): Response<Unit>
 
+    @POST("calls/{id}/cancel")
+    suspend fun cancelCallProcessing(@Path("id") callId: String): Response<Unit>
+
     @DELETE("calls/{id}/photos/{photoId}")
     suspend fun deleteCallPhoto(
         @Path("id") callId: String,

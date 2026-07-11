@@ -49,12 +49,27 @@ class CallRepository(
     }
 
     /** 업로드 큐에서 제거 (CANCELED). 폰 녹음 파일은 그대로 두고, 재스캔돼도 재업로드 안 함. */
-    suspend fun cancelUpload(id: Long) {
+    suspend fun cancelUpload(id: Long): Result<Unit> = runCatching {
+        val rec = dao.findById(id)
+        val callId = rec?.serverCallId?.takeIf { it.isNotBlank() }
+        if (callId != null) {
+            val res = api.cancelCallProcessing(callId)
+            if (!res.isSuccessful) {
+                error("서버 분석 취소 실패: HTTP ${res.code()}")
+            }
+        }
         dao.updateStatus(id, RecordingStatus.CANCELED)
     }
 
     /** 진행 중인 업로드 전체 일괄 취소. */
-    suspend fun cancelAllUploads() {
+    suspend fun cancelAllUploads(): Result<Unit> = runCatching {
+        dao.getCancelableServerUploads().forEach { rec ->
+            val callId = rec.serverCallId?.takeIf { it.isNotBlank() } ?: return@forEach
+            val res = api.cancelCallProcessing(callId)
+            if (!res.isSuccessful) {
+                error("서버 분석 취소 실패: HTTP ${res.code()}")
+            }
+        }
         dao.cancelAllActive()
     }
 

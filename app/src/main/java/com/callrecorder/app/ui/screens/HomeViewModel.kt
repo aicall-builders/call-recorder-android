@@ -196,13 +196,19 @@ class HomeViewModel : ViewModel() {
 
                     // 서버 상태에 맞춰 로컬 진행상태(UPLOADED/PROCESSING) 정리 → 진행 칩에서 사라짐
                     val summarizedIds = calls
-                        .filter { it.status.equals(CallStatus.SUMMARIZED, true) }
+                        .filter {
+                            it.status.equals(CallStatus.COMPLETED, true) ||
+                                    it.status.equals(CallStatus.SUMMARIZED, true) ||
+                                    !it.summary.isNullOrBlank()
+                        }
                         .map { it.id }.toSet()
                     // 완료(summarized)/실패(failed)/요약이 생긴 건은 "진행 끝"으로 보고 칩에서 내림
                     val terminalIds = calls
                         .filter {
-                            it.status.equals(CallStatus.SUMMARIZED, true) ||
+                            it.status.equals(CallStatus.COMPLETED, true) ||
+                                    it.status.equals(CallStatus.SUMMARIZED, true) ||
                                     it.status.equals(CallStatus.FAILED, true) ||
+                                    it.status.equals(CallStatus.ERROR, true) ||
                                     !it.summary.isNullOrBlank()
                         }
                         .map { it.id }.toSet()
@@ -250,14 +256,18 @@ class HomeViewModel : ViewModel() {
     /** 업로드 진행 목록에서 한 건 제거 (큐에서 취소). 목록은 Flow로 자동 갱신됨. */
     fun deleteUpload(id: Long) {
         viewModelScope.launch {
-            callRepo.cancelUpload(id)
+            callRepo.cancelUpload(id).onFailure {
+                _state.value = _state.value.copy(error = it.message ?: "서버 분석 취소에 실패했어요")
+            }
         }
     }
 
     /** 업로드 진행 목록 전체 일괄 제거. */
     fun deleteAllUploads() {
         viewModelScope.launch {
-            callRepo.cancelAllUploads()
+            callRepo.cancelAllUploads().onFailure {
+                _state.value = _state.value.copy(error = it.message ?: "서버 분석 취소에 실패했어요")
+            }
         }
     }
 
@@ -277,7 +287,14 @@ class HomeViewModel : ViewModel() {
         calls.count { isToday(it.createdAt) }
 
     private fun countTodaySummarized(calls: List<Call>): Int =
-        calls.count { isToday(it.createdAt) && it.status.equals(CallStatus.SUMMARIZED, true) }
+        calls.count {
+            isToday(it.createdAt) &&
+                    (
+                            it.status.equals(CallStatus.COMPLETED, true) ||
+                                    it.status.equals(CallStatus.SUMMARIZED, true) ||
+                                    !it.summary.isNullOrBlank()
+                            )
+        }
 
     private fun countTodayScheduled(calls: List<Call>): Int =
         calls.count { isToday(it.createdAt) && it.category == "예약" }

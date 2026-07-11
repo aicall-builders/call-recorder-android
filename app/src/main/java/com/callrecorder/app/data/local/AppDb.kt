@@ -101,6 +101,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE filePath = :path LIMIT 1")
     suspend fun findByPath(path: String): RecordingEntity?
 
+    @Query("SELECT * FROM recordings WHERE id = :id LIMIT 1")
+    suspend fun findById(id: Long): RecordingEntity?
+
     @Query("SELECT * FROM recordings ORDER BY callStartedAtMillis DESC")
     fun observeAll(): Flow<List<RecordingEntity>>
 
@@ -146,16 +149,19 @@ interface RecordingDao {
     suspend fun countByStatus(status: String): Int
 
     /** 진행 중(대기/업로드/서버분석) 개수 실시간 관찰 — 홈 진행 칩용 */
-    @Query("SELECT COUNT(*) FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING')")
+    @Query("SELECT COUNT(*) FROM recordings WHERE status IN ('AWAITING_APPROVAL','PENDING','UPLOADING','UPLOADED','PROCESSING')")
     fun observeActiveUploadCount(): Flow<Int>
 
     /** 진행 중 목록 실시간 관찰 — 홈 진행 시트용 */
-    @Query("SELECT * FROM recordings WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING') ORDER BY createdAt ASC")
+    @Query("SELECT * FROM recordings WHERE status IN ('AWAITING_APPROVAL','PENDING','UPLOADING','UPLOADED','PROCESSING') ORDER BY createdAt ASC")
     fun observeActiveUploads(): Flow<List<RecordingEntity>>
 
     /** 서버 처리 중(업로드 완료~분석)인 로컬 녹음 — 완료 동기화용 */
     @Query("SELECT * FROM recordings WHERE status IN ('UPLOADED','PROCESSING') AND serverCallId IS NOT NULL")
     suspend fun getServerProcessing(): List<RecordingEntity>
+
+    @Query("SELECT * FROM recordings WHERE status IN ('UPLOADED','PROCESSING') AND serverCallId IS NOT NULL")
+    suspend fun getCancelableServerUploads(): List<RecordingEntity>
 
     /** 서버 요약 완료 시 로컬 상태를 DONE으로 정리 (진행 칩에서 제거) */
     @Query("UPDATE recordings SET status='DONE', updatedAt=:now WHERE serverCallId = :callId")
@@ -166,7 +172,7 @@ interface RecordingDao {
     suspend fun markStaleProcessingDone(threshold: Long, now: Long = System.currentTimeMillis())
 
     /** 진행 중(대기/업로드/분석) 전체를 일괄 취소 */
-    @Query("UPDATE recordings SET status='CANCELED', updatedAt=:now WHERE status IN ('PENDING','UPLOADING','UPLOADED','PROCESSING')")
+    @Query("UPDATE recordings SET status='CANCELED', updatedAt=:now WHERE status IN ('AWAITING_APPROVAL','PENDING','UPLOADING','UPLOADED','PROCESSING')")
     suspend fun cancelAllActive(now: Long = System.currentTimeMillis())
 
     @Query("UPDATE recordings SET status = 'PENDING', updatedAt = :now WHERE status = 'AWAITING_APPROVAL'")
