@@ -73,6 +73,15 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="callrecorder" android:host="oauth" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="dsoh4vn0si08a.cloudfront.net"
+                    android:pathPrefix="/oauth" />
+            </intent-filter>
         </activity>
 
         <!-- 카카오 로그인 콜백 액티비티 -->

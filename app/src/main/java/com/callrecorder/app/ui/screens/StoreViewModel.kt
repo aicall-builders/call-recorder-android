@@ -36,24 +36,8 @@ class StoreViewModel : ViewModel() {
 
     fun ensureActiveStore(onReady: () -> Unit) {
         viewModelScope.launch {
-            if (repo.activeStoreId() != null) { onReady(); return@launch }
-
-            repo.list().fold(
-                onSuccess = { stores ->
-                    val first = stores.firstOrNull()
-                    if (first != null) {
-                        repo.setActive(first.id)
-                        onReady()
-                    } else {
-                        repo.create("내 가게", "기타", null, null).fold(
-                            onSuccess = { onReady() },
-                            onFailure = {
-                                _state.value = _state.value.copy(error = it.message)
-                                onReady()
-                            },
-                        )
-                    }
-                },
+            repo.ensureActiveStoreId().fold(
+                onSuccess = { onReady() },
                 onFailure = {
                     _state.value = _state.value.copy(error = it.message)
                     onReady()

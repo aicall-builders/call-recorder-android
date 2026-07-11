@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.R
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
@@ -322,26 +321,12 @@ private fun ExternalCalendarBottomSheetContent(
 ) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
-    val redirectBase = "https://dk1k75g0ji3vw.cloudfront.net/oauth"
+    val redirectBase = "https://dsoh4vn0si08a.cloudfront.net/oauth"
     val provider = "google"
     val isConnected = state.connections.any { it.provider == provider }
-    val bridge = CallRecorderApp.instance.container.calendarOAuthBridge
-    val pending by bridge.pending.collectAsState()
 
     LaunchedEffect(Unit) {
         vm.loadConnections()
-    }
-
-    LaunchedEffect(pending) {
-        pending?.let { cb ->
-            vm.completeOAuth(
-                provider = cb.provider,
-                code = cb.code,
-                redirectUri = "$redirectBase/${cb.provider}",
-                state = cb.state,
-            )
-            bridge.consume()
-        }
     }
 
     Column(
@@ -428,37 +413,24 @@ private fun ExternalCalendarBottomSheetContent(
             ExternalCalendarSheetButton(
                 label = "취소",
                 filled = false,
-                enabled = !state.loading,
+                enabled = !state.actionLoading,
                 onClick = onDismiss,
                 modifier = Modifier.weight(1f),
             )
             ExternalCalendarSheetButton(
                 label = if (isConnected) "연동 해제" else "연동하기",
                 filled = true,
-                enabled = !state.loading,
-                showProgress = state.loading,
+                enabled = !state.actionLoading,
+                showProgress = state.actionLoading,
                 onClick = {
                     if (isConnected) {
                         vm.disconnect(provider)
                     } else {
                         val oauthState = "app:" + java.util.UUID.randomUUID().toString()
                         val redirectUri = "$redirectBase/$provider"
-                        val clientId = "141325097922-rnsj0gfhd44nm6evsc2ue4nsungg1f2p.apps.googleusercontent.com"
-                        val params = listOf(
-                            "client_id" to clientId,
-                            "redirect_uri" to redirectUri,
-                            "response_type" to "code",
-                            "scope" to "https://www.googleapis.com/auth/calendar",
-                            "state" to oauthState,
-                            "access_type" to "offline",
-                            "prompt" to "consent",
-                        ).joinToString("&") { "${it.first}=${Uri.encode(it.second)}" }
-                        context.startActivity(
-                            Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("https://accounts.google.com/o/oauth2/v2/auth?$params"),
-                            ),
-                        )
+                        vm.getOAuthUrl(provider, redirectUri, oauthState) { authUrl ->
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                        }
                     }
                 },
                 modifier = Modifier.weight(1f),

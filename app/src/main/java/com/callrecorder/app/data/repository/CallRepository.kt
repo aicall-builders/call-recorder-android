@@ -9,6 +9,7 @@ import com.callrecorder.app.data.model.*
 import com.callrecorder.app.util.SafeLog
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
+import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -46,7 +47,23 @@ class CallRepository(
     /** AI 요약문 사용자 수정 저장 (PATCH /calls/{id}) */
     suspend fun updateSummary(callId: String, summary: String): Result<Unit> =
         runCatching {
-            api.updateCall(callId, UpdateCallRequest(summary = summary))
+            val response = api.updateCall(callId, UpdateCallRequest(summary = summary))
+            if (!response.isSuccessful) error("update summary failed: HTTP ${response.code()}")
+            Unit
+        }
+
+    /** AI 요약 줄글 + 항목 키워드 저장 (PATCH /calls/{id}) */
+    suspend fun updateSummaryAndKeywords(
+        callId: String,
+        summary: String?,
+        internalKeywords: JsonObject,
+    ): Result<Unit> =
+        runCatching {
+            val response = api.updateCall(
+                callId,
+                UpdateCallRequest(summary = summary, internalKeywords = internalKeywords),
+            )
+            if (!response.isSuccessful) error("update summary failed: HTTP ${response.code()}")
             Unit
         }
 
@@ -58,7 +75,9 @@ class CallRepository(
     /** 업로드 큐에서 제거 (CANCELED). 폰 녹음 파일은 그대로 두고, 재스캔돼도 재업로드 안 함. */
     suspend fun cancelUpload(id: Long): Result<Unit> = runCatching {
         val rec = dao.findById(id)
-        val callId = rec?.serverCallId?.takeIf { it.isNotBlank() }
+        val shouldCancelServer = rec?.status == RecordingStatus.UPLOADED ||
+                rec?.status == RecordingStatus.PROCESSING
+        val callId = rec?.serverCallId?.takeIf { it.isNotBlank() && shouldCancelServer }
         if (callId != null) {
             val response = api.cancelCallProcessing(callId)
             if (!response.isSuccessful) {

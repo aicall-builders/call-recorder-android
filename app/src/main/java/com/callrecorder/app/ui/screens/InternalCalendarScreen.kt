@@ -38,7 +38,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.R
 import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.model.CallCategoryCode
@@ -760,25 +759,10 @@ fun ExternalCalendarScreen(
 private fun ExternalCalendarTab(vm: CalendarViewModel) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
-    val redirectBase = "https://dk1k75g0ji3vw.cloudfront.net/oauth"
+    val redirectBase = "https://dsoh4vn0si08a.cloudfront.net/oauth"
 
     LaunchedEffect(Unit) {
         vm.ensureConnectionsLoaded()
-    }
-
-    // 브라우저에서 callrecorder://oauth/{provider} 딥링크로 돌아오면 앱 토큰으로 직접 완료
-    val bridge = CallRecorderApp.instance.container.calendarOAuthBridge
-    val pending by bridge.pending.collectAsState()
-    LaunchedEffect(pending) {
-        pending?.let { cb ->
-            vm.completeOAuth(
-                provider = cb.provider,
-                code = cb.code,
-                redirectUri = "$redirectBase/${cb.provider}",  // 인가 때와 동일해야 토큰 교환 성공
-                state = cb.state,
-            )
-            bridge.consume()
-        }
     }
 
     // 캘린더 연동은 구글만 지원 (로그인은 카카오/구글 그대로 — 별개 흐름)
@@ -805,44 +789,9 @@ private fun ExternalCalendarTab(vm: CalendarViewModel) {
                         // state 앞에 "app:" 마커 -> 웹 콜백이 로그인/웹연결이 아니라 "앱 릴레이"로 인식
                         val oauthState = "app:" + java.util.UUID.randomUUID().toString()
                         val redirectUri = "$redirectBase/$provider"
-                        val url = when (provider) {
-                            "google" -> {
-                                val clientId = "141325097922-rnsj0gfhd44nm6evsc2ue4nsungg1f2p.apps.googleusercontent.com"
-                                val params = listOf(
-                                    "client_id" to clientId,
-                                    "redirect_uri" to redirectUri,
-                                    "response_type" to "code",
-                                    "scope" to "https://www.googleapis.com/auth/calendar",
-                                    "state" to oauthState,
-                                    "access_type" to "offline",
-                                    "prompt" to "consent"
-                                ).joinToString("&") { "${it.first}=${Uri.encode(it.second)}" }
-                                "https://accounts.google.com/o/oauth2/v2/auth?$params"
-                            }
-                            "kakao" -> {
-                                val clientId = "a05635006ea378df6a0a4ba7de8aed61"
-                                val params = listOf(
-                                    "client_id" to clientId,
-                                    "redirect_uri" to redirectUri,
-                                    "response_type" to "code",
-                                    "scope" to "talk_calendar",
-                                    "state" to oauthState
-                                ).joinToString("&") { "${it.first}=${Uri.encode(it.second)}" }
-                                "https://kauth.kakao.com/oauth/authorize?$params"
-                            }
-                            "naver" -> {
-                                val clientId = "ZkYLir0G86UhIB264uO0"
-                                val params = listOf(
-                                    "client_id" to clientId,
-                                    "redirect_uri" to redirectUri,
-                                    "response_type" to "code",
-                                    "state" to oauthState
-                                ).joinToString("&") { "${it.first}=${Uri.encode(it.second)}" }
-                                "https://nid.naver.com/oauth2.0/authorize?$params"
-                            }
-                            else -> null
+                        vm.getOAuthUrl(provider, redirectUri, oauthState) { authUrl ->
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
                         }
-                        url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
                     },
                     onDisconnect = { vm.disconnect(provider) },
                 )

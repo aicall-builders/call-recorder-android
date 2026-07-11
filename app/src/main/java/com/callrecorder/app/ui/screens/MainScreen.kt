@@ -64,6 +64,7 @@ import com.callrecorder.app.onboarding.rememberFeatureTourController
 import com.callrecorder.app.onboarding.shouldShowFeatureTour
 import com.callrecorder.app.onboarding.tourTarget
 import com.callrecorder.app.ui.theme.AppColors
+import com.callrecorder.app.worker.UploadWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -156,7 +157,7 @@ fun MainScreen(
                         }
                     }
 
-                    val storeId = container.storeRepo.activeStoreId() ?: ""
+                    val storeId = container.storeRepo.ensureActiveStoreId().getOrNull().orEmpty()
                     val durationSeconds = readAudioDurationSeconds(destFile.absolutePath)
 
                     val insertedId = recordingDao.insert(
@@ -168,19 +169,22 @@ fun MainScreen(
                             callStartedAtMillis = System.currentTimeMillis(),
                             counterpartNumber = null,
                             storeId = storeId,
-                            status = RecordingStatus.AWAITING_APPROVAL,
+                            status = RecordingStatus.PENDING,
                             category = CallCategory.UNCLASSIFIED,
                         )
                     )
                     if (insertedId == -1L) {
                         recordingDao.findByPath(destFile.absolutePath)?.let { existing ->
-                            recordingDao.updateStatus(existing.id, RecordingStatus.AWAITING_APPROVAL)
+                            recordingDao.updateStatus(existing.id, RecordingStatus.PENDING)
                         }
                     }
+                    UploadWorker.enqueueOneShot(context)
                     homeVm.refresh()
                     approvalRefreshKey += 1
                     delay(300)
-                    showApproval = true
+                    callDetailId = null
+                    openCallsOnPendingTab = true
+                    selected = BottomTab.CALLS
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }

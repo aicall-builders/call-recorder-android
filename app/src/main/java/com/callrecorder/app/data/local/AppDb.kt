@@ -159,6 +159,9 @@ interface RecordingDao {
     @Query("UPDATE recordings SET serverCallId = :callId, status = :status, updatedAt = :now WHERE id = :id")
     suspend fun setServerCallId(id: Long, callId: String, status: String, now: Long = System.currentTimeMillis())
 
+    @Query("UPDATE recordings SET storeId = :storeId, updatedAt = :now WHERE id = :id")
+    suspend fun updateStoreId(id: Long, storeId: String, now: Long = System.currentTimeMillis())
+
     @Query("UPDATE recordings SET status = :status, errorMessage = :err, updatedAt = :now WHERE id = :id")
     suspend fun setError(id: Long, status: String, err: String?, now: Long = System.currentTimeMillis())
 

@@ -72,7 +72,7 @@ class RecordingObserverService : Service() {
         val app = applicationContext as CallRecorderApp
         pendingJob?.cancel()
         pendingJob = scope.launch {
-            val storeId = app.container.tokenStore.getActiveStore() ?: return@launch
+            val storeId = app.container.storeRepo.ensureActiveStoreId().getOrNull() ?: return@launch
             if (app.container.tokenStore.getAccessToken().isNullOrBlank()) return@launch
 
             // 최근 1시간 내 파일만 검사 (방금 생긴 통화 녹음)

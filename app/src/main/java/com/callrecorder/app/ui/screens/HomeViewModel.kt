@@ -10,6 +10,7 @@ import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
 import com.callrecorder.app.data.model.CustomerListItem
+import com.callrecorder.app.worker.UploadWorker
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,6 +31,9 @@ data class UploadItem(
     val id: Long,
     val name: String,
     val phase: String,   // "대기중" / "업로드중" / "분석중"
+    val status: String,
+    val errorMessage: String? = null,
+    val canRetry: Boolean = false,
 )
 
 data class HomeUiState(
@@ -77,6 +81,7 @@ class HomeViewModel : ViewModel() {
     private val retriedUploadedProcessIds = mutableSetOf<String>()
     private val retriedServerProcessingIds = mutableSetOf<String>()
     private var hasExternalCalendarConnection: Boolean? = null
+    private var pendingUploadKickStarted = false
 
     init {
         syncSettingsFromPrefs()
@@ -99,6 +104,9 @@ class HomeViewModel : ViewModel() {
                             RecordingStatus.FAILED -> "실패"
                             else -> "서버 분석 중"   // UPLOADED / PROCESSING
                         },
+                        status = it.status,
+                        errorMessage = it.errorMessage,
+                        canRetry = it.status == RecordingStatus.FAILED,
                     )
                 }
                 val runningCount = list.count {
@@ -106,6 +114,10 @@ class HomeViewModel : ViewModel() {
                             it.status == RecordingStatus.UPLOADING ||
                             it.status == RecordingStatus.UPLOADED ||
                             it.status == RecordingStatus.PROCESSING
+                }
+                if (!pendingUploadKickStarted && list.any { it.status == RecordingStatus.PENDING }) {
+                    pendingUploadKickStarted = true
+                    UploadWorker.enqueueOneShot(CallRecorderApp.instance.applicationContext)
                 }
                 _state.value = _state.value.copy(
                     uploadingCount = runningCount,
@@ -489,6 +501,19 @@ class HomeViewModel : ViewModel() {
             callRepo.cancelUpload(id).onFailure {
                 _state.value = _state.value.copy(error = it.message ?: "서버 분석 취소에 실패했어요")
             }
+        }
+    }
+
+    /** 실패한 업로드를 사용자가 직접 다시 시도. */
+    fun retryUpload(id: Long) {
+        viewModelScope.launch {
+            val storeId = storeRepo.ensureActiveStoreId().getOrNull()
+            if (!storeId.isNullOrBlank()) {
+                recordingDao.updateStoreId(id, storeId)
+            }
+            recordingDao.updateStatus(id, RecordingStatus.PENDING)
+            pendingUploadKickStarted = false
+            UploadWorker.enqueueOneShot(CallRecorderApp.instance.applicationContext)
         }
     }
 

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="auth_prefs.xml" />
+    <exclude domain="database" path="callrec.db" />
+    <exclude domain="database" path="callrec.db-shm" />
+    <exclude domain="database" path="callrec.db-wal" />
 </full-backup-content>

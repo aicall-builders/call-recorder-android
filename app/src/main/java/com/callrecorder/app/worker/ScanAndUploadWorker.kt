@@ -37,8 +37,9 @@ class ScanAndUploadWorker(
         val tokenStore = app.container.tokenStore
 
         // 로그인되어 있고 활성 가게가 있을 때만 동작
-        val storeId = tokenStore.getActiveStore() ?: return Result.success()
         if (tokenStore.getAccessToken().isNullOrBlank()) return Result.success()
+        val storeId = app.container.storeRepo.ensureActiveStoreId().getOrNull()
+            ?: return Result.success()
 
         // 자동 업로드 설정 (false=수동 승인). 신규 파일 등록 상태를 결정한다.
         val autoUpload = app.isAutoUploadEnabled()

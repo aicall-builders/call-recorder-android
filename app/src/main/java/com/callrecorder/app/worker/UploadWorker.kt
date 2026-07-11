@@ -115,7 +115,7 @@ class UploadWorker(
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
-                UNIQUE_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, req
+                UNIQUE_NAME, ExistingWorkPolicy.REPLACE, req
             )
         }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -107,11 +108,13 @@ fun CallSummaryDetailScreen(
                     summaryMessage = state.summaryMessage,
                     connectedCalendars = state.connectedCalendars,
                     showCalendarPicker = state.showCalendarPicker,
+                    originalSummary = state.originalSummary,
+                    originalKeywordRows = state.originalKeywordRows,
                     transcript = state.detail!!.transcript,
                     onBack = onBack,
                     onToggleCalendarPicker = { vm.toggleCalendarPicker(callId) },
                     onAddToCalendar = { provider -> vm.addToCalendar(callId, provider) },
-                    onSummarySave = { summary -> vm.updateSummary(callId, summary) },
+                    onSummarySave = { summary, rows -> vm.updateSummaryAndKeywords(callId, summary, rows) },
                 )
             }
         }
@@ -128,11 +131,13 @@ private fun DetailBody(
     summaryMessage: String?,
     connectedCalendars: List<String>,
     showCalendarPicker: Boolean,
+    originalSummary: String,
+    originalKeywordRows: List<Pair<String, String>>,
     transcript: String?,
     onBack: () -> Unit,
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
-    onSummarySave: (String) -> Unit,
+    onSummarySave: (String, List<Pair<String, String>>) -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
@@ -174,6 +179,8 @@ private fun DetailBody(
                     summarySaving = summarySaving,
                     summaryMessage = summaryMessage,
                     showCalendarPicker = showCalendarPicker,
+                    originalSummary = originalSummary,
+                    originalKeywordRows = originalKeywordRows,
                     onToggleCalendarPicker = onToggleCalendarPicker,
                     onAddToCalendar = onAddToCalendar,
                     onSummarySave = onSummarySave,
@@ -439,9 +446,11 @@ private fun AnalysisTabContent(
     summarySaving: Boolean,
     summaryMessage: String?,
     showCalendarPicker: Boolean,
+    originalSummary: String,
+    originalKeywordRows: List<Pair<String, String>>,
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
-    onSummarySave: (String) -> Unit,
+    onSummarySave: (String, List<Pair<String, String>>) -> Unit,
 ) {
     var editingSummary by remember(call.id, call.summary) { mutableStateOf(false) }
     var summaryDraft by remember(call.id, call.summary) { mutableStateOf(call.summary.orEmpty()) }
@@ -463,6 +472,13 @@ private fun AnalysisTabContent(
                 }.toList()
         } catch (_: Exception) { emptyList() }
     }
+    var keywordDraftRows by remember(call.id, keywordRows) { mutableStateOf(keywordRows) }
+    LaunchedEffect(editingSummary) {
+        if (editingSummary) {
+            summaryDraft = call.summary.orEmpty()
+            keywordDraftRows = keywordRows
+        }
+    }
 
     Surface(color = SummaryBoxBg, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
         Column {
@@ -472,22 +488,43 @@ private fun AnalysisTabContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("✦ AI 요약", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (!call.summary.isNullOrBlank() && !editingSummary) {
-                        TextButton(
-                            onClick = {
-                                summaryDraft = call.summary.orEmpty()
-                                editingSummary = true
-                            },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    Text("✦ AI 요약", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink))
+                    if ((!call.summary.isNullOrBlank() || keywordRows.isNotEmpty()) && !editingSummary) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clickable {
+                                    summaryDraft = call.summary.orEmpty()
+                                    keywordDraftRows = keywordRows
+                                    editingSummary = true
+                                },
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                "수정",
-                                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Ink),
+                            Image(
+                                painter = painterResource(id = R.drawable.call_icon_edit),
+                                contentDescription = "수정",
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }
+                }
+                if (editingSummary) {
+                    Text(
+                        "원본복원",
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable(enabled = !summarySaving) {
+                                summaryDraft = originalSummary
+                                keywordDraftRows = originalKeywordRows
+                            },
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            color = if (summarySaving) LabelGray else LabelGrayActive,
+                        ),
+                    )
+                } else {
                     ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
                         onToggleCalendarPicker()
                     }
@@ -495,7 +532,7 @@ private fun AnalysisTabContent(
             }
 
             // 캘린더 선택 시트
-            if (showCalendarPicker && connectedCalendars.isNotEmpty()) {
+            if (!editingSummary && showCalendarPicker && connectedCalendars.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = Color.White,
@@ -528,17 +565,60 @@ private fun AnalysisTabContent(
             // 키워드 줄 (라벨 / 값)
             if (keywordRows.isNotEmpty()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
-                    keywordRows.forEachIndexed { idx, (label, value) ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                label,
-                                modifier = Modifier.width(62.dp),
-                                style = TextStyle(fontSize = 12.sp, color = if (idx == 0) LabelGrayActive else LabelGray),
-                            )
-                            Text(value, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
+                    if (editingSummary) {
+                        keywordDraftRows.forEachIndexed { index, (label, value) ->
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    InlineSummaryTextField(
+                                        value = label,
+                                        onValueChange = { next ->
+                                            keywordDraftRows = keywordDraftRows.toMutableList().also {
+                                                it[index] = next to it[index].second
+                                            }
+                                        },
+                                        textStyle = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
+                                        modifier = Modifier.width(62.dp),
+                                    )
+                                    InlineSummaryTextField(
+                                        value = value,
+                                        onValueChange = { next ->
+                                            keywordDraftRows = keywordDraftRows.toMutableList().also {
+                                                it[index] = it[index].first to next
+                                            }
+                                        },
+                                        textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(0.8.dp)
+                                        .background(AppColors.DeepBrown200),
+                                )
+                            }
+                        }
+                    } else {
+                        keywordRows.forEach { (label, value) ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    label,
+                                    modifier = Modifier.width(62.dp),
+                                    style = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
+                                )
+                                Text(value, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
+                            }
                         }
                     }
                 }
@@ -556,28 +636,28 @@ private fun AnalysisTabContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 24.dp),
+                        .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 24.dp),
                 ) {
-                    OutlinedTextField(
-                        value = summaryDraft,
-                        onValueChange = { summaryDraft = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 132.dp),
-                        textStyle = TextStyle(fontSize = 14.sp, color = Ink, lineHeight = 21.sp),
-                        placeholder = {
-                            Text("요약 내용을 입력해 주세요.", style = TextStyle(fontSize = 14.sp, color = LabelGray))
-                        },
+                    Surface(
+                        color = Color.White,
                         shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Ink,
-                            unfocusedTextColor = Ink,
-                            focusedBorderColor = Ink,
-                            unfocusedBorderColor = AppColors.DeepBrown200,
-                            focusedContainerColor = Color.White,
-                            unfocusedContainerColor = Color.White,
-                            cursorColor = Ink,
-                        ),
-                    )
-                    Spacer(Modifier.height(10.dp))
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        InlineSummaryTextField(
+                            value = summaryDraft,
+                            onValueChange = { summaryDraft = it },
+                            textStyle = TextStyle(fontSize = 14.sp, color = Ink, lineHeight = 21.sp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 132.dp)
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            singleLine = false,
+                            placeholder = {
+                                Text("요약 내용을 입력해 주세요.", style = TextStyle(fontSize = 14.sp, color = LabelGray))
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -589,6 +669,7 @@ private fun AnalysisTabContent(
                             modifier = Modifier.weight(1f),
                         ) {
                             summaryDraft = call.summary.orEmpty()
+                            keywordDraftRows = keywordRows
                             editingSummary = false
                         }
                         SummaryEditButton(
@@ -597,7 +678,7 @@ private fun AnalysisTabContent(
                             enabled = !summarySaving,
                             modifier = Modifier.weight(1f),
                         ) {
-                            onSummarySave(summaryDraft)
+                            onSummarySave(summaryDraft, keywordDraftRows)
                         }
                     }
                 }
@@ -634,6 +715,30 @@ private fun ActionCircle(
             Image(painter = painterResource(iconRes), contentDescription = null, modifier = Modifier.size(24.dp))
         }
     }
+}
+
+@Composable
+private fun InlineSummaryTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    textStyle: TextStyle,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,
+    placeholder: (@Composable () -> Unit)? = null,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        singleLine = singleLine,
+        textStyle = textStyle,
+        decorationBox = { innerTextField ->
+            Box {
+                if (value.isBlank() && placeholder != null) placeholder()
+                innerTextField()
+            }
+        },
+    )
 }
 
 @Composable

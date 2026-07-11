@@ -1,5 +1,6 @@
 package com.callrecorder.app.ui.screens
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
@@ -19,6 +20,7 @@ data class CalendarUiState(
     val events: List<CalendarEvent> = emptyList(),
     val manualEvents: List<ManualCalendarEventEntity> = emptyList(),
     val eventsLoading: Boolean = false,
+    val actionLoading: Boolean = false,
     val error: String? = null,
 )
 
@@ -213,37 +215,46 @@ class CalendarViewModel : ViewModel() {
 
     fun getOAuthUrl(provider: String, redirectUri: String, state: String, onResult: (String) -> Unit) {
         viewModelScope.launch {
+            _state.value = _state.value.copy(actionLoading = true, error = null)
             calendarRepo.getOAuthUrl(provider, redirectUri, state).fold(
-                onSuccess = { url -> onResult(url) },
-                onFailure = { _state.value = _state.value.copy(error = it.message) }
+                onSuccess = { url ->
+                    Log.d("CalendarOAuth", "authorizeUrl=$url")
+                    _state.value = _state.value.copy(actionLoading = false)
+                    onResult(url)
+                },
+                onFailure = { _state.value = _state.value.copy(actionLoading = false, error = it.message) }
             )
         }
     }
 
     fun completeOAuth(provider: String, code: String, redirectUri: String, state: String) {
         viewModelScope.launch {
+            _state.value = _state.value.copy(actionLoading = true, error = null)
             calendarRepo.completeOAuth(provider, code, redirectUri, state).fold(
                 onSuccess = {
                     hasExternalCalendarConnection = true
                     monthCache.clear()
                     loadedMonthKey = null
+                    _state.value = _state.value.copy(actionLoading = false)
                     loadConnections()
                 },
-                onFailure = { _state.value = _state.value.copy(error = it.message) }
+                onFailure = { _state.value = _state.value.copy(actionLoading = false, error = it.message) }
             )
         }
     }
 
     fun disconnect(provider: String) {
         viewModelScope.launch {
+            _state.value = _state.value.copy(actionLoading = true, error = null)
             calendarRepo.disconnect(provider).fold(
                 onSuccess = {
                     hasExternalCalendarConnection = null
                     monthCache.clear()
                     loadedMonthKey = null
+                    _state.value = _state.value.copy(actionLoading = false)
                     loadConnections()
                 },
-                onFailure = { _state.value = _state.value.copy(error = it.message) }
+                onFailure = { _state.value = _state.value.copy(actionLoading = false, error = it.message) }
             )
         }
     }

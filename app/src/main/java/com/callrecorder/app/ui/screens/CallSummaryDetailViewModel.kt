@@ -3,8 +3,13 @@ package com.callrecorder.app.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CallDetail
+import com.callrecorder.app.data.model.extractedInfoOrNull
+import com.callrecorder.app.data.model.internalKeywordsMap
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,11 +36,15 @@ data class CallSummaryDetailUiState(
     val showCalendarPicker: Boolean = false,
     val summarySaving: Boolean = false,
     val summaryMessage: String? = null,
+    val originalCallId: String? = null,
+    val originalSummary: String = "",
+    val originalKeywordRows: List<Pair<String, String>> = emptyList(),
 )
 
 class CallSummaryDetailViewModel : ViewModel() {
 
     private val callRepo = CallRecorderApp.instance.container.callRepo
+    private val calendarRepo = CallRecorderApp.instance.container.calendarRepo
 
     private val _state = MutableStateFlow(CallSummaryDetailUiState())
     val state: StateFlow<CallSummaryDetailUiState> = _state.asStateFlow()
@@ -58,7 +67,14 @@ class CallSummaryDetailViewModel : ViewModel() {
             val detailResult = detailDeferred.await()
             detailResult.fold(
                 onSuccess = { detail ->
-                    _state.value = _state.value.copy(loading = false, detail = detail, error = null)
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        detail = detail,
+                        error = null,
+                        originalCallId = callId,
+                        originalSummary = detail.call.summary.orEmpty(),
+                        originalKeywordRows = detail.call.internalKeywordsMap().toList(),
+                    )
                 },
                 onFailure = { e ->
                     _state.value = _state.value.copy(loading = false, error = e.message)
@@ -100,6 +116,57 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
     }
 
+    fun updateSummaryAndKeywords(
+        callId: String,
+        summary: String,
+        keywordRows: List<Pair<String, String>>,
+    ) {
+        val trimmedSummary = summary.trim()
+        val normalizedRows = keywordRows
+            .map { (label, value) -> label.trim() to value.trim() }
+            .filter { (label, value) -> label.isNotBlank() || value.isNotBlank() }
+
+        if (trimmedSummary.isBlank() && normalizedRows.isEmpty()) {
+            _state.value = _state.value.copy(summaryMessage = "요약 내용을 입력해 주세요.")
+            return
+        }
+
+        val keywordObject = JsonObject(
+            normalizedRows
+                .filter { (label, _) -> label.isNotBlank() }
+                .associate { (label, value) -> label to JsonPrimitive(value) }
+        )
+
+        viewModelScope.launch {
+            _state.value = _state.value.copy(summarySaving = true, summaryMessage = null)
+            callRepo.updateSummaryAndKeywords(
+                callId = callId,
+                summary = trimmedSummary.ifBlank { null },
+                internalKeywords = keywordObject,
+            ).fold(
+                onSuccess = {
+                    val current = _state.value.detail
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약을 저장했어요.",
+                        detail = current?.copy(
+                            call = current.call.copy(
+                                summary = trimmedSummary,
+                                internalKeywordsRaw = keywordObject,
+                            )
+                        ),
+                    )
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약 저장에 실패했어요. ${it.message.orEmpty()}".trim(),
+                    )
+                },
+            )
+        }
+    }
+
     fun addToCalendar(callId: String, provider: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
@@ -124,6 +191,75 @@ class CallSummaryDetailViewModel : ViewModel() {
                         calendarMessage = "❌ ${it.message}"
                     )
                 }
+            )
+        }
+    }
+
+    fun addToInternalCalendar(callId: String) {
+        val detail = _state.value.detail
+        val call = detail?.call
+        if (call == null) {
+            _state.value = _state.value.copy(calendarMessage = "통화 정보를 먼저 불러와 주세요.")
+            return
+        }
+
+        val info = call.extractedInfoOrNull()
+        val date = info?.date?.takeIf { it.isNotBlank() }
+        val time = info?.time?.takeIf { it.isNotBlank() } ?: "00:00"
+        if (date.isNullOrBlank()) {
+            _state.value = _state.value.copy(calendarMessage = "등록할 일정 날짜를 찾지 못했어요.")
+            return
+        }
+
+        val title = listOfNotNull(
+            info.customerName?.takeIf { it.isNotBlank() },
+            call.callerName?.takeIf { it.isNotBlank() },
+            call.callerNumber?.takeIf { it.isNotBlank() },
+        ).firstOrNull() ?: "통화 일정"
+
+        val description = buildString {
+            val summary = call.summary?.takeIf { it.isNotBlank() }
+            val notes = info.specialNotes?.takeIf { it.isNotBlank() }
+            if (summary != null) append(summary)
+            if (notes != null) {
+                if (isNotBlank()) append("\n")
+                append(notes)
+            }
+            if (isBlank()) append("통화 분석에서 등록한 일정입니다.")
+        }
+
+        val chip = when {
+            info.categoryCode == "reservation" || call.category == "예약" -> "RESERVATION"
+            info.categoryCode == "inquiry" || call.category == "문의" -> "INQUIRY"
+            else -> "OTHER"
+        }
+
+        viewModelScope.launch {
+            _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
+            calendarRepo.saveManualEvent(
+                ManualCalendarEventEntity(
+                    id = "call-$callId",
+                    title = title,
+                    date = date,
+                    time = time,
+                    description = description,
+                    chip = chip,
+                    reminderEnabled = true,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            ).fold(
+                onSuccess = {
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        calendarMessage = "내부 캘린더에 등록됐어요.",
+                    )
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        calendarMessage = "내부 캘린더 등록에 실패했어요. ${it.message.orEmpty()}".trim(),
+                    )
+                },
             )
         }
     }
@@ -182,19 +318,7 @@ class CallSummaryDetailViewModel : ViewModel() {
     }
 
     fun toggleCalendarPicker(callId: String) {
-        val nextOpen = !_state.value.showCalendarPicker
-        if (nextOpen && _state.value.connectedCalendars.isEmpty()) {
-            loadCalendars(callId = callId, openAfterLoad = true)
-            return
-        }
-        if (nextOpen && _state.value.connectedCalendars.size == 1) {
-            addToCalendar(callId, _state.value.connectedCalendars.first())
-            return
-        }
-        _state.value = _state.value.copy(
-            showCalendarPicker = nextOpen,
-            calendarMessage = null,
-        )
+        addToInternalCalendar(callId)
     }
 
 

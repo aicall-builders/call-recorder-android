@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +89,7 @@ fun CallSummaryListScreen(
         onCallClick = onCallClick,
         onDeleteCall = { vm.deleteCall(it) },
         onDeleteUpload = { vm.deleteUpload(it) },
+        onRetryUpload = { vm.retryUpload(it) },
         onApproveRecording = { id ->
             approvalVm.approveOne(id)
             vm.refresh(silent = true)
@@ -111,6 +114,7 @@ private fun CallSummaryListContent(
     onCallClick: (String) -> Unit,
     onDeleteCall: (String) -> Unit,
     onDeleteUpload: (Long) -> Unit,
+    onRetryUpload: (Long) -> Unit,
     onApproveRecording: (Long) -> Unit,
     onDeleteRecording: (Long) -> Unit,
     onPendingTabVisible: () -> Unit = {},
@@ -124,6 +128,7 @@ private fun CallSummaryListContent(
     var filter by remember { mutableStateOf(CallFilter.ALL) }
     var tab by remember { mutableStateOf(initialTab) }
     var completionBaselineIds by remember { mutableStateOf<Set<String>?>(null) }
+    var pendingDeleteCallId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(startOnPendingTab) {
         if (startOnPendingTab) {
@@ -225,6 +230,35 @@ private fun CallSummaryListContent(
 
     LaunchedEffect(tab) {
         if (tab == AnalysisTab.PENDING) onPendingTabVisible()
+    }
+
+    pendingDeleteCallId?.let { callId ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteCallId = null },
+            text = {
+                Text(
+                    "통화 분석 데이터를 정말 삭제하시겠습니까?",
+                    style = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, color = Ink),
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteCallId = null }) {
+                    Text("취소", color = SubInk)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeleteCallId = null
+                        onDeleteCall(callId)
+                    },
+                ) {
+                    Text("확인", color = AppColors.SignalRed500, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(18.dp),
+        )
     }
 
     Scaffold(containerColor = ScreenBg) { padding ->
@@ -357,7 +391,10 @@ private fun CallSummaryListContent(
                                             .background(SheetBg)
                                             .padding(horizontal = 16.dp, vertical = 4.dp),
                                     ) {
-                                        ActiveUploadCallCard(upload = upload)
+                                        ActiveUploadCallCard(
+                                            upload = upload,
+                                            onRetry = { onRetryUpload(upload.id) },
+                                        )
                                     }
                                 }
                             }
@@ -376,7 +413,13 @@ private fun CallSummaryListContent(
                         items(calls, key = { it.id }) { call ->
                             Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
                                 SwipeRevealDeleteBox(
-                                    onDelete = { onDeleteCall(call.id) },
+                                    onDelete = {
+                                        if (tab == AnalysisTab.DONE) {
+                                            pendingDeleteCallId = call.id
+                                        } else {
+                                            onDeleteCall(call.id)
+                                        }
+                                    },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 4.dp),
@@ -489,6 +532,7 @@ private fun CallSummaryPendingWithApprovalsPreview() {
         onCallClick = {},
         onDeleteCall = {},
         onDeleteUpload = {},
+        onRetryUpload = {},
         onApproveRecording = {},
         onDeleteRecording = {},
         initialTab = AnalysisTab.PENDING,
@@ -674,7 +718,10 @@ private fun PendingApprovalActionButton(
 }
 
 @Composable
-private fun ActiveUploadCallCard(upload: UploadItem) {
+private fun ActiveUploadCallCard(
+    upload: UploadItem,
+    onRetry: () -> Unit,
+) {
     Surface(
         color = SheetBg,
         shape = RoundedCornerShape(14.dp),
@@ -696,7 +743,11 @@ private fun ActiveUploadCallCard(upload: UploadItem) {
                             style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Ink),
                             maxLines = 1,
                         )
-                        PhaseBadge(upload.phase.toPendingPhase())
+                        if (upload.canRetry) {
+                            RetryUploadButton(onClick = onRetry)
+                        } else {
+                            PhaseBadge(upload.phase.toPendingPhase())
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -711,7 +762,8 @@ private fun ActiveUploadCallCard(upload: UploadItem) {
                             when (upload.phase) {
                                 "대기중" -> "업로드를 준비하고 있어요."
                                 "업로드중" -> "파일을 업로드하고 있어요."
-                                "실패" -> "업로드에 실패했어요. 네트워크 연결 후 다시 시도됩니다."
+                                "실패" -> upload.errorMessage?.takeIf { it.isNotBlank() }
+                                    ?: "업로드에 실패했어요. 재시도 버튼을 눌러 다시 시도해 주세요."
                                 else -> "분석이 끝나면 알려드릴게요."
                             },
                             style = TextStyle(fontSize = 13.sp, color = if (upload.phase == "실패") AppColors.SignalRed500 else LabelGray),
@@ -720,6 +772,26 @@ private fun ActiveUploadCallCard(upload: UploadItem) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RetryUploadButton(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = Color.White,
+        shape = RoundedCornerShape(999.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.SignalRed500),
+    ) {
+        Text(
+            "재시도",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = TextStyle(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.SignalRed500,
+            ),
+        )
     }
 }
 

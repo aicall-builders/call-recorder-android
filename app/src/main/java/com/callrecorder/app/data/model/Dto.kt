@@ -122,6 +122,7 @@ data class UpdateCallRequest(
     @SerialName("caller_number") val callerNumber: String? = null,
     @SerialName("caller_name") val callerName: String? = null,
     val summary: String? = null,
+    @SerialName("internal_keywords") val internalKeywords: JsonElement? = null,
 )
 
 /** 통화 상태 상수 (백엔드 소문자 응답에 맞춤)

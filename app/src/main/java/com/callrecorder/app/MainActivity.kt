@@ -29,6 +29,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.callrecorder.app.ui.screens.AuthViewModel
+import com.callrecorder.app.ui.screens.CalendarViewModel
 import com.callrecorder.app.ui.screens.IntroScreen
 import com.callrecorder.app.ui.screens.KakaoLinkedScreen
 import com.callrecorder.app.ui.screens.LoginScreen
@@ -72,13 +73,20 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * callrecorder://oauth/{provider}?code=...&state=... 형태의 외부 캘린더 OAuth 콜백을
+     * callrecorder://oauth/{provider}?code=...&state=...
+     * https://dsoh4vn0si08a.cloudfront.net/oauth/{provider}?code=...&state=...
+     * 형태의 외부 캘린더 OAuth 콜백을
      * 받아 브릿지로 전달한다. 실제 토큰 교환은 ExternalCalendarTab이 앱의 Firebase 토큰으로 수행.
      */
     private fun handleCalendarOAuthDeepLink(intent: Intent?) {
         val data: Uri = intent?.data ?: return
-        if (data.scheme != "callrecorder" || data.host != "oauth") return
-        val provider = data.lastPathSegment ?: return
+        val provider = when {
+            data.scheme == "callrecorder" && data.host == "oauth" -> data.lastPathSegment
+            data.scheme == "https" &&
+                data.host == "dsoh4vn0si08a.cloudfront.net" &&
+                data.pathSegments.firstOrNull() == "oauth" -> data.pathSegments.getOrNull(1)
+            else -> null
+        } ?: return
         val code = data.getQueryParameter("code") ?: return
         val state = data.getQueryParameter("state") ?: ""
         CallRecorderApp.instance.container.calendarOAuthBridge.submit(
@@ -91,8 +99,11 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val nav = rememberNavController()
     val auth: AuthViewModel = viewModel()
+    val calendarVm: CalendarViewModel = viewModel()
     val token by auth.isLoggedIn.collectAsState(initial = AuthTokenState.Checking)
     val state by auth.state.collectAsState()
+    val calendarOAuthBridge = CallRecorderApp.instance.container.calendarOAuthBridge
+    val pendingCalendarOAuth by calendarOAuthBridge.pending.collectAsState()
 
     if (token == AuthTokenState.Checking) {
         Box(
@@ -102,6 +113,19 @@ private fun AppRoot() {
             CircularProgressIndicator()
         }
         return
+    }
+
+    LaunchedEffect(pendingCalendarOAuth, token) {
+        val cb = pendingCalendarOAuth ?: return@LaunchedEffect
+        if (token.isNullOrBlank()) return@LaunchedEffect
+        val redirectUri = "https://dsoh4vn0si08a.cloudfront.net/oauth/${cb.provider}"
+        calendarVm.completeOAuth(
+            provider = cb.provider,
+            code = cb.code,
+            redirectUri = redirectUri,
+            state = cb.state,
+        )
+        calendarOAuthBridge.consume()
     }
 
     // 콜드 스타트: 로그인 안 됐으면 INTRO, 로그인됐으면 권한 게이트(PERMISSION) → 자동 통과 시 바로 메인

@@ -28,7 +28,7 @@ fun CalendarScreen(vm: CalendarViewModel = viewModel()) {
     val context = LocalContext.current
 
     // 리다이렉트 URI (웹앱 OAuth 콜백)
-    val redirectBase = "https://dk1k75g0ji3vw.cloudfront.net/oauth"
+    val redirectBase = "https://dsoh4vn0si08a.cloudfront.net/oauth"
 
     val providers = listOf(
         Triple("google", "Google 캘린더", Color(0xFF4285F4)),
