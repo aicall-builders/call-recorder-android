@@ -23,6 +23,7 @@ class CallRepository(
     /** 새 녹음을 DB에 등록 (이미 있으면 ignore). 반환값은 로컬 PK(Long). */
     suspend fun registerLocal(rec: RecordingEntity): Long {
         dao.findByPath(rec.filePath)?.let { return it.id }
+        dao.findActiveByFileNameAndSize(rec.fileName, rec.fileSize)?.let { return it.id }
         return dao.insert(rec)
     }
 

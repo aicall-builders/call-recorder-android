@@ -161,22 +161,27 @@ fun MainScreen(
                     val storeId = container.storeRepo.ensureActiveStoreId().getOrNull().orEmpty()
                     val durationSeconds = readAudioDurationSeconds(destFile.absolutePath)
 
-                    val insertedId = recordingDao.insert(
-                        RecordingEntity(
-                            filePath = destFile.absolutePath,
-                            fileName = fileName,
-                            fileSize = destFile.length(),
-                            durationSeconds = durationSeconds,
-                            callStartedAtMillis = System.currentTimeMillis(),
-                            counterpartNumber = null,
-                            storeId = storeId,
-                            status = RecordingStatus.PENDING,
-                            category = CallCategory.UNCLASSIFIED,
+                    val existing = recordingDao.findActiveByFileNameAndSize(fileName, destFile.length())
+                    if (existing != null) {
+                        destFile.delete()
+                    } else {
+                        val insertedId = recordingDao.insert(
+                            RecordingEntity(
+                                filePath = destFile.absolutePath,
+                                fileName = fileName,
+                                fileSize = destFile.length(),
+                                durationSeconds = durationSeconds,
+                                callStartedAtMillis = System.currentTimeMillis(),
+                                counterpartNumber = null,
+                                storeId = storeId,
+                                status = RecordingStatus.PENDING,
+                                category = CallCategory.UNCLASSIFIED,
+                            )
                         )
-                    )
-                    if (insertedId == -1L) {
-                        recordingDao.findByPath(destFile.absolutePath)?.let { existing ->
-                            recordingDao.updateStatus(existing.id, RecordingStatus.PENDING)
+                        if (insertedId == -1L) {
+                            recordingDao.findByPath(destFile.absolutePath)?.let { existingByPath ->
+                                recordingDao.updateStatus(existingByPath.id, RecordingStatus.PENDING)
+                            }
                         }
                     }
                     UploadWorker.enqueueOneShot(context)

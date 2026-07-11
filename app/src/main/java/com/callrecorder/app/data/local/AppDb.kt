@@ -117,6 +117,16 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE filePath = :path LIMIT 1")
     suspend fun findByPath(path: String): RecordingEntity?
 
+    @Query("""
+        SELECT * FROM recordings
+        WHERE fileName = :fileName
+          AND fileSize = :fileSize
+          AND status != 'CANCELED'
+        ORDER BY updatedAt DESC
+        LIMIT 1
+    """)
+    suspend fun findActiveByFileNameAndSize(fileName: String, fileSize: Long): RecordingEntity?
+
     @Query("SELECT * FROM recordings WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): RecordingEntity?
 
@@ -210,7 +220,7 @@ interface RecordingDao {
         SELECT COUNT(*) FROM recordings
         WHERE fileName = :fileName
           AND fileSize = :fileSize
-          AND status NOT IN ('CANCELED', 'FAILED')
+          AND status != 'CANCELED'
     """)
     suspend fun countActiveByFileNameAndSize(fileName: String, fileSize: Long): Int
 
