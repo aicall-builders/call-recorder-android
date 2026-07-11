@@ -3,6 +3,7 @@ package com.callrecorder.app.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CallDetail
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,9 +40,16 @@ class CallSummaryDetailViewModel : ViewModel() {
     private val _state = MutableStateFlow(CallSummaryDetailUiState())
     val state: StateFlow<CallSummaryDetailUiState> = _state.asStateFlow()
 
-    fun load(callId: String) {
+    fun load(callId: String, initialCall: Call? = null) {
         viewModelScope.launch {
-            _state.value = CallSummaryDetailUiState(loading = true)
+            _state.value = if (initialCall != null) {
+                CallSummaryDetailUiState(
+                    loading = false,
+                    detail = CallDetail(call = initialCall, transcript = initialCall.sttResult),
+                )
+            } else {
+                CallSummaryDetailUiState(loading = true)
+            }
 
             val detailDeferred = async { callRepo.getDetail(callId) }
             val audioDeferred = async { callRepo.getAudioUrl(callId) }

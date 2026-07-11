@@ -55,6 +55,7 @@ import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.local.CallCategory
 import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.data.local.RecordingStatus
+import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.onboarding.FeatureTourOverlay
 import com.callrecorder.app.onboarding.HomeTourSteps
 import com.callrecorder.app.onboarding.TourKeys
@@ -83,6 +84,7 @@ fun MainScreen(
     var selected by remember { mutableStateOf(BottomTab.HOME) }
     var showApproval by remember { mutableStateOf(false) }
     var callDetailId by remember { mutableStateOf<String?>(null) }
+    var callDetailInitial by remember { mutableStateOf<Call?>(null) }
     var noteEditCallId by remember { mutableStateOf<String?>(null) }
     var noteEditTitle by remember { mutableStateOf("통화 메모") }
     var approvalRefreshKey by remember { mutableStateOf(0) }
@@ -127,6 +129,7 @@ fun MainScreen(
         noteEditCallId = null
         selected = BottomTab.CALLS
         callDetailId = callId
+        callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
     }
 
     // 파일 피커 런처 — Scaffold 밖 선언
@@ -203,6 +206,7 @@ fun MainScreen(
                             noteEditCallId = null
                             selected = BottomTab.CALLS
                             callDetailId = callId
+                            callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
                         },
                         vm = homeVm,
                     )
@@ -242,11 +246,15 @@ fun MainScreen(
                             if (callDetailId != null) {
                                 CallSummaryDetailScreen(
                                     callId = callDetailId!!,
+                                    initialCall = callDetailInitial,
                                     onBack = { callDetailId = null },
                                 )
                             } else {
                                 CallSummaryListScreen(
-                                    onCallClick = { callId -> callDetailId = callId },
+                                    onCallClick = { callId ->
+                                        callDetailId = callId
+                                        callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
+                                    },
                                     onNotificationClick = { showNotifications = true },
                                     hasNotification = hasNotification,
                                     startOnPendingTab = openCallsOnPendingTab,

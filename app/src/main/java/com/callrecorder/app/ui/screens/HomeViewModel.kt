@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.local.ManualCalendarEventEntity
+import com.callrecorder.app.data.local.RecordingEntity
 import com.callrecorder.app.data.local.RecordingStatus
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
@@ -47,6 +48,11 @@ data class HomeUiState(
     val activeUploads: List<UploadItem> = emptyList(),
 )
 
+private data class CallsSnapshot(
+    val calls: List<Call>,
+    val listedStoreIds: Set<String>,
+)
+
 class HomeViewModel : ViewModel() {
 
     private val container = CallRecorderApp.instance.container
@@ -69,6 +75,7 @@ class HomeViewModel : ViewModel() {
     private var _allCalls: List<Call> = emptyList()
     private var pollJob: Job? = null
     private val retriedUploadedProcessIds = mutableSetOf<String>()
+    private val retriedServerProcessingIds = mutableSetOf<String>()
     private var hasExternalCalendarConnection: Boolean? = null
 
     init {
@@ -81,6 +88,7 @@ class HomeViewModel : ViewModel() {
     private fun observeUploads() {
         viewModelScope.launch {
             recordingDao.observeActiveUploads().collect { list ->
+                markLocallyStaleProcessingAsFailed(list)
                 val items = list.map {
                     UploadItem(
                         id = it.id,
@@ -89,16 +97,40 @@ class HomeViewModel : ViewModel() {
                             RecordingStatus.PENDING -> "대기중"
                             RecordingStatus.UPLOADING -> "업로드중"
                             RecordingStatus.FAILED -> "실패"
-                            else -> "분석중"   // UPLOADED / PROCESSING
+                            else -> "서버 분석 중"   // UPLOADED / PROCESSING
                         },
                     )
                 }
+                val runningCount = list.count {
+                    it.status == RecordingStatus.PENDING ||
+                            it.status == RecordingStatus.UPLOADING ||
+                            it.status == RecordingStatus.UPLOADED ||
+                            it.status == RecordingStatus.PROCESSING
+                }
                 _state.value = _state.value.copy(
-                    uploadingCount = items.size,
+                    uploadingCount = runningCount,
                     activeUploads = items,
                 )
                 // 진행 중 항목이 있으면 서버 분석이 끝날 때까지 주기적으로 확인해 자동 정리
-                if (items.isNotEmpty()) startPollingForCompletion()
+                if (runningCount > 0) startPollingForCompletion()
+            }
+        }
+    }
+
+    private fun markLocallyStaleProcessingAsFailed(list: List<RecordingEntity>) {
+        val staleThreshold = System.currentTimeMillis() - 10 * 60 * 1000L
+        val staleItems = list.filter {
+            (it.status == RecordingStatus.UPLOADED || it.status == RecordingStatus.PROCESSING) &&
+                    it.updatedAt < staleThreshold
+        }
+        if (staleItems.isEmpty()) return
+        viewModelScope.launch {
+            staleItems.forEach {
+                recordingDao.setError(
+                    it.id,
+                    RecordingStatus.FAILED,
+                    "서버 분석 상태 확인이 지연되고 있어요. 삭제 후 다시 업로드해 주세요.",
+                )
             }
         }
     }
@@ -201,7 +233,7 @@ class HomeViewModel : ViewModel() {
             val callsDeferred = async {
                 runCatching {
                     withTimeout(10_000L) {
-                        callRepo.listCalls(storeId).getOrThrow()
+                        loadCallsSnapshot(storeId)
                     }
                 }
             }
@@ -260,8 +292,8 @@ class HomeViewModel : ViewModel() {
             val callsResult = callsDeferred.await()
 
             callsResult.fold(
-                onSuccess = { allCalls ->
-                    val calls = allCalls.distinctBy { it.id }
+                onSuccess = { snapshot ->
+                    val calls = snapshot.calls.distinctBy { it.id }
                     val awaitingCount = recordingDao.countByStatus("AWAITING_APPROVAL")
                     _allCalls = calls
 
@@ -279,7 +311,7 @@ class HomeViewModel : ViewModel() {
                                     !it.summary.isNullOrBlank()
                         }
                         .map { it.id }.toSet()
-                    retryStuckUploadedCalls(calls)
+                    retryStuckAnalysisCalls(calls)
                     if (terminalIds.isNotEmpty()) {
                         var doneCount = 0
                         recordingDao.getServerProcessing().forEach { rec ->
@@ -289,9 +321,12 @@ class HomeViewModel : ViewModel() {
                                 if (sid in summarizedIds) doneCount++   // 알림은 성공한 건만
                             }
                         }
+                        markMissingProcessingAsFailed(calls, snapshot.listedStoreIds)
                         if (doneCount > 0) {
                             CallRecorderApp.instance.notifyAnalysisDone(doneCount)
                         }
+                    } else {
+                        markMissingProcessingAsFailed(calls, snapshot.listedStoreIds)
                     }
                     val categories = getImportantCategories()
                     val filtered = if (_state.value.importantFilterEnabled) {
@@ -312,6 +347,50 @@ class HomeViewModel : ViewModel() {
                     _state.value = _state.value.copy(loading = false, error = it.message)
                 },
             )
+        }
+    }
+
+    private suspend fun loadCallsSnapshot(activeStoreId: String?): CallsSnapshot {
+        val processingStores = recordingDao.getServerProcessing()
+            .map { it.storeId }
+            .filter { it.isNotBlank() }
+        val storeIds = (listOfNotNull(activeStoreId) + processingStores)
+            .distinct()
+
+        if (storeIds.isEmpty()) {
+            return CallsSnapshot(callRepo.listCalls(null).getOrThrow(), emptySet())
+        }
+
+        val calls = mutableListOf<Call>()
+        val listedStoreIds = mutableSetOf<String>()
+        storeIds.forEach { id ->
+            callRepo.listCalls(id).onSuccess {
+                calls += it
+                listedStoreIds += id
+            }
+        }
+        return CallsSnapshot(calls.distinctBy { it.id }, listedStoreIds)
+    }
+
+    private suspend fun markMissingProcessingAsFailed(
+        calls: List<Call>,
+        listedStoreIds: Set<String>,
+    ) {
+        val visibleServerIds = calls.map { it.id }.toSet()
+        val staleThreshold = System.currentTimeMillis() - 10 * 60 * 1000L
+        recordingDao.getServerProcessing().forEach { rec ->
+            val sid = rec.serverCallId ?: return@forEach
+            if (
+                rec.storeId in listedStoreIds &&
+                sid !in visibleServerIds &&
+                rec.updatedAt < staleThreshold
+            ) {
+                recordingDao.setError(
+                    rec.id,
+                    RecordingStatus.FAILED,
+                    "서버에서 분석 상태를 찾을 수 없어요. 다시 업로드해 주세요.",
+                )
+            }
         }
     }
 
@@ -361,26 +440,43 @@ class HomeViewModel : ViewModel() {
 
     private fun String.normalizedPhoneKey(): String = filter { it.isDigit() }
 
-    private suspend fun retryStuckUploadedCalls(calls: List<Call>) {
+    private suspend fun retryStuckAnalysisCalls(calls: List<Call>) {
+        val now = System.currentTimeMillis()
         val uploadedIds = calls
             .filter { it.status.equals(CallStatus.UPLOADED, true) && it.summary.isNullOrBlank() }
             .map { it.id }
             .toSet()
-        if (uploadedIds.isEmpty()) return
+        val staleProcessingIds = calls
+            .filter {
+                it.status.equals(CallStatus.PROCESSING, true) &&
+                        it.summary.isNullOrBlank() &&
+                        it.sttResult.isNullOrBlank() &&
+                        isOlderThan(it.createdAt, now, 2 * 60 * 1000L)
+            }
+            .map { it.id }
+            .toSet()
 
         uploadedIds
             .filter { retriedUploadedProcessIds.add(it) }
+            .forEach { callRepo.triggerProcess(it) }
+        staleProcessingIds
+            .filter { retriedServerProcessingIds.add(it) }
             .forEach { callRepo.triggerProcess(it) }
 
         val staleThreshold = System.currentTimeMillis() - 30_000L
         recordingDao.getServerProcessing().forEach { rec ->
             val sid = rec.serverCallId ?: return@forEach
-            if (sid in uploadedIds && rec.updatedAt < staleThreshold) {
+            if ((sid in uploadedIds || sid in staleProcessingIds) && rec.updatedAt < staleThreshold) {
                 callRepo.triggerProcess(sid).onSuccess {
                     recordingDao.updateStatus(rec.id, RecordingStatus.PROCESSING)
                 }
             }
         }
+    }
+
+    private fun isOlderThan(createdAt: String?, now: Long, durationMillis: Long): Boolean {
+        val created = createdAt?.let { parseServerDate(it) } ?: return true
+        return now - created.time > durationMillis
     }
 
     /** 업로드 진행 목록에서 한 건 제거 (큐에서 취소). 목록은 Flow로 자동 갱신됨. */

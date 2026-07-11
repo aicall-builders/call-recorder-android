@@ -76,10 +76,11 @@ private enum class DetailTab { ANALYSIS, TRANSCRIPT }
 fun CallSummaryDetailScreen(
     callId: String,
     onBack: () -> Unit,
+    initialCall: Call? = null,
     vm: CallSummaryDetailViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
-    LaunchedEffect(callId) { vm.load(callId) }
+    LaunchedEffect(callId) { vm.load(callId, initialCall) }
 
     Scaffold(containerColor = ScreenBg) { padding ->
         Box(

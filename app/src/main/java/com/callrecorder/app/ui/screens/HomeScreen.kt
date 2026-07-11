@@ -637,7 +637,7 @@ private fun UploadSheet(items: List<com.callrecorder.app.ui.screens.UploadItem>,
 @Composable
 private fun UploadSheetItem(u: com.callrecorder.app.ui.screens.UploadItem, onDelete: (Long) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        if (u.phase != "대기중") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = UploadBlue)
+        if (u.phase == "업로드중") CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = UploadBlue)
         else Icon(Icons.Filled.UploadFile, null, tint = Color(0xFFB0B5C0), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Text(u.name, style = TextStyle(fontSize = 14.sp, color = Color(0xFF1B1C23)), modifier = Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)

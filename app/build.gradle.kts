@@ -28,8 +28,8 @@ android {
         versionName = "1.0.0"
 
         // 移댁뭅??SDK 留ㅻ땲?섏뒪??placeholder , ?ㅼ씠踰?
-        manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = "385c52a6aae0029d1eae4c0533071650"
-        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"385c52a6aae0029d1eae4c0533071650\"")
+        manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoKey
+        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoKey\"")
         buildConfigField("String", "NAVER_CLIENT_ID", "\"${gradleProps.getProperty("NAVER_CLIENT_ID", "")}\"")
         buildConfigField("String", "NAVER_CLIENT_SECRET", "\"${gradleProps.getProperty("NAVER_CLIENT_SECRET", "")}\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
@@ -134,4 +134,3 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
 }
-

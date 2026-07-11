@@ -86,6 +86,7 @@ fun CallSummaryListScreen(
         approvalState = approvalState,
         onCallClick = onCallClick,
         onDeleteCall = { vm.deleteCall(it) },
+        onDeleteUpload = { vm.deleteUpload(it) },
         onApproveRecording = { id ->
             approvalVm.approveOne(id)
             vm.refresh(silent = true)
@@ -109,6 +110,7 @@ private fun CallSummaryListContent(
     approvalState: PendingApprovalUiState,
     onCallClick: (String) -> Unit,
     onDeleteCall: (String) -> Unit,
+    onDeleteUpload: (Long) -> Unit,
     onApproveRecording: (Long) -> Unit,
     onDeleteRecording: (Long) -> Unit,
     onPendingTabVisible: () -> Unit = {},
@@ -121,6 +123,7 @@ private fun CallSummaryListContent(
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CallFilter.ALL) }
     var tab by remember { mutableStateOf(initialTab) }
+    var completionBaselineIds by remember { mutableStateOf<Set<String>?>(null) }
 
     LaunchedEffect(startOnPendingTab) {
         if (startOnPendingTab) {
@@ -130,6 +133,25 @@ private fun CallSummaryListContent(
     }
 
     val uniqueCalls = remember(state.recentCalls) { state.recentCalls.distinctBy { it.id } }
+    val doneCallIds = remember(uniqueCalls) {
+        uniqueCalls.filter { it.isAnalyzed() }.map { it.id }.toSet()
+    }
+
+    LaunchedEffect(tab, state.uploadingCount, doneCallIds) {
+        if (tab != AnalysisTab.PENDING) {
+            completionBaselineIds = null
+            return@LaunchedEffect
+        }
+        if (state.uploadingCount > 0 && completionBaselineIds == null) {
+            completionBaselineIds = doneCallIds
+        }
+        val baseline = completionBaselineIds
+        if (state.uploadingCount == 0 && baseline != null && doneCallIds.any { it !in baseline }) {
+            tab = AnalysisTab.DONE
+            filter = CallFilter.ALL
+            completionBaselineIds = null
+        }
+    }
 
     // ① 분석 대기 / 완료 분리
     val tabCalls = remember(uniqueCalls, tab) {
@@ -324,12 +346,19 @@ private fun CallSummaryListContent(
                         }
                         items(activeUploads, key = { "active-upload-${it.id}" }) { upload ->
                             Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
-                                Box(
-                                    Modifier
-                                        .background(SheetBg)
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                SwipeRevealDeleteBox(
+                                    onDelete = { onDeleteUpload(upload.id) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(SheetBg),
                                 ) {
-                                    ActiveUploadCallCard(upload = upload)
+                                    Box(
+                                        Modifier
+                                            .background(SheetBg)
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    ) {
+                                        ActiveUploadCallCard(upload = upload)
+                                    }
                                 }
                             }
                         }
@@ -459,6 +488,7 @@ private fun CallSummaryPendingWithApprovalsPreview() {
         ),
         onCallClick = {},
         onDeleteCall = {},
+        onDeleteUpload = {},
         onApproveRecording = {},
         onDeleteRecording = {},
         initialTab = AnalysisTab.PENDING,
@@ -531,8 +561,8 @@ private data class PendingPhase(
 private fun pendingPhaseOf(call: Call): PendingPhase {
     return when (call.status.lowercase()) {
         "uploaded" -> PendingPhase("업로드됨", Color(0xFFE8EBF3), SubInk, showProgress = false)
-        "transcribed" -> PendingPhase("요약 중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
-        "processing" -> PendingPhase("처리 중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
+        "transcribed" -> PendingPhase("요약 중", Color(0xFFE3EEFB), AccentBlue, showProgress = false)
+        "processing" -> PendingPhase("서버 분석 중", Color(0xFFE3EEFB), AccentBlue, showProgress = false)
         "error", "failed" -> PendingPhase("분석 실패", Color(0xFFFBE3E3), Color(0xFFC23B3B), showProgress = false, isError = true)
         else -> PendingPhase("분석 대기", Color(0xFFE8EBF3), SubInk, showProgress = true)
     }
@@ -760,8 +790,12 @@ private fun PendingCallCard(
                             )
                         }
                         Text(
-                            if (phase.isError) "분석에 실패했어요. 다시 시도해 주세요."
-                            else "분석이 끝나면 알려드릴게요.",
+                            when {
+                                phase.isError && call.errorMessage.orEmpty().contains("일별 한도") ->
+                                    "CLOVA 일별 한도에 도달해 분석이 중단됐어요."
+                                phase.isError -> "분석에 실패했어요. 다시 시도해 주세요."
+                                else -> "서버에서 분석 중이에요. 완료되면 알려드릴게요."
+                            },
                             style = TextStyle(fontSize = 13.sp, color = if (phase.isError) Color(0xFFC23B3B) else LabelGray),
                         )
                     }
@@ -791,7 +825,7 @@ private fun String.toPendingPhase(): PendingPhase {
         "대기중" -> PendingPhase("대기중", Color(0xFFE8EBF3), SubInk, showProgress = true)
         "업로드중" -> PendingPhase("업로드중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
         "실패" -> PendingPhase("실패", Color(0xFFFBE3E3), AppColors.SignalRed500, showProgress = false, isError = true)
-        else -> PendingPhase("분석중", Color(0xFFE3EEFB), AccentBlue, showProgress = true)
+        else -> PendingPhase("서버 분석 중", Color(0xFFE3EEFB), AccentBlue, showProgress = false)
     }
 }
 

@@ -128,7 +128,12 @@ interface RecordingDao {
     fun observeCountByCategory(category: String): Flow<Int>
 
     // ===== 업로드 큐 =====
-    @Query("SELECT * FROM recordings WHERE status IN ('PENDING','FAILED') ORDER BY createdAt ASC")
+    @Query("""
+        SELECT * FROM recordings
+        WHERE status = 'PENDING'
+           OR (status = 'FAILED' AND serverCallId IS NULL)
+        ORDER BY createdAt ASC
+    """)
     suspend fun pending(): List<RecordingEntity>
 
     /**
@@ -137,7 +142,7 @@ interface RecordingDao {
      */
     @Query("""
         SELECT * FROM recordings 
-        WHERE status IN ('PENDING','FAILED') 
+        WHERE (status = 'PENDING' OR (status = 'FAILED' AND serverCallId IS NULL))
           AND category IN (:allowedCategories)
         ORDER BY createdAt ASC
     """)
