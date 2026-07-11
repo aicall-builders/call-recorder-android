@@ -934,20 +934,12 @@ fun UserInfoScreen(vm: SettingsViewModel, onBack: () -> Unit) {
     }
 
     if (showWithdrawDialog) {
-        AlertDialog(
-            onDismissRequest = { showWithdrawDialog = false },
-            title = { Text("회원 탈퇴", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold)) },
-            text = { Text("탈퇴 시 모든 통화 데이터와 계정 정보가 삭제됩니다.\n정말 탈퇴하시겠어요?") },
-            confirmButton = {
-                Button(
-                    onClick = { showWithdrawDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.SignalRed700),
-                ) { Text("탈퇴하기") }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showWithdrawDialog = false }) { Text("취소") }
-            },
-            containerColor = Color.White,
+        FianoConfirmDialog(
+            title = "회원 탈퇴",
+            message = "탈퇴 시 모든 통화 데이터와\n계정 정보가 삭제됩니다.\n정말 탈퇴하시겠어요?",
+            confirmLabel = "탈퇴",
+            onDismiss = { showWithdrawDialog = false },
+            onConfirm = { showWithdrawDialog = false },
         )
     }
 }

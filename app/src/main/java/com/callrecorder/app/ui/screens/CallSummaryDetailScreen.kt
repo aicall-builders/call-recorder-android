@@ -124,31 +124,14 @@ fun CallSummaryDetailScreen(
     }
 
     if (state.showMissingScheduleDialog) {
-        AlertDialog(
-            onDismissRequest = { vm.dismissMissingScheduleDialog() },
-            text = {
-                Text(
-                    "등록할 일정을 찾지못했어요. 직접 등록하시겠어요?",
-                    style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, color = Ink),
-                )
+        FianoConfirmDialog(
+            title = "일정 등록",
+            message = "등록할 일정을 찾지못했어요.\n직접 등록하시겠어요?",
+            onDismiss = { vm.dismissMissingScheduleDialog() },
+            onConfirm = {
+                vm.dismissMissingScheduleDialog()
+                onManualScheduleRequest()
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.dismissMissingScheduleDialog()
-                        onManualScheduleRequest()
-                    },
-                ) {
-                    Text("확인", color = AppColors.SignalRed600)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { vm.dismissMissingScheduleDialog() }) {
-                    Text("취소", color = LabelGrayActive)
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(20.dp),
         )
     }
 }

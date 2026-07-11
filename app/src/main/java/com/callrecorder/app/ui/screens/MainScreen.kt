@@ -85,6 +85,7 @@ fun MainScreen(
     homeVm: HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
 ) {
     var selected by remember { mutableStateOf(BottomTab.HOME) }
+    var tabBackStack by remember { mutableStateOf<List<BottomTab>>(emptyList()) }
     var showApproval by remember { mutableStateOf(false) }
     var callDetailId by remember { mutableStateOf<String?>(null) }
     var callDetailInitial by remember { mutableStateOf<Call?>(null) }
@@ -130,9 +131,31 @@ fun MainScreen(
         }
     }
 
+    fun navigateTo(tab: BottomTab, keepHistory: Boolean = true) {
+        if (tab == selected) return
+        if (keepHistory) {
+            tabBackStack = (tabBackStack + selected).takeLast(20)
+        }
+        selected = tab
+    }
+
+    fun navigateBackTab() {
+        val previous = tabBackStack.lastOrNull()
+        if (previous != null) {
+            tabBackStack = tabBackStack.dropLast(1)
+            selected = previous
+        } else {
+            selected = BottomTab.HOME
+        }
+        openCallsOnPendingTab = false
+        callDetailId = null
+        callDetailInitial = null
+        noteEditCallId = null
+    }
+
     val handleCallClick: (String) -> Unit = { callId ->
         noteEditCallId = null
-        selected = BottomTab.CALLS
+        navigateTo(BottomTab.CALLS)
         callDetailId = callId
         callDetailInitial = homeVm.findLoadedCall(callId)
     }
@@ -159,13 +182,7 @@ fun MainScreen(
                 callDetailId = null
                 callDetailInitial = null
             }
-            selected != BottomTab.HOME -> {
-                selected = BottomTab.HOME
-                openCallsOnPendingTab = false
-                callDetailId = null
-                callDetailInitial = null
-                noteEditCallId = null
-            }
+            selected != BottomTab.HOME -> navigateBackTab()
         }
     }
 
@@ -216,13 +233,13 @@ fun MainScreen(
                         callDetailInitial = null
                         if (existing.status == RecordingStatus.DONE && !existing.serverCallId.isNullOrBlank()) {
                             Toast.makeText(context, "이미 분석 완료된 파일이에요.", Toast.LENGTH_SHORT).show()
-                            selected = BottomTab.CALLS
+                            navigateTo(BottomTab.CALLS)
                             callDetailId = existing.serverCallId
                         } else {
                             Toast.makeText(context, "이미 분석 대기 중인 파일이에요.", Toast.LENGTH_SHORT).show()
                             openCallsOnPendingTab = true
                             openCallsPendingRequestKey += 1
-                            selected = BottomTab.CALLS
+                            navigateTo(BottomTab.CALLS)
                         }
                         return@launch
                     } else {
@@ -252,7 +269,7 @@ fun MainScreen(
                     delay(300)
                     callDetailId = null
                     openCallsOnPendingTab = true
-                    selected = BottomTab.CALLS
+                    navigateTo(BottomTab.CALLS)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -276,7 +293,7 @@ fun MainScreen(
                         onCallClick = { callId ->
                             showNotifications = false
                             noteEditCallId = null
-                            selected = BottomTab.CALLS
+                            navigateTo(BottomTab.CALLS)
                             callDetailId = callId
                             callDetailInitial = homeVm.findLoadedCall(callId)
                         },
@@ -293,12 +310,12 @@ fun MainScreen(
                         BottomTab.HOME -> HomeScreen(
                             vm = homeVm,
                             onCallClick = handleCallClick,
-                            onSettings = { selected = BottomTab.SETTINGS },
+                            onSettings = { navigateTo(BottomTab.SETTINGS) },
                             onApprovalClick = {
                                 callDetailId = null
                                 openCallsOnPendingTab = true
                                 openCallsPendingRequestKey += 1
-                                selected = BottomTab.CALLS
+                                navigateTo(BottomTab.CALLS)
                             },
                             onUploadClick = { uploadLauncher.launch("audio/*") },
                             onRefreshRecordings = {
@@ -309,14 +326,14 @@ fun MainScreen(
                                 callDetailId = null
                                 openCallsOnPendingTab = true
                                 openCallsPendingRequestKey += 1
-                                selected = BottomTab.CALLS
+                                navigateTo(BottomTab.CALLS)
                             },
                             onSeeAllCalls = {
                                 openCallsOnPendingTab = false
-                                selected = BottomTab.CALLS
+                                navigateTo(BottomTab.CALLS)
                             },
-                            onSeeAllSchedules = { selected = BottomTab.CALENDAR },
-                            onSeeAllCustomers = { selected = BottomTab.CUSTOMERS },
+                            onSeeAllSchedules = { navigateTo(BottomTab.CALENDAR) },
+                            onSeeAllCustomers = { navigateTo(BottomTab.CUSTOMERS) },
                             onNotificationClick = { showNotifications = true },
                             hasNotification = hasNotification,
                             tourController = tourController,
@@ -330,7 +347,7 @@ fun MainScreen(
                                     onManualScheduleRequest = {
                                         callDetailId = null
                                         callDetailInitial = null
-                                        selected = BottomTab.CALENDAR
+                                        navigateTo(BottomTab.CALENDAR)
                                         openCalendarAddRequestKey += 1
                                     },
                                 )
@@ -367,7 +384,7 @@ fun MainScreen(
                             onAddRequestConsumed = { openCalendarAddRequestKey = 0 },
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
-                            onBack = { selected = BottomTab.HOME },
+                            onBack = { navigateBackTab() },
                             onChangeStore = onChangeStore,
                             onLoggedOut = onLoggedOut,
                             onExternalCalendarClick = { showExternalCalendarSheet = true },
@@ -389,7 +406,7 @@ fun MainScreen(
                         callDetailId = null
                         callDetailInitial = null
                     }
-                    selected = tab
+                    navigateTo(tab)
                     if (tab != BottomTab.CALLS) callDetailId = null
                 },
                 modifier = Modifier

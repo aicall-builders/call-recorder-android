@@ -1025,7 +1025,9 @@ private fun AddEventDialog(
         title = {
             Text(
                 if (initialEvent == null) "일정 추가" else "일정 수정",
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown950),
             )
         },
         text = {
@@ -1167,15 +1169,15 @@ private fun AddEventDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                PopupActionButton(
+                FianoPopupActionButton(
                     label = "취소",
-                    type = PopupActionType.OUTLINE,
+                    type = FianoPopupActionType.OUTLINE,
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
-                PopupActionButton(
+                FianoPopupActionButton(
                     label = if (initialEvent == null) "추가" else "저장",
-                    type = PopupActionType.FILL,
+                    type = FianoPopupActionType.FILL,
                     onClick = {
                         if (title.isNotBlank()) {
                             onConfirm(
@@ -1343,15 +1345,15 @@ private fun FianoDatePickerDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                PopupActionButton(
+                FianoPopupActionButton(
                     label = "취소",
-                    type = PopupActionType.OUTLINE,
+                    type = FianoPopupActionType.OUTLINE,
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 )
-                PopupActionButton(
+                FianoPopupActionButton(
                     label = "확인",
-                    type = PopupActionType.FILL,
+                    type = FianoPopupActionType.FILL,
                     onClick = { onConfirm(pickedYear, pickedMonth, pickedDay) },
                     modifier = Modifier.weight(1f),
                 )
@@ -1474,38 +1476,6 @@ private fun ScheduleFilterChip(
                 lineHeight = 16.sp,
             ),
         )
-    }
-}
-
-private enum class PopupActionType { FILL, OUTLINE }
-
-@Composable
-private fun PopupActionButton(
-    label: String,
-    type: PopupActionType,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val isFill = type == PopupActionType.FILL
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(40.dp),
-        shape = RoundedCornerShape(999.dp),
-        color = if (isFill) AppColors.DeepBrown900 else Color.White,
-        border = if (isFill) null else BorderStroke(1.dp, AppColors.DeepBrown950),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                label,
-                textAlign = TextAlign.Center,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    fontWeight = if (isFill) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isFill) Color.White else AppColors.DeepBrown900,
-                    lineHeight = 16.sp,
-                ),
-            )
-        }
     }
 }
 

@@ -237,31 +237,14 @@ private fun CallSummaryListContent(
     }
 
     pendingDeleteCallId?.let { callId ->
-        AlertDialog(
-            onDismissRequest = { pendingDeleteCallId = null },
-            text = {
-                Text(
-                    "통화 분석 데이터를 정말 삭제하시겠습니까?",
-                    style = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, color = Ink),
-                )
+        FianoConfirmDialog(
+            title = "분석 데이터 삭제",
+            message = "통화 분석 데이터를\n정말 삭제하시겠습니까?",
+            onDismiss = { pendingDeleteCallId = null },
+            onConfirm = {
+                pendingDeleteCallId = null
+                onDeleteCall(callId)
             },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteCallId = null }) {
-                    Text("취소", color = SubInk)
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        pendingDeleteCallId = null
-                        onDeleteCall(callId)
-                    },
-                ) {
-                    Text("확인", color = AppColors.SignalRed500, fontWeight = FontWeight.Bold)
-                }
-            },
-            containerColor = Color.White,
-            shape = RoundedCornerShape(18.dp),
         )
     }
 
