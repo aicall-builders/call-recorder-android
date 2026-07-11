@@ -117,6 +117,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE filePath = :path LIMIT 1")
     suspend fun findByPath(path: String): RecordingEntity?
 
+    @Query("SELECT * FROM recordings WHERE id = :id LIMIT 1")
+    suspend fun findById(id: Long): RecordingEntity?
+
     @Query("SELECT * FROM recordings ORDER BY callStartedAtMillis DESC")
     fun observeAll(): Flow<List<RecordingEntity>>
 
@@ -177,6 +180,10 @@ interface RecordingDao {
     /** 서버 처리 중(업로드 완료~분석)인 로컬 녹음 — 완료 동기화용 */
     @Query("SELECT * FROM recordings WHERE status IN ('UPLOADED','PROCESSING') AND serverCallId IS NOT NULL")
     suspend fun getServerProcessing(): List<RecordingEntity>
+
+    /** 서버 분석 취소 API를 같이 호출해야 하는 로컬 녹음 */
+    @Query("SELECT * FROM recordings WHERE status IN ('UPLOADED','PROCESSING') AND serverCallId IS NOT NULL")
+    suspend fun getCancelableServerUploads(): List<RecordingEntity>
 
     /** 서버 요약 완료 시 로컬 상태를 DONE으로 정리 (진행 칩에서 제거) */
     @Query("UPDATE recordings SET status='DONE', updatedAt=:now WHERE serverCallId = :callId")

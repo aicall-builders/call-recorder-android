@@ -56,12 +56,27 @@ class CallRepository(
     }
 
     /** 업로드 큐에서 제거 (CANCELED). 폰 녹음 파일은 그대로 두고, 재스캔돼도 재업로드 안 함. */
-    suspend fun cancelUpload(id: Long) {
+    suspend fun cancelUpload(id: Long): Result<Unit> = runCatching {
+        val rec = dao.findById(id)
+        val callId = rec?.serverCallId?.takeIf { it.isNotBlank() }
+        if (callId != null) {
+            val response = api.cancelCallProcessing(callId)
+            if (!response.isSuccessful) {
+                error("서버 분석 취소 실패: HTTP ${response.code()}")
+            }
+        }
         dao.updateStatus(id, RecordingStatus.CANCELED)
     }
 
     /** 진행 중인 업로드 전체 일괄 취소. */
-    suspend fun cancelAllUploads() {
+    suspend fun cancelAllUploads(): Result<Unit> = runCatching {
+        dao.getCancelableServerUploads().forEach { rec ->
+            val callId = rec.serverCallId?.takeIf { it.isNotBlank() } ?: return@forEach
+            val response = api.cancelCallProcessing(callId)
+            if (!response.isSuccessful) {
+                error("서버 분석 취소 실패: HTTP ${response.code()}")
+            }
+        }
         dao.cancelAllActive()
     }
 
@@ -116,8 +131,7 @@ class CallRepository(
 
         // 2) S3 PUT 업로드
         val body = file.asRequestBody(mime.toMediaTypeOrNull())
-        val headers = urlResp.uploadHeaders.toMutableMap()
-        if (!headers.containsKey("Content-Type")) headers["Content-Type"] = mime
+        val headers = urlResp.uploadHeaders.filterValues { it.isNotBlank() }
         SafeLog.i("CallRepo", "📤 S3 PUT headers: $headers")
         SafeLog.i("CallRepo", "📤 S3 PUT mime: $mime, file: ${file.name}, size: ${file.length()}")
         val s3Resp = api.uploadToS3(urlResp.uploadUrl, headers, body)
