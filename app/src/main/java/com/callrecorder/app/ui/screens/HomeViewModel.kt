@@ -3,14 +3,17 @@ package com.callrecorder.app.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
+import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.local.RecordingStatus
 import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
+import com.callrecorder.app.data.model.CustomerListItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +23,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import org.json.JSONArray
 
 data class UploadItem(
     val id: Long,
@@ -33,6 +37,7 @@ data class HomeUiState(
     val todaySummarized: Int = 0,
     val todayScheduled: Int = 0,
     val recentCalls: List<Call> = emptyList(),
+    val pinnedCustomers: List<CustomerListItem> = emptyList(),
     val pendingApprovalCount: Int = 0,
     val schedules: List<CalendarEvent> = emptyList(),
     val error: String? = null,
@@ -49,30 +54,25 @@ class HomeViewModel : ViewModel() {
     private val storeRepo = container.storeRepo
     private val recordingDao = container.recordingDao
     private val calendarRepo = container.calendarRepo
+    private val api = container.api
+    private val manualCustomerPrefs = CallRecorderApp.instance
+        .getSharedPreferences("manual_customers", android.content.Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    // 홈 토글 설정 저장
-    private val homePrefs by lazy {
-        CallRecorderApp.instance.getSharedPreferences("home_settings", android.content.Context.MODE_PRIVATE)
-    }
-
-    // 중요 통화 카테고리 설정 읽기
+    // 홈 히어로와 설정 화면이 같은 설정값을 공유한다.
     private val appPrefs by lazy {
         CallRecorderApp.instance.getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE)
     }
 
     private var _allCalls: List<Call> = emptyList()
     private var pollJob: Job? = null
+    private val retriedUploadedProcessIds = mutableSetOf<String>()
+    private var hasExternalCalendarConnection: Boolean? = null
 
     init {
-        val autoSummary = homePrefs.getBoolean("auto_summary", true)
-        val importantFilter = homePrefs.getBoolean("important_filter", false)
-        _state.value = _state.value.copy(
-            autoSummaryEnabled = autoSummary,
-            importantFilterEnabled = importantFilter,
-        )
+        syncSettingsFromPrefs()
         refresh()
         observeUploads()
     }
@@ -88,6 +88,7 @@ class HomeViewModel : ViewModel() {
                         phase = when (it.status) {
                             RecordingStatus.PENDING -> "대기중"
                             RecordingStatus.UPLOADING -> "업로드중"
+                            RecordingStatus.FAILED -> "실패"
                             else -> "분석중"   // UPLOADED / PROCESSING
                         },
                     )
@@ -116,18 +117,33 @@ class HomeViewModel : ViewModel() {
     }
 
     fun setAutoSummary(enabled: Boolean) {
-        homePrefs.edit().putBoolean("auto_summary", enabled).apply()
+        appPrefs.edit().putBoolean("auto_analyze", enabled).apply()
         _state.value = _state.value.copy(autoSummaryEnabled = enabled)
     }
 
     fun setImportantFilter(enabled: Boolean) {
-        homePrefs.edit().putBoolean("important_filter", enabled).apply()
+        appPrefs.edit()
+            .putStringSet(
+                "important_categories",
+                if (enabled) ALL_CALL_CATEGORIES.toSet() else emptySet(),
+            )
+            .apply()
         _state.value = _state.value.copy(importantFilterEnabled = enabled)
         applyFilter()
     }
 
     // 설정 화면에서 카테고리 변경 시 홈 목록 갱신용
     fun refreshFilter() {
+        syncSettingsFromPrefs()
+        applyFilter()
+    }
+
+    fun syncSettingsFromPrefs() {
+        val categories = getImportantCategories()
+        _state.value = _state.value.copy(
+            autoSummaryEnabled = appPrefs.getBoolean("auto_analyze", false),
+            importantFilterEnabled = categories.isNotEmpty(),
+        )
         applyFilter()
     }
 
@@ -179,14 +195,69 @@ class HomeViewModel : ViewModel() {
 
     fun refresh(silent: Boolean = false) {
         viewModelScope.launch {
-            if (!silent) _state.value = _state.value.copy(loading = true, error = null)
+            if (!silent) _state.value = _state.value.copy(loading = false, error = null)
             val storeId = storeRepo.activeStoreId()
 
-            val callsDeferred = async { callRepo.listCalls(storeId) }
-            val schedulesDeferred = async { calendarRepo.getEvents() }
+            val callsDeferred = async {
+                runCatching {
+                    withTimeout(10_000L) {
+                        callRepo.listCalls(storeId).getOrThrow()
+                    }
+                }
+            }
+            viewModelScope.launch {
+                val schedulesResult = runCatching {
+                    val from = todayDateString()
+                    val to = dateStringAfter(days = 30)
+                    val manualEvents = calendarRepo
+                        .getManualEventsInRange(from = from, to = to)
+                        .getOrDefault(emptyList())
+                        .map { it.toHomeCalendarEvent() }
+                    val hasExternalConnection = hasExternalCalendarConnection ?: run {
+                        val connections = runCatching {
+                            withTimeout(2_000L) {
+                                calendarRepo.getConnections().getOrDefault(emptyList())
+                            }
+                        }.getOrDefault(emptyList())
+                        hasExternalCalendarConnection = connections.isNotEmpty()
+                        connections.isNotEmpty()
+                    }
+                    val serverEvents = if (hasExternalConnection) {
+                        runCatching {
+                            withTimeout(6_000L) {
+                                calendarRepo
+                                .getEventsInRange(from = from, to = to, limit = 100)
+                                .getOrDefault(emptyList())
+                            }
+                        }.getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
+
+                    (serverEvents + manualEvents)
+                        .filter { it.isUpcoming() }
+                        .sortedWith(compareBy<CalendarEvent> { it.startAt.orEmpty() }.thenBy { it.time })
+                }
+                _state.value = _state.value.copy(
+                    schedules = schedulesResult.getOrDefault(emptyList()),
+                )
+            }
+            viewModelScope.launch {
+                val customersResult = runCatching {
+                    withTimeout(2_000L) {
+                        api.listCustomers().customers
+                    }
+                }
+                val serverCustomers = customersResult.getOrDefault(emptyList())
+                _state.value = _state.value.copy(
+                    pinnedCustomers = mergeManualPinnedCustomers(serverCustomers)
+                        .filter { it.isPinned }
+                        .sortedWith(compareByDescending<CustomerListItem> { it.callCount }.thenByDescending { it.lastCallAt ?: "" })
+                        .take(3),
+                )
+            }
 
             val callsResult = callsDeferred.await()
-            val schedulesResult = schedulesDeferred.await()
 
             callsResult.fold(
                 onSuccess = { allCalls ->
@@ -202,10 +273,13 @@ class HomeViewModel : ViewModel() {
                     val terminalIds = calls
                         .filter {
                             it.status.equals(CallStatus.SUMMARIZED, true) ||
+                                    it.status.equals(CallStatus.COMPLETED, true) ||
                                     it.status.equals(CallStatus.FAILED, true) ||
+                                    it.status.equals(CallStatus.ERROR, true) ||
                                     !it.summary.isNullOrBlank()
                         }
                         .map { it.id }.toSet()
+                    retryStuckUploadedCalls(calls)
                     if (terminalIds.isNotEmpty()) {
                         var doneCount = 0
                         recordingDao.getServerProcessing().forEach { rec ->
@@ -219,11 +293,6 @@ class HomeViewModel : ViewModel() {
                             CallRecorderApp.instance.notifyAnalysisDone(doneCount)
                         }
                     }
-                    // 안전장치: 매칭 실패/서버 지연으로 2분 넘게 분석중인 건은 강제로 칩에서 내림
-                    recordingDao.markStaleProcessingDone(
-                        System.currentTimeMillis() - 2 * 60 * 1000L
-                    )
-
                     val categories = getImportantCategories()
                     val filtered = if (_state.value.importantFilterEnabled) {
                         calls.filter { it.category in categories }
@@ -237,13 +306,80 @@ class HomeViewModel : ViewModel() {
                         todayScheduled = countTodayScheduled(calls),
                         recentCalls = filtered.take(20),
                         pendingApprovalCount = awaitingCount,
-                        schedules = schedulesResult.getOrDefault(emptyList()),
                     )
                 },
                 onFailure = {
                     _state.value = _state.value.copy(loading = false, error = it.message)
                 },
             )
+        }
+    }
+
+    private fun mergeManualPinnedCustomers(serverCustomers: List<CustomerListItem>): List<CustomerListItem> {
+        val manualCustomers = loadManualCustomers()
+        val manualByKey = manualCustomers.associateBy { it.phone.normalizedPhoneKey() }
+        val mergedServer = serverCustomers.map { server ->
+            val local = manualByKey[server.phone.normalizedPhoneKey()]
+            if (local == null) {
+                server
+            } else {
+                server.copy(
+                    name = server.name?.takeIf { it.isNotBlank() } ?: local.name,
+                    callCount = maxOf(server.callCount, local.callCount),
+                    lastCallAt = server.lastCallAt ?: local.lastCallAt,
+                    latestSummary = server.latestSummary ?: local.latestSummary,
+                    isPinned = server.isPinned || local.isPinned,
+                )
+            }
+        }
+        val serverKeys = mergedServer.map { it.phone.normalizedPhoneKey() }.toSet()
+        return mergedServer + manualCustomers.filter { it.phone.normalizedPhoneKey() !in serverKeys }
+    }
+
+    private fun loadManualCustomers(): List<CustomerListItem> {
+        val raw = manualCustomerPrefs.getString("items", null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val phone = item.optString("phone").takeIf { it.isNotBlank() } ?: continue
+                    add(
+                        CustomerListItem(
+                            phone = phone,
+                            name = item.optString("name").takeIf { it.isNotBlank() },
+                            callCount = item.optInt("callCount", 0),
+                            lastCallAt = item.optString("lastCallAt").takeIf { it.isNotBlank() },
+                            latestSummary = item.optString("lastSummary").takeIf { it.isNotBlank() },
+                            isPinned = item.optBoolean("isPinned", false),
+                        )
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun String.normalizedPhoneKey(): String = filter { it.isDigit() }
+
+    private suspend fun retryStuckUploadedCalls(calls: List<Call>) {
+        val uploadedIds = calls
+            .filter { it.status.equals(CallStatus.UPLOADED, true) && it.summary.isNullOrBlank() }
+            .map { it.id }
+            .toSet()
+        if (uploadedIds.isEmpty()) return
+
+        uploadedIds
+            .filter { retriedUploadedProcessIds.add(it) }
+            .forEach { callRepo.triggerProcess(it) }
+
+        val staleThreshold = System.currentTimeMillis() - 30_000L
+        recordingDao.getServerProcessing().forEach { rec ->
+            val sid = rec.serverCallId ?: return@forEach
+            if (sid in uploadedIds && rec.updatedAt < staleThreshold) {
+                callRepo.triggerProcess(sid).onSuccess {
+                    recordingDao.updateStatus(rec.id, RecordingStatus.PROCESSING)
+                }
+            }
         }
     }
 
@@ -264,11 +400,9 @@ class HomeViewModel : ViewModel() {
     fun approveAll() {
         viewModelScope.launch {
             recordingDao.approveAll()
-            val workRequest = androidx.work.OneTimeWorkRequestBuilder<com.callrecorder.app.worker.ScanAndUploadWorker>()
-                .build()
-            androidx.work.WorkManager.getInstance(
+            com.callrecorder.app.worker.UploadWorker.enqueueOneShot(
                 CallRecorderApp.instance.applicationContext
-            ).enqueue(workRequest)
+            )
             refresh()
         }
     }
@@ -307,4 +441,73 @@ class HomeViewModel : ViewModel() {
         }
         return null
     }
+
+    private fun todayDateString(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    private fun dateStringAfter(days: Int): String {
+        val cal = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, days)
+        }
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+    }
+
+    private fun CalendarEvent.isUpcoming(): Boolean {
+        val start = parseScheduleStart(this) ?: return true
+        return start.time >= System.currentTimeMillis()
+    }
+
+    private fun parseScheduleStart(event: CalendarEvent): Date? {
+        event.startAt?.takeIf { it.isNotBlank() }?.let { raw ->
+            parseScheduleDate(raw)?.let { return it }
+        }
+
+        val datePart = event.startAt
+            ?.substringBefore("T")
+            ?.substringBefore(" ")
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        val timePart = event.time.takeIf { it.isNotBlank() } ?: "00:00"
+        return parseScheduleDate("$datePart ${timePart.withSeconds()}")
+    }
+
+    private fun parseScheduleDate(raw: String): Date? {
+        val normalized = raw.trim()
+        val patterns = listOf(
+            "yyyy-MM-dd" to null,
+            "yyyy-MM-dd HH:mm:ss" to null,
+            "yyyy-MM-dd HH:mm" to null,
+            "yyyy-MM-dd'T'HH:mm:ss" to null,
+            "yyyy-MM-dd'T'HH:mm" to null,
+            "yyyy-MM-dd'T'HH:mm:ss'Z'" to TimeZone.getTimeZone("UTC"),
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" to TimeZone.getTimeZone("UTC"),
+        )
+        for ((pattern, zone) in patterns) {
+            try {
+                return SimpleDateFormat(pattern, Locale.US)
+                    .apply { zone?.let { timeZone = it } }
+                    .parse(normalized) ?: continue
+            } catch (_: Exception) {
+            }
+        }
+        return null
+    }
+
+    private fun ManualCalendarEventEntity.toHomeCalendarEvent(): CalendarEvent {
+        val normalizedTime = time.ifBlank { "00:00" }
+        val startAt = "$date ${normalizedTime.withSeconds()}"
+        return CalendarEvent(
+            id = "manual-$id",
+            provider = "manual",
+            title = title,
+            time = normalizedTime,
+            category = chip,
+            description = description.ifBlank { "수동 등록 일정" },
+            startAt = startAt,
+            reminderEnabled = reminderEnabled,
+        )
+    }
+
+    private fun String.withSeconds(): String =
+        if (count { it == ':' } >= 2) this else "$this:00"
 }

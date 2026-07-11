@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.model.CallDetail
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 통화 상세 화면(시안 7)용 ViewModel.
@@ -26,6 +28,8 @@ data class CallSummaryDetailUiState(
     val calendarLoading: Boolean = false,
     val connectedCalendars: List<String> = emptyList(),
     val showCalendarPicker: Boolean = false,
+    val summarySaving: Boolean = false,
+    val summaryMessage: String? = null,
 )
 
 class CallSummaryDetailViewModel : ViewModel() {
@@ -36,12 +40,14 @@ class CallSummaryDetailViewModel : ViewModel() {
     val state: StateFlow<CallSummaryDetailUiState> = _state.asStateFlow()
 
     fun load(callId: String) {
-        loadCalendars()
         viewModelScope.launch {
             _state.value = CallSummaryDetailUiState(loading = true)
 
-            // 1) 통화 상세
-            val detailResult = callRepo.getDetail(callId)
+            val detailDeferred = async { callRepo.getDetail(callId) }
+            val audioDeferred = async { callRepo.getAudioUrl(callId) }
+
+            // 상세 정보가 도착하면 먼저 화면을 연다. 음성 URL은 뒤이어 갱신된다.
+            val detailResult = detailDeferred.await()
             detailResult.fold(
                 onSuccess = { detail ->
                     _state.value = _state.value.copy(loading = false, detail = detail, error = null)
@@ -52,21 +58,50 @@ class CallSummaryDetailViewModel : ViewModel() {
                 },
             )
 
-            // 2) 음성 URL — 백엔드에 /calls/{id}/audio 엔드포인트 활성화됨
-            callRepo.getAudioUrl(callId).fold(
+            audioDeferred.await().fold(
                 onSuccess = { url -> _state.value = _state.value.copy(audioUrl = url) },
                 onFailure = { _state.value = _state.value.copy(audioUrl = null) },
             )
         }
     }
+
+    fun updateSummary(callId: String, summary: String) {
+        val trimmed = summary.trim()
+        if (trimmed.isBlank()) {
+            _state.value = _state.value.copy(summaryMessage = "요약 내용을 입력해 주세요.")
+            return
+        }
+        viewModelScope.launch {
+            _state.value = _state.value.copy(summarySaving = true, summaryMessage = null)
+            callRepo.updateSummary(callId, trimmed).fold(
+                onSuccess = {
+                    val current = _state.value.detail
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약을 저장했어요.",
+                        detail = current?.copy(call = current.call.copy(summary = trimmed)),
+                    )
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        summarySaving = false,
+                        summaryMessage = "요약 저장에 실패했어요. ${it.message.orEmpty()}".trim(),
+                    )
+                },
+            )
+        }
+    }
+
     fun addToCalendar(callId: String, provider: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
             runCatching {
-                CallRecorderApp.instance.container.api.addCalendarEvent(
-                    callId,
-                    mapOf("provider" to provider)
-                )
+                withTimeoutOrNull(12_000) {
+                    CallRecorderApp.instance.container.api.addCalendarEvent(
+                        callId,
+                        mapOf("provider" to provider)
+                    )
+                } ?: error("캘린더 등록 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.")
             }
                 .fold(
                 onSuccess = { resp ->
@@ -85,22 +120,72 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
     }
 
-    fun loadCalendars() {
+    private fun loadCalendars(callId: String? = null, openAfterLoad: Boolean = false) {
+        if (_state.value.calendarLoading) return
         viewModelScope.launch {
-            CallRecorderApp.instance.container.calendarRepo.getConnections().fold(
+            _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null)
+            val result = withTimeoutOrNull(12_000) {
+                CallRecorderApp.instance.container.calendarRepo.getConnections()
+            }
+            if (result == null) {
+                _state.value = _state.value.copy(
+                    calendarLoading = false,
+                    showCalendarPicker = false,
+                    calendarMessage = "캘린더 연결 조회가 지연되고 있어요. 잠시 후 다시 시도해 주세요.",
+                )
+                return@launch
+            }
+            result.fold(
                 onSuccess = { connections ->
+                    val providers = connections.map { it.provider }.filter { it.isNotBlank() }
+                    if (providers.isEmpty()) {
+                        _state.value = _state.value.copy(
+                            calendarLoading = false,
+                            connectedCalendars = emptyList(),
+                            showCalendarPicker = false,
+                            calendarMessage = "설정에서 외부 캘린더를 먼저 연동해 주세요.",
+                        )
+                        return@fold
+                    }
+                    if (callId != null && providers.size == 1) {
+                        _state.value = _state.value.copy(
+                            calendarLoading = false,
+                            connectedCalendars = providers,
+                            showCalendarPicker = false,
+                        )
+                        addToCalendar(callId, providers.first())
+                        return@fold
+                    }
                     _state.value = _state.value.copy(
-                        connectedCalendars = connections.map { it.provider }
+                        calendarLoading = false,
+                        connectedCalendars = providers,
+                        showCalendarPicker = openAfterLoad,
                     )
                 },
-                onFailure = {}
+                onFailure = {
+                    _state.value = _state.value.copy(
+                        calendarLoading = false,
+                        showCalendarPicker = false,
+                        calendarMessage = "캘린더 연결 정보를 불러오지 못했어요.",
+                    )
+                }
             )
         }
     }
 
-    fun toggleCalendarPicker() {
+    fun toggleCalendarPicker(callId: String) {
+        val nextOpen = !_state.value.showCalendarPicker
+        if (nextOpen && _state.value.connectedCalendars.isEmpty()) {
+            loadCalendars(callId = callId, openAfterLoad = true)
+            return
+        }
+        if (nextOpen && _state.value.connectedCalendars.size == 1) {
+            addToCalendar(callId, _state.value.connectedCalendars.first())
+            return
+        }
         _state.value = _state.value.copy(
-            showCalendarPicker = !_state.value.showCalendarPicker
+            showCalendarPicker = nextOpen,
+            calendarMessage = null,
         )
     }
 

@@ -2,11 +2,9 @@ package com.callrecorder.app.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.callrecorder.app.CallRecorderApp
 import com.callrecorder.app.data.local.RecordingEntity
-import com.callrecorder.app.worker.ScanAndUploadWorker
+import com.callrecorder.app.worker.UploadWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +12,7 @@ import kotlinx.coroutines.launch
 
 data class PendingApprovalUiState(
     val recordings: List<RecordingEntity> = emptyList(),
+    val duplicateIds: Set<Long> = emptySet(),
     val loading: Boolean = false,
 )
 
@@ -29,7 +28,15 @@ class PendingApprovalViewModel : ViewModel() {
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true)
             val recordings = recordingDao.getAwaitingApproval()
-            _state.value = PendingApprovalUiState(recordings = recordings, loading = false)
+            val duplicateIds = recordings
+                .filter { recordingDao.countActiveByFileNameAndSize(it.fileName, it.fileSize) > 1 }
+                .map { it.id }
+                .toSet()
+            _state.value = PendingApprovalUiState(
+                recordings = recordings,
+                duplicateIds = duplicateIds,
+                loading = false,
+            )
         }
     }
 
@@ -57,9 +64,6 @@ class PendingApprovalViewModel : ViewModel() {
     }
 
     private fun triggerUpload() {
-        val workRequest = OneTimeWorkRequestBuilder<ScanAndUploadWorker>().build()
-        WorkManager.getInstance(
-            CallRecorderApp.instance.applicationContext
-        ).enqueue(workRequest)
+        UploadWorker.enqueueOneShot(CallRecorderApp.instance.applicationContext)
     }
 }

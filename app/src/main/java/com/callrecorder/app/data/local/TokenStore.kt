@@ -16,6 +16,8 @@ class TokenStore(private val context: Context) {
     private val refreshKey = stringPreferencesKey("refresh_token")
     private val userIdKey = stringPreferencesKey("user_id")          // Long → String
     private val nicknameKey = stringPreferencesKey("nickname")
+    private val loginProviderKey = stringPreferencesKey("login_provider")
+    private val accountEmailKey = stringPreferencesKey("account_email")
     private val activeStoreKey = stringPreferencesKey("active_store_id")  // Long → String
 
     suspend fun saveTokens(access: String, refresh: String?, userId: String, nickname: String) {
@@ -27,6 +29,15 @@ class TokenStore(private val context: Context) {
         }
     }
 
+    suspend fun saveLoginProfile(provider: String, email: String?) {
+        context.dataStore.edit { prefs ->
+            prefs[loginProviderKey] = provider
+            if (!email.isNullOrBlank()) {
+                prefs[accountEmailKey] = email
+            }
+        }
+    }
+
     suspend fun getAccessToken(): String? =
         context.dataStore.data.first()[accessKey]
 
@@ -35,6 +46,18 @@ class TokenStore(private val context: Context) {
 
     val nicknameFlow: Flow<String?> =
         context.dataStore.data.map { it[nicknameKey] }
+
+    val loginProviderFlow: Flow<String?> =
+        context.dataStore.data.map { it[loginProviderKey] }
+
+    val accountEmailFlow: Flow<String?> =
+        context.dataStore.data.map { it[accountEmailKey] }
+
+    suspend fun getLoginProvider(): String? =
+        context.dataStore.data.first()[loginProviderKey]
+
+    suspend fun getAccountEmail(): String? =
+        context.dataStore.data.first()[accountEmailKey]
 
     suspend fun setActiveStore(storeId: String) {
         context.dataStore.edit { it[activeStoreKey] = storeId }

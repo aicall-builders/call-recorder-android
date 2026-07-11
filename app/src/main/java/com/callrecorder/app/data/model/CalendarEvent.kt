@@ -9,11 +9,16 @@ data class CalendarEvent(
     val provider: String,
     val title: String,
     val time: String,                                    // "14:00"
+    @SerialName("call_id") val callId: String? = null,
+    @SerialName("caller_name") val callerName: String? = null,
+    @SerialName("caller_number") val callerNumber: String? = null,
+    val category: String? = null,
     @SerialName("end_time") val endTime: String = "",
     val description: String = "",
     @SerialName("event_url") val eventUrl: String? = null,
     @SerialName("start_at") val startAt: String? = null, // "2026-06-11 14:00:00"
     @SerialName("end_at") val endAt: String? = null,
+    val reminderEnabled: Boolean = true,
 ) {
     /** start_at 에서 "일(day)"만 추출. 파싱 실패 시 null */
     val dayOfMonth: Int?

@@ -5,45 +5,37 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.callrecorder.app.R
 import com.callrecorder.app.service.RecordingObserverService
 import com.callrecorder.app.ui.theme.AppColors
+import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.callrecorder.app.worker.UploadWorker
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionState
@@ -65,7 +57,7 @@ import com.google.accompanist.permissions.rememberPermissionState
  * "대시보드로 계속하기" 버튼 -> 1번 권한이 허용된 상태에서만 활성화.
  *   onContinue() 호출 시 옵저버 서비스 + 업로드 워커 시작.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PermissionScreen(onGranted: () -> Unit) {
     val context = LocalContext.current
@@ -89,6 +81,10 @@ fun PermissionScreen(onGranted: () -> Unit) {
     val notifPerm = if (Build.VERSION.SDK_INT >= 33) {
         rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     } else null
+    var audioToggleOn by remember { mutableStateOf(false) }
+    var contactsToggleOn by remember { mutableStateOf(false) }
+    var callLogToggleOn by remember { mutableStateOf(false) }
+    var notificationsToggleOn by remember { mutableStateOf(false) }
 
     // 핵심 권한(녹음) 허용되면 백그라운드 서비스/워커 시작
     LaunchedEffect(audioPerm.status.isGranted) {
@@ -97,151 +93,177 @@ fun PermissionScreen(onGranted: () -> Unit) {
             UploadWorker.enqueuePeriodic(context)
         }
     }
+    LaunchedEffect(audioPerm.status.isGranted) {
+        if (audioPerm.status.isGranted && audioToggleOn) audioToggleOn = true
+    }
+    LaunchedEffect(contactsPerm.status.isGranted) {
+        if (contactsPerm.status.isGranted && contactsToggleOn) contactsToggleOn = true
+    }
+    LaunchedEffect(callLogPerm.status.isGranted) {
+        if (callLogPerm.status.isGranted && callLogToggleOn) callLogToggleOn = true
+    }
+    LaunchedEffect(notifPerm?.status?.isGranted) {
+        if ((notifPerm?.status?.isGranted ?: false) && notificationsToggleOn) notificationsToggleOn = true
+    }
 
-    Scaffold(
-        containerColor = AppColors.Background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "AI 통화 비서",
-                        style = TextStyle(
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppColors.TextPrimary,
-                        ),
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { /* 시작 흐름이라 뒤로가기 비활성. 필요시 onBack 콜백 추가 */ }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = null,
-                            tint = AppColors.TextPrimary,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* TODO: 도움말 */ }) {
-                        Icon(
-                            imageVector = Icons.Filled.HelpOutline,
-                            contentDescription = "도움말",
-                            tint = AppColors.TextPrimary,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppColors.Background,
-                ),
-            )
+    PermissionContent(
+        audioGranted = audioToggleOn,
+        contactsGranted = contactsToggleOn,
+        callLogGranted = callLogToggleOn,
+        notificationsGranted = notificationsToggleOn,
+        canContinue = audioPerm.status.isGranted,
+        onAudioToggle = {
+            audioToggleOn = true
+            handlePermissionToggle(context, audioPerm)
         },
-    ) { padding ->
+        onContactsToggle = {
+            contactsToggleOn = true
+            handlePermissionToggle(context, contactsPerm)
+        },
+        onCallLogToggle = {
+            callLogToggleOn = true
+            handlePermissionToggle(context, callLogPerm)
+        },
+        onNotificationsToggle = {
+            notificationsToggleOn = true
+            notifPerm?.let { handlePermissionToggle(context, it) }
+        },
+        onGranted = onGranted,
+    )
+}
+
+@Composable
+private fun PermissionContent(
+    audioGranted: Boolean,
+    contactsGranted: Boolean,
+    callLogGranted: Boolean,
+    notificationsGranted: Boolean,
+    canContinue: Boolean = audioGranted,
+    onAudioToggle: () -> Unit,
+    onContactsToggle: () -> Unit,
+    onCallLogToggle: () -> Unit,
+    onNotificationsToggle: () -> Unit,
+    onGranted: () -> Unit,
+) {
+    Scaffold(containerColor = Color.White) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppColors.Background)
-                .padding(padding)
-                .padding(horizontal = 20.dp),
+                .background(Color.White)
+                .padding(padding),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(8.dp))
-
-            // ===== 헤드라인 =====
-            Text(
-                text = "서비스 권한 설정",
-                style = TextStyle(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColors.TextPrimary,
-                ),
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // ===== 안내 문구 =====
-            Text(
-                text = "AI 통화 비서가 예약 관리와 고객 응대를 원활하게 처리할 수 있도록 권한을 허용해 주세요. 설정은 언제든 변경 가능합니다.",
-                style = TextStyle(
-                    fontSize = 13.sp,
-                    color = AppColors.TextSecondary,
-                    lineHeight = 20.sp,
-                ),
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            // ===== 권한 카드들 =====
-            PermissionCard(
-                icon = Icons.Filled.Mic,
-                title = "통화 녹음 분석 및 저장",
-                desc = "에이전트가 저장된 통화 녹음들을 안전하게 불러 분석하고, 예약 정보를 추출하기 위해 필요합니다.",
-                checked = audioPerm.status.isGranted,
-                onToggle = { handlePermissionToggle(context, audioPerm) },
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            PermissionCard(
-                icon = Icons.Filled.People,
-                title = "연락처 접근 권한",
-                desc = "고객에게 전화가 왔을 때 기본 고객 정보를 자동으로 미리 표시합니다.",
-                checked = contactsPerm.status.isGranted,
-                onToggle = { handlePermissionToggle(context, contactsPerm) },
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            PermissionCard(
-                icon = Icons.Filled.Call,
-                title = "통화 기록 접근",
-                desc = "녹음된 통화의 실제 발신 번호와 연락처 이름을 자동으로 채워 정확하게 표시합니다.",
-                checked = callLogPerm.status.isGranted,
-                onToggle = { handlePermissionToggle(context, callLogPerm) },
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            PermissionCard(
-                icon = Icons.Filled.Notifications,
-                title = "카카오 알림톡 전송",
-                desc = "예약이 확정되면 빠르게 고객님께 카카오톡으로 실시간 알림을 보내드립니다.",
-                checked = notifPerm?.status?.isGranted ?: true,  // SDK<33 은 권한 불필요
-                onToggle = {
-                    notifPerm?.let { handlePermissionToggle(context, it) }
-                },
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            // ===== 대시보드로 계속하기 =====
-            Button(
-                onClick = onGranted,
-                enabled = audioPerm.status.isGranted,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppColors.BrandBlue,
-                    contentColor = AppColors.TextOnPrimary,
-                    disabledContainerColor = AppColors.BrandBlue.copy(alpha = 0.4f),
-                    disabledContentColor = AppColors.TextOnPrimary.copy(alpha = 0.7f),
-                ),
+                    .height(60.dp)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "대시보드로 계속하기",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                Image(
+                    painter = painterResource(id = R.drawable.icon_header_back),
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(32.dp),
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(37.dp))
+
+            Column(
+                modifier = Modifier.width(325.dp),
+                verticalArrangement = Arrangement.spacedBy(33.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(11.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "서비스 권한 설정",
+                        style = TextStyle(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF1A1A21),
+                            lineHeight = 32.sp,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
+
+                    Text(
+                        text = "AI 통화 비서가 원활한 관리를 할 수 있도록\n권한을 허용해 주세요.",
+                        style = TextStyle(
+                            fontSize = 18.sp,
+                            color = Color(0xFF5A5F6C),
+                            lineHeight = 24.sp,
+                            letterSpacing = (-0.5).sp,
+                        ),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_file,
+                        title = "통화 녹음 분석 및 저장",
+                        desc = "통화 녹음 분석시 파일 접근 권한 허용,\n통화 내용 분석 및 정보 추출 허용",
+                        checked = audioGranted,
+                        onToggle = onAudioToggle,
+                    )
+
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_num,
+                        title = "연락처 접근 권한",
+                        desc = "휴대폰 연락처 정보 접근 권한 허용,\n전화 수신 시 기본 고객 정보 표시 허용",
+                        checked = contactsGranted,
+                        onToggle = onContactsToggle,
+                    )
+
+                    PermissionCard(
+                        iconRes = R.drawable.icon_access_mach,
+                        title = "통화 기록 접근",
+                        desc = "녹음된 통화의 발신 번호와 연락처 이름 자동 매칭 허용",
+                        checked = callLogGranted,
+                        onToggle = onCallLogToggle,
+                        textStartGap = 16.dp,
+                    )
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            OnboardingPrimaryButton(
+                text = "통화비서 이용하기",
+                onClick = onGranted,
+                enabled = canContinue,
+                modifier = Modifier
+                    .width(328.dp)
+                    .padding(bottom = 65.dp),
+            )
         }
+    }
+}
+
+@Preview(
+    name = "Permission",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=360dp,height=800dp,dpi=440",
+)
+@Composable
+private fun PermissionScreenPreview() {
+    CallRecorderTheme {
+        PermissionContent(
+            audioGranted = false,
+            contactsGranted = false,
+            callLogGranted = false,
+            notificationsGranted = false,
+            onAudioToggle = {},
+            onContactsToggle = {},
+            onCallLogToggle = {},
+            onNotificationsToggle = {},
+            onGranted = {},
+        )
     }
 }
 
@@ -277,66 +299,55 @@ private fun openAppSettings(context: android.content.Context) {
  * 컴포저블: 권한 카드
  * ───────────────────────────────────────────────── */
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PermissionCard(
-    icon: ImageVector,
+    iconRes: Int,
     title: String,
     desc: String,
     checked: Boolean,
     onToggle: () -> Unit,
+    textStartGap: Dp = 8.dp,
 ) {
     Surface(
         onClick = onToggle,
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(14.dp),
-                ambientColor = Color(0x10000000),
-                spotColor = Color(0x10000000),
-            ),
-        color = AppColors.Surface,
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+        color = AppColors.DeepBrown50,
+        shape = RoundedCornerShape(24.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 좌측 아이콘 박스 (연한 파란 배경)
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(IconBoxBg),
+                    .background(Color.White),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = icon,
+                Image(
+                    painter = painterResource(id = iconRes),
                     contentDescription = null,
-                    tint = AppColors.BrandBlue,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(40.dp),
                 )
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(textStartGap))
 
-            // 본문
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = title,
                     style = TextStyle(
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AppColors.TextPrimary,
+                        color = Color(0xFF1A1A21),
                     ),
                 )
-                Spacer(Modifier.height(4.dp))
                 Text(
                     text = desc,
                     style = TextStyle(
                         fontSize = 11.sp,
-                        color = AppColors.TextSecondary,
+                        color = Color(0xFF656565),
                         lineHeight = 16.sp,
                     ),
                 )
@@ -344,23 +355,13 @@ private fun PermissionCard(
 
             Spacer(Modifier.width(8.dp))
 
-            // 우측 토글
-            Switch(
-                checked = checked,
-                onCheckedChange = { onToggle() },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = AppColors.BrandBlue,
-                    checkedBorderColor = AppColors.BrandBlue,
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = ToggleOffTrack,
-                    uncheckedBorderColor = ToggleOffTrack,
+            Image(
+                painter = painterResource(
+                    if (checked) R.drawable.icon_toggle_l_on else R.drawable.icon_toggle_l_off
                 ),
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
             )
         }
     }
 }
-
-// ===== 이 화면 전용 색상 =====
-private val IconBoxBg = Color(0xFFEBEFF6)        // 카드 좌측 아이콘 박스 연파랑
-private val ToggleOffTrack = Color(0xFFE0E2EA)   // 토글 OFF 회색 트랙

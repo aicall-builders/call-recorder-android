@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CallRecorder"
+rootProject.name = "FIANO"
 include(":app")

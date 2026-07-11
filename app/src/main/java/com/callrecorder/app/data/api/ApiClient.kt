@@ -1,5 +1,6 @@
 package com.callrecorder.app.data.api
 
+import android.util.Log
 import com.callrecorder.app.BuildConfig
 import com.callrecorder.app.data.local.TokenStore
 import com.callrecorder.app.util.SafeLog
@@ -7,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -43,7 +45,9 @@ object ApiClient {
             val req = if (isS3 || isAuthEndpoint) {
                 original
             } else {
-                val idToken = runBlocking { fetchFirebaseIdToken() }
+                val idToken = runBlocking {
+                    withTimeoutOrNull(8_000L) { fetchFirebaseIdToken() }
+                }
                 if (!idToken.isNullOrBlank()) {
                     original.newBuilder()
                         .addHeader("Authorization", "Bearer $idToken")
@@ -67,6 +71,7 @@ object ApiClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
             else HttpLoggingInterceptor.Level.NONE
+            redactHeader("Authorization")
         }
 
         val client = OkHttpClient.Builder()
@@ -79,6 +84,7 @@ object ApiClient {
             .build()
 
         val contentType = "application/json".toMediaType()
+        Log.d("API_URL", "Base URL = ${BuildConfig.API_BASE_URL}")
         return Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)

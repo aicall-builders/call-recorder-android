@@ -1,11 +1,16 @@
 package com.callrecorder.app.data.repository
 
 import com.callrecorder.app.data.api.ApiService
+import com.callrecorder.app.data.local.ManualCalendarEventDao
+import com.callrecorder.app.data.local.ManualCalendarEventEntity
 import com.callrecorder.app.data.model.CalendarConnection
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CalendarOAuthCodeRequest
 
-class CalendarRepository(private val api: ApiService) {
+class CalendarRepository(
+    private val api: ApiService,
+    private val manualCalendarEventDao: ManualCalendarEventDao,
+) {
 
     suspend fun getConnections(): Result<List<CalendarConnection>> = runCatching {
         api.getCalendarConnections().connections
@@ -46,5 +51,17 @@ class CalendarRepository(private val api: ApiService) {
     /** 날짜 범위 일정 (월 전체 조회용). from~to = "YYYY-MM-DD" */
     suspend fun getEventsInRange(from: String, to: String, limit: Int = 100): Result<List<CalendarEvent>> = runCatching {
         api.getCalendarEventsRange(from = from, to = to, limit = limit).events
+    }
+
+    suspend fun getManualEventsInRange(from: String, to: String): Result<List<ManualCalendarEventEntity>> = runCatching {
+        manualCalendarEventDao.getInRange(fromDate = from, toDate = to)
+    }
+
+    suspend fun saveManualEvent(event: ManualCalendarEventEntity): Result<Unit> = runCatching {
+        manualCalendarEventDao.upsert(event)
+    }
+
+    suspend fun deleteManualEvent(eventId: String): Result<Unit> = runCatching {
+        manualCalendarEventDao.deleteById(eventId)
     }
 }

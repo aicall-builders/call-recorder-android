@@ -43,6 +43,13 @@ class CallRepository(
             Unit
         }
 
+    /** AI 요약문 사용자 수정 저장 (PATCH /calls/{id}) */
+    suspend fun updateSummary(callId: String, summary: String): Result<Unit> =
+        runCatching {
+            api.updateCall(callId, UpdateCallRequest(summary = summary))
+            Unit
+        }
+
     /** 외부에서 명시적으로 FAILED 마킹 (예: 파일 삭제됨) */
     suspend fun markAsFailed(id: Long, reason: String) {
         dao.setError(id, RecordingStatus.FAILED, reason)
@@ -133,20 +140,32 @@ class CallRepository(
             }.onFailure { SafeLog.w("CallRepo", "발신자 정보 보강 실패", it) }
         }
 
-        // 3) STT/요약 처리 트리거
-        val procResp = api.processCall(urlResp.callId)
-        if (!procResp.isSuccessful) {
-            SafeLog.w("CallRepo", "process trigger failed: ${procResp.code()}")
-            // 실패해도 업로드는 됐으므로 PROCESSING 으로만 마킹
-        }
+        // 3) STT/요약 처리 트리거. 트리거가 일시 실패해도 업로드는 성공했으므로
+        // 로컬 항목은 PROCESSING으로 남겨 재시도/조회 흐름에서 이어가게 둔다.
+        triggerProcess(urlResp.callId)
         dao.updateStatus(rec.id, RecordingStatus.PROCESSING)
         urlResp.callId
     }.onFailure { e ->
         dao.setError(rec.id, RecordingStatus.FAILED, e.message)
     }
 
+    suspend fun triggerProcess(callId: String): Result<Unit> = runCatching {
+        val procResp = api.processCall(callId)
+        if (!procResp.isSuccessful) {
+            error("process trigger failed: HTTP ${procResp.code()}")
+        }
+        Unit
+    }.onFailure { e ->
+        SafeLog.w("CallRepo", "process trigger failed for $callId: ${e.message}", e)
+    }
+
     suspend fun deleteCall(callId: String): Result<Unit> = runCatching {
-        api.deleteCall(callId)
+        val response = api.deleteCall(callId)
+        if (!response.isSuccessful) {
+            error("delete call failed: HTTP ${response.code()}")
+        }
+        dao.deleteByServerCallId(callId)
+        Unit
     }
 
     suspend fun listCalls(storeId: String?): Result<List<Call>> = runCatching {

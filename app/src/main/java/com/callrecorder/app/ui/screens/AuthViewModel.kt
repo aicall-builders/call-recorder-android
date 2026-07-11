@@ -1,5 +1,6 @@
 package com.callrecorder.app.ui.screens
 
+import android.util.Log
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -38,10 +39,29 @@ class AuthViewModel : ViewModel() {
 
     // idToken만 받도록 단순화
     fun handleGoogleSignInResult(idToken: String) {
+
+        Log.d("GOOGLE_LOGIN", "idToken received")
+
         viewModelScope.launch {
+
+            Log.d("GOOGLE_LOGIN", "calling repo")
+
             repo.loginWithGoogle(idToken).fold(
-                onSuccess = { _state.value = AuthUiState(loading = false, success = true, loginType = LoginType.GOOGLE) },
-                onFailure = { _state.value = AuthUiState(loading = false, error = it.message) },
+                onSuccess = {
+                    Log.d("GOOGLE_LOGIN", "SUCCESS")
+                    _state.value = AuthUiState(
+                        loading = false,
+                        success = true,
+                        loginType = LoginType.GOOGLE
+                    )
+                },
+                onFailure = {
+                    Log.e("GOOGLE_LOGIN", "FAIL", it)
+                    _state.value = AuthUiState(
+                        loading = false,
+                        error = it.message
+                    )
+                },
             )
         }
     }

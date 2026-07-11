@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -6,28 +6,30 @@ plugins {
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 val gradleProps = Properties().apply {
     rootProject.file("gradle.properties").inputStream().use { load(it) }
 }
-val kakaoKey: String = gradleProps.getProperty("KAKAO_NATIVE_APP_KEY", "")
+val kakaoKey: String = (providers.gradleProperty("KAKAO_NATIVE_APP_KEY").orNull ?: gradleProps.getProperty("KAKAO_NATIVE_APP_KEY") ?: "").trim()
 val apiBaseUrl: String = gradleProps.getProperty("API_BASE_URL", "")
+val composeUiVersion = "1.11.0"
 
 android {
     namespace = "com.callrecorder.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.callrecorder.app"
-        minSdk = 26          // Android 8.0 - 99%+ 시장 커버
+        minSdk = 26          // Android 8.0 - 99%+ ?쒖옣 而ㅻ쾭
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
 
-        // 카카오 SDK 매니페스트 placeholder , 네이버
-        manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = kakaoKey
-        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"$kakaoKey\"")
+        // 移댁뭅??SDK 留ㅻ땲?섏뒪??placeholder , ?ㅼ씠踰?
+        manifestPlaceholders["KAKAO_NATIVE_APP_KEY"] = "385c52a6aae0029d1eae4c0533071650"
+        buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"385c52a6aae0029d1eae4c0533071650\"")
         buildConfigField("String", "NAVER_CLIENT_ID", "\"${gradleProps.getProperty("NAVER_CLIENT_ID", "")}\"")
         buildConfigField("String", "NAVER_CLIENT_SECRET", "\"${gradleProps.getProperty("NAVER_CLIENT_SECRET", "")}\"")
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
@@ -38,7 +40,7 @@ android {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -52,9 +54,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -75,9 +74,10 @@ dependencies {
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.ui:ui:$composeUiVersion")
+    implementation("androidx.compose.ui:ui-graphics:$composeUiVersion")
+    implementation("androidx.compose.ui:ui-tooling-preview:$composeUiVersion")
+    debugImplementation("androidx.compose.ui:ui-tooling:$composeUiVersion")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.6")
@@ -88,15 +88,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Room (로컬 DB - 업로드 상태 관리)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
+    // Room (濡쒖뺄 DB - ?낅줈???곹깭 愿由?
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
 
-    // WorkManager (백그라운드 업로드 + 주기적 스캔)
+    // WorkManager (諛깃렇?쇱슫???낅줈??+ 二쇨린???ㅼ틪)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    // DataStore (토큰 등 저장)
+    // DataStore (?좏겙 ?????
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Firebase BoM
@@ -104,7 +104,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
-    // implementation("com.google.firebase:firebase-crashlytics-ktx")  // 발표 후 추가 예정
+    // implementation("com.google.firebase:firebase-crashlytics-ktx")  // 諛쒗몴 ??異붽? ?덉젙
 
     // Kakao Login
     implementation("com.kakao.sdk:v2-user:2.20.1")
@@ -116,13 +116,13 @@ dependencies {
     implementation("com.navercorp.nid:oauth:5.9.1")
 
 
-    // Coil (이미지)
+    // Coil (?대?吏)
     implementation("io.coil-kt:coil-compose:2.5.0")
     
-     // EXIF (사진 회전 보정)
+     // EXIF (?ъ쭊 ?뚯쟾 蹂댁젙)
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
-    // Media3 ExoPlayer (음성 재생용)
+    // Media3 ExoPlayer (?뚯꽦 ?ъ깮??
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.media3:media3-common:1.2.1")
@@ -134,3 +134,4 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
 }
+

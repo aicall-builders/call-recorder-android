@@ -35,7 +35,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -47,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.callrecorder.app.ui.theme.AppColors
 
 // ─────────────────────────────────────────────────────────────
 // 1) 영구 저장 플래그 (한 번 본 사용자는 다시 안 보이게)
@@ -62,6 +62,13 @@ fun Context.markFeatureTourDone() {
     getSharedPreferences(TOUR_PREFS, Context.MODE_PRIVATE)
         .edit()
         .putBoolean(KEY_HOME_TOUR_DONE, true)
+        .apply()
+}
+
+fun Context.resetFeatureTour() {
+    getSharedPreferences(TOUR_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .remove(KEY_HOME_TOUR_DONE)
         .apply()
 }
 
@@ -176,7 +183,7 @@ fun FeatureTourOverlay(
 
         // 6-1) 어둡게 + 구멍
         Canvas(Modifier.fillMaxSize()) {
-            val scrim = Color.Black.copy(alpha = 0.74f)
+            val scrim = AppColors.FianoBlack950.copy(alpha = 0.74f)
             if (rect != null && rect.width > 0f && rect.height > 0f) {
                 val spot = Rect(
                     left = rect.left - padPx,
@@ -191,7 +198,7 @@ fun FeatureTourOverlay(
                 }
                 drawPath(path, scrim)
                 drawRoundRect(
-                    color = Color.White.copy(alpha = 0.95f),
+                    color = AppColors.Surface.copy(alpha = 0.95f),
                     topLeft = Offset(spot.left, spot.top),
                     size = Size(spot.width, spot.height),
                     cornerRadius = CornerRadius(cornerPx, cornerPx),
@@ -247,7 +254,7 @@ private fun TourTooltipCard(
         // 카드 탭이 뒤 오버레이로 새어나가지 않게 소비
         modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
     ) {
         Box(Modifier.padding(20.dp)) {
@@ -256,13 +263,13 @@ private fun TourTooltipCard(
                     text = step.title,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3D4166),
+                    color = AppColors.TextPrimary,
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(
                     text = step.description,
                     fontSize = 14.sp,
-                    color = Color(0xFF555B6E),
+                    color = AppColors.TextSecondary,
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.size(16.dp))
@@ -275,14 +282,14 @@ private fun TourTooltipCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (!isLast) {
                             TextButton(onClick = onSkip) {
-                                Text("건너뛰기", color = Color(0xFF9AA0B0), fontSize = 14.sp)
+                                Text("건너뛰기", color = AppColors.FianoBlack400, fontSize = 14.sp)
                             }
                             Spacer(Modifier.width(4.dp))
                         }
                         TextButton(onClick = onNext) {
                             Text(
                                 text = if (isLast) "시작하기" else "다음",
-                                color = Color(0xFF3B7DD8),
+                                color = AppColors.Accent,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                             )
@@ -310,7 +317,7 @@ private fun StepDots(index: Int, total: Int) {
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCircle(
-                        color = if (active) Color(0xFF3B7DD8) else Color(0xFFD2D6E0)
+                        color = if (active) AppColors.Accent else AppColors.FianoBlack200
                     )
                 }
             }

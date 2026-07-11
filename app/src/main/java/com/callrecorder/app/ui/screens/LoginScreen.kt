@@ -1,28 +1,31 @@
 package com.callrecorder.app.ui.screens
 
 import android.app.Activity
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.callrecorder.app.R
 import com.callrecorder.app.ui.theme.AppColors
+import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
@@ -54,137 +57,158 @@ fun LoginScreen(
                     vm.setError("Google ID Token을 가져올 수 없습니다.")
                 }
             } catch (e: ApiException) {
+                Log.e("GOOGLE_LOGIN", "Google sign-in failed. statusCode=${e.statusCode}", e)
                 vm.setError("Google 로그인 실패: ${e.statusCode}")
             }
         } else {
-            vm.setError(null)
+            Log.w("GOOGLE_LOGIN", "Google sign-in canceled or failed before account result. resultCode=${result.resultCode}")
+            vm.setError("Google 로그인 결과를 가져오지 못했습니다. 다시 시도해주세요. (${result.resultCode})")
         }
     }
 
-    Scaffold(containerColor = AppColors.Background) { padding ->
-        Column(
+    LoginContent(
+        state = state,
+        onKakaoClick = { vm.loginWithKakao(context) },
+        onGoogleClick = {
+            val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(context.getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build()
+            val signInIntent = GoogleSignIn.getClient(context, gso).signInIntent
+            vm.setLoading(LoginType.GOOGLE)
+            googleLauncher.launch(signInIntent)
+        },
+    )
+}
+
+@Composable
+private fun LoginContent(
+    state: AuthUiState,
+    onKakaoClick: () -> Unit,
+    onGoogleClick: () -> Unit,
+) {
+    Scaffold(containerColor = Color.White) { padding ->
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppColors.Background)
+                .background(Color.White)
                 .padding(padding)
                 .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.weight(1f))
-
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(AppColors.Surface, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center,
+                    .align(Alignment.Center)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(
-                    imageVector = Icons.Filled.PhoneAndroid,
-                    contentDescription = null,
-                    tint = AppColors.BrandBlue,
-                    modifier = Modifier.size(32.dp),
+                FianoFolderIcon()
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "간편 로그인으로 시작하기",
+                    style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color(0xFF1A1A21), lineHeight = 32.sp),
+                    textAlign = TextAlign.Center,
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = "소셜 계정으로 1초만에 시작하세요.\n번거로운 가입 절차가 없습니다.",
+                    style = TextStyle(fontSize = 18.sp, color = Color(0xFF5A5F6C), lineHeight = 24.sp, letterSpacing = (-0.5).sp),
+                    textAlign = TextAlign.Center,
                 )
             }
 
-            Spacer(Modifier.height(14.dp))
-
-            Text(
-                text = "AI 통화 비서",
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary),
-            )
-
-            Spacer(Modifier.height(28.dp))
-
-            Text(
-                text = "로그인하고 시작하기",
-                style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary),
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            Text(
-                text = "소셜 계정으로 1초만에 시작하세요.\n번거로운 가입 절차가 없습니다.",
-                style = TextStyle(fontSize = 13.sp, color = AppColors.TextSecondary, lineHeight = 20.sp),
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.weight(1.4f))
-
-            // ── 에러 표시 ──
-            state.error?.let {
-                Surface(
-                    color = Color(0xFFFEE2E2),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "로그인 실패: $it",
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        style = TextStyle(fontSize = 12.sp, color = Color(0xFFB91C1C)),
-                        textAlign = TextAlign.Center,
-                    )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 64.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // ── 에러 표시 ──
+                state.error?.let {
+                    Surface(
+                        color = AppColors.SignalRed50,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = "로그인 실패: $it",
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            style = TextStyle(fontSize = 12.sp, color = AppColors.SignalRed800),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
-                Spacer(Modifier.height(12.dp))
+
+                // ── 카카오 버튼 ──
+                SocialLoginButton(
+                    onClick = onKakaoClick,
+                    loading = state.loading && state.loginType == LoginType.KAKAO,
+                    enabled = !state.loading,
+                    containerColor = AppColors.KakaoYellow,
+                    contentColor = AppColors.KakaoBlack,
+                    icon = {
+                        Image(
+                            painter = painterResource(id = R.drawable.icon_kakao_logo),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    text = "카카오로 시작하기",
+                    loadingColor = AppColors.KakaoBlack,
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // ── 구글 버튼 ──
+                SocialLoginButton(
+                    onClick = onGoogleClick,
+                    loading = state.loading && state.loginType == LoginType.GOOGLE,
+                    enabled = !state.loading,
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF4D4D57),
+                    borderColor = Color(0xFF747775),
+                    icon = {
+                        Image(
+                            painter = painterResource(id = R.drawable.icon_google_logo),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    text = "Google로 시작하기",
+                    loadingColor = AppColors.Brand,
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Text(
+                    text = "로그인 시 이용약관 및 개인정보 처리방침에\n동의하는 것으로 간주됩니다.",
+                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF474B6B), lineHeight = 16.sp),
+                    textAlign = TextAlign.Center,
+                )
             }
-
-            // ── 카카오 버튼 ──
-            SocialLoginButton(
-                onClick = { vm.loginWithKakao(context) },
-                loading = state.loading && state.loginType == LoginType.KAKAO,
-                enabled = !state.loading,
-                containerColor = AppColors.KakaoYellow,
-                contentColor = AppColors.KakaoBlack,
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.ChatBubble,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = AppColors.KakaoBlack,
-                    )
-                },
-                text = "카카오로 시작하기",
-                loadingColor = AppColors.KakaoBlack,
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // ── 구글 버튼 ──
-            SocialLoginButton(
-                onClick = {
-                    // requestServerAuthCode 없이 idToken만 요청
-                    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestIdToken("213295926741-kchpjbvh6qhlovld5njcvnrnlh9v13mc.apps.googleusercontent.com")
-                        .requestEmail()
-                        .build()
-                    val signInIntent = GoogleSignIn.getClient(context, gso).signInIntent
-                    vm.setLoading(LoginType.GOOGLE)
-                    googleLauncher.launch(signInIntent)
-                },
-                loading = state.loading && state.loginType == LoginType.GOOGLE,
-                enabled = !state.loading,
-                containerColor = Color.White,
-                contentColor = Color(0xFF3C4043),
-                borderColor = Color(0xFFDCE0E6),
-                icon = {
-                    Text(
-                        text = "G",
-                        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4285F4)),
-                    )
-                },
-                text = "Google로 시작하기",
-                loadingColor = Color(0xFF4285F4),
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            Text(
-                text = "로그인 시 이용약관 및 개인정보 처리방침에\n동의하는 것으로 간주됩니다.",
-                style = TextStyle(fontSize = 11.sp, color = AppColors.TextSecondary, lineHeight = 16.sp),
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(28.dp))
         }
+    }
+}
+
+@Preview(
+    name = "Login",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=360dp,height=800dp,dpi=440",
+)
+@Composable
+private fun LoginScreenPreview() {
+    CallRecorderTheme {
+        LoginContent(
+            state = AuthUiState(),
+            onKakaoClick = {},
+            onGoogleClick = {},
+        )
     }
 }
 
@@ -205,13 +229,13 @@ private fun SocialLoginButton(
         enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .height(56.dp)
             .then(
                 if (borderColor != null)
-                    Modifier.border(1.dp, borderColor, RoundedCornerShape(12.dp))
+                    Modifier.border(1.dp, borderColor, RoundedCornerShape(999.dp))
                 else Modifier,
             ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -228,8 +252,8 @@ private fun SocialLoginButton(
             )
         } else {
             icon()
-            Spacer(Modifier.width(10.dp))
-            Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = contentColor)
+            Spacer(Modifier.width(8.dp))
+            Text(text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = contentColor)
         }
     }
 }

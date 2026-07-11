@@ -71,7 +71,7 @@ class UploadWorker(
         )
         val notif: Notification = NotificationCompat.Builder(applicationContext, CallRecorderApp.CHANNEL_UPLOAD)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("통화 비서")
+            .setContentTitle("FIANO")
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(intent)

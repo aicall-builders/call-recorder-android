@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.background
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,6 +35,7 @@ import com.callrecorder.app.ui.screens.LoginScreen
 import com.callrecorder.app.ui.screens.LoginType
 import com.callrecorder.app.ui.screens.MainScreen
 import com.callrecorder.app.ui.screens.PermissionScreen
+import com.callrecorder.app.ui.screens.PrivacyConsentScreen
 import com.callrecorder.app.ui.screens.StoreViewModel
 import com.callrecorder.app.ui.screens.StoresScreen
 import com.callrecorder.app.di.CalendarOAuthResult
@@ -40,6 +43,7 @@ import com.callrecorder.app.onboarding.BusinessTypeScreen
 import com.callrecorder.app.onboarding.OnboardingScreen
 import com.callrecorder.app.onboarding.hasSelectedDomain
 import com.callrecorder.app.service.RecordingObserverService
+import com.callrecorder.app.onboarding.resetFeatureTour
 import com.callrecorder.app.ui.theme.CallRecorderTheme
 import com.callrecorder.app.util.SafeLog
 import com.callrecorder.app.worker.UploadWorker
@@ -87,8 +91,18 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val nav = rememberNavController()
     val auth: AuthViewModel = viewModel()
-    val token by auth.isLoggedIn.collectAsState(initial = null)
+    val token by auth.isLoggedIn.collectAsState(initial = AuthTokenState.Checking)
     val state by auth.state.collectAsState()
+
+    if (token == AuthTokenState.Checking) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     // 콜드 스타트: 로그인 안 됐으면 INTRO, 로그인됐으면 권한 게이트(PERMISSION) → 자동 통과 시 바로 메인
     val start = if (token.isNullOrBlank()) Routes.INTRO else Routes.PERMISSION
@@ -97,7 +111,13 @@ private fun AppRoot() {
         composable(Routes.INTRO) {
             IntroScreen(
                 onStart = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
-                onSkip = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
+                onSkip = { nav.navigate(Routes.PRIVACY_CONSENT) },
+            )
+        }
+        composable(Routes.PRIVACY_CONSENT) {
+            PrivacyConsentScreen(
+                onBack = { nav.popBackStack() },
+                onNext = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
             )
         }
         composable(Routes.LOGIN) {
@@ -134,8 +154,10 @@ private fun AppRoot() {
         }
         // 온보딩 5장 (매 로그인): 끝나면 메인
         composable(Routes.ONBOARDING) {
+            val context = LocalContext.current
             OnboardingScreen(
                 onFinish = {
+                    context.resetFeatureTour()
                     nav.navigate(Routes.MAIN) {
                         popUpTo(Routes.ONBOARDING) { inclusive = true }
                     }
@@ -155,6 +177,10 @@ private fun AppRoot() {
             )
         }
     }
+}
+
+private object AuthTokenState {
+    const val Checking = "__checking__"
 }
 
 /**
@@ -250,6 +276,7 @@ fun Context.markPermissionOnboardingDone() {
 
 object Routes {
     const val INTRO = "intro"
+    const val PRIVACY_CONSENT = "privacy_consent"
     const val LOGIN = "login"
     const val KAKAO_LINKED = "kakao_linked"
     const val PERMISSION = "permission"             // 콜드 스타트용 (자동 통과 가능)
