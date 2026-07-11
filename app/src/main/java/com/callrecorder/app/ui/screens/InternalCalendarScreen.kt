@@ -1,7 +1,6 @@
 package com.callrecorder.app.ui.screens
 
 import android.Manifest
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -951,20 +950,7 @@ private fun AddEventDialog(
     var reminderEnabled by remember(initialKey) { mutableStateOf(initialEvent?.reminderEnabled ?: true) }
     var imageError by remember(initialKey) { mutableStateOf<String?>(null) }
     var cameraImageUri by remember(initialKey) { mutableStateOf<Uri?>(null) }
-    val datePicker = remember(selectedYear, selectedMonth, selectedDay) {
-        DatePickerDialog(
-            context,
-            R.style.Theme_Fiano_DateTimePicker,
-            { _, year, monthZeroBased, dayOfMonth ->
-                selectedYear = year
-                selectedMonth = monthZeroBased + 1
-                selectedDay = dayOfMonth
-            },
-            selectedYear,
-            selectedMonth - 1,
-            selectedDay,
-        ).apply { setFianoDialogButtonColors() }
-    }
+    var showDatePicker by remember(initialKey) { mutableStateOf(false) }
     val timePicker = remember(time) {
         val (hour, minute) = time.toHourMinute()
         TimePickerDialog(
@@ -1055,7 +1041,7 @@ private fun AddEventDialog(
                     ScheduleSelectField(
                         label = "날짜",
                         value = "%04d년 %d월 %d일".format(selectedYear, selectedMonth, selectedDay),
-                        onClick = { datePicker.show() },
+                        onClick = { showDatePicker = true },
                         modifier = Modifier.weight(1f),
                     )
                     ScheduleSelectField(
@@ -1212,6 +1198,21 @@ private fun AddEventDialog(
         containerColor = Color.White,
         shape = RoundedCornerShape(24.dp),
     )
+
+    if (showDatePicker) {
+        FianoDatePickerDialog(
+            initialYear = selectedYear,
+            initialMonth = selectedMonth,
+            initialDay = selectedDay,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { year, month, day ->
+                selectedYear = year
+                selectedMonth = month
+                selectedDay = day
+                showDatePicker = false
+            },
+        )
+    }
 }
 
 private fun copyScheduleImageToAppStorage(context: Context, sourceUri: Uri): Result<Uri> = runCatching {
@@ -1235,6 +1236,174 @@ private fun copyScheduleImageToAppStorage(context: Context, sourceUri: Uri): Res
 private fun deleteLocalScheduleImage(uri: Uri) {
     if (uri.scheme == "file") {
         runCatching { File(uri.path.orEmpty()).delete() }
+    }
+}
+
+@Composable
+private fun FianoDatePickerDialog(
+    initialYear: Int,
+    initialMonth: Int,
+    initialDay: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (year: Int, month: Int, day: Int) -> Unit,
+) {
+    var visibleYear by remember { mutableStateOf(initialYear) }
+    var visibleMonth by remember { mutableStateOf(initialMonth) }
+    var pickedYear by remember { mutableStateOf(initialYear) }
+    var pickedMonth by remember { mutableStateOf(initialMonth) }
+    var pickedDay by remember { mutableStateOf(initialDay.coerceIn(1, daysInMonth(initialYear, initialMonth))) }
+    val today = remember { Calendar.getInstance() }
+    val weekdays = remember { listOf("일", "월", "화", "수", "목", "금", "토") }
+
+    fun moveMonth(delta: Int) {
+        val next = Calendar.getInstance().apply {
+            set(Calendar.YEAR, visibleYear)
+            set(Calendar.MONTH, visibleMonth - 1)
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.MONTH, delta)
+        }
+        visibleYear = next.get(Calendar.YEAR)
+        visibleMonth = next.get(Calendar.MONTH) + 1
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = { moveMonth(-1) }) {
+                    Icon(Icons.Filled.ChevronLeft, contentDescription = "이전 달", tint = AppColors.DeepBrown900)
+                }
+                Text(
+                    "%04d년 %d월".format(visibleYear, visibleMonth),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown950),
+                )
+                IconButton(onClick = { moveMonth(1) }) {
+                    Icon(Icons.Filled.ChevronRight, contentDescription = "다음 달", tint = AppColors.DeepBrown900)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth()) {
+                    weekdays.forEachIndexed { index, label ->
+                        val color = when (index) {
+                            0 -> AppColors.SignalRed600
+                            6 -> AppColors.DeepBrown600
+                            else -> AppColors.DeepBrown500
+                        }
+                        Text(
+                            label,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = color),
+                        )
+                    }
+                }
+
+                val days = daysInMonth(visibleYear, visibleMonth)
+                val firstOffset = firstDayOfWeek(visibleYear, visibleMonth)
+                val cells = remember(visibleYear, visibleMonth) {
+                    List(firstOffset) { 0 } + (1..days).toList()
+                }
+                cells.chunked(7).forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        (week + List(7 - week.size) { 0 }).forEach { day ->
+                            if (day == 0) {
+                                Spacer(Modifier.weight(1f).height(40.dp))
+                            } else {
+                                FianoDateCell(
+                                    day = day,
+                                    selected = visibleYear == pickedYear && visibleMonth == pickedMonth && day == pickedDay,
+                                    today = visibleYear == today.get(Calendar.YEAR) &&
+                                        visibleMonth == today.get(Calendar.MONTH) + 1 &&
+                                        day == today.get(Calendar.DAY_OF_MONTH),
+                                    onClick = {
+                                        pickedYear = visibleYear
+                                        pickedMonth = visibleMonth
+                                        pickedDay = day
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                PopupActionButton(
+                    label = "취소",
+                    type = PopupActionType.OUTLINE,
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+                PopupActionButton(
+                    label = "확인",
+                    type = PopupActionType.FILL,
+                    onClick = { onConfirm(pickedYear, pickedMonth, pickedDay) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(24.dp),
+    )
+}
+
+@Composable
+private fun FianoDateCell(
+    day: Int,
+    selected: Boolean,
+    today: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.height(40.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(if (selected) AppColors.DeepBrown900 else Color.Transparent)
+                .then(
+                    if (today && !selected) {
+                        Modifier.border(BorderStroke(1.dp, AppColors.SignalRed500), CircleShape)
+                    } else {
+                        Modifier
+                    }
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                day.toString(),
+                textAlign = TextAlign.Center,
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontWeight = if (selected || today) FontWeight.Bold else FontWeight.Normal,
+                    color = when {
+                        selected -> Color.White
+                        today -> AppColors.SignalRed600
+                        else -> AppColors.DeepBrown900
+                    },
+                ),
+            )
+        }
     }
 }
 
