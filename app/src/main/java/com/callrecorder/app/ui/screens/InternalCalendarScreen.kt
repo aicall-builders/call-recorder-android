@@ -147,6 +147,7 @@ fun InternalCalendarScreen(
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     onScheduleChanged: () -> Unit = {},
+    openAddRequestKey: Int = 0,
 ) {
     val calState by calVm.state.collectAsState()
 
@@ -157,6 +158,13 @@ fun InternalCalendarScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var editingManualEvent by remember { mutableStateOf<CalEvent?>(null) }
+
+    LaunchedEffect(openAddRequestKey) {
+        if (openAddRequestKey > 0) {
+            editingManualEvent = null
+            showAddDialog = true
+        }
+    }
 
     // API 일정 + 저장된 수동 일정 병합
     val apiEvents = remember(calState.events) {

@@ -92,6 +92,7 @@ fun MainScreen(
     var showExternalCalendarSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var openCallsOnPendingTab by remember { mutableStateOf(false) }
+    var openCalendarAddRequestKey by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -252,6 +253,12 @@ fun MainScreen(
                                     callId = callDetailId!!,
                                     initialCall = callDetailInitial,
                                     onBack = { callDetailId = null },
+                                    onManualScheduleRequest = {
+                                        callDetailId = null
+                                        callDetailInitial = null
+                                        selected = BottomTab.CALENDAR
+                                        openCalendarAddRequestKey += 1
+                                    },
                                 )
                             } else {
                                 CallSummaryListScreen(
@@ -281,6 +288,7 @@ fun MainScreen(
                             onNotificationClick = { showNotifications = true },
                             hasNotification = hasNotification,
                             onScheduleChanged = { homeVm.refresh(silent = true) },
+                            openAddRequestKey = openCalendarAddRequestKey,
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
                             onBack = { selected = BottomTab.HOME },
@@ -300,7 +308,11 @@ fun MainScreen(
                 selected = selected,
                 onSelect = { tab ->
                     noteEditCallId = null
-                    if (tab == BottomTab.CALLS) openCallsOnPendingTab = false
+                    if (tab == BottomTab.CALLS) {
+                        openCallsOnPendingTab = false
+                        callDetailId = null
+                        callDetailInitial = null
+                    }
                     selected = tab
                     if (tab != BottomTab.CALLS) callDetailId = null
                 },

@@ -63,7 +63,16 @@ class CallRepository(
                 callId,
                 UpdateCallRequest(summary = summary, internalKeywords = internalKeywords),
             )
-            if (!response.isSuccessful) error("update summary failed: HTTP ${response.code()}")
+            if (response.isSuccessful) return@runCatching Unit
+
+            val errorBody = response.errorBody()?.string().orEmpty()
+            SafeLog.w("CallRepository", "update summary+keywords failed: HTTP ${response.code()} $errorBody")
+
+            val summaryOnlyResponse = api.updateCall(callId, UpdateCallRequest(summary = summary))
+            if (!summaryOnlyResponse.isSuccessful) {
+                val summaryOnlyError = summaryOnlyResponse.errorBody()?.string().orEmpty()
+                error("update summary failed: HTTP ${summaryOnlyResponse.code()} $summaryOnlyError".trim())
+            }
             Unit
         }
 

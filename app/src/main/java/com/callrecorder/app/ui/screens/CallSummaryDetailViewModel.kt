@@ -39,6 +39,7 @@ data class CallSummaryDetailUiState(
     val originalCallId: String? = null,
     val originalSummary: String = "",
     val originalKeywordRows: List<Pair<String, String>> = emptyList(),
+    val showMissingScheduleDialog: Boolean = false,
 )
 
 class CallSummaryDetailViewModel : ViewModel() {
@@ -167,6 +168,14 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
     }
 
+    fun clearSummaryMessage() {
+        _state.value = _state.value.copy(summaryMessage = null)
+    }
+
+    fun dismissMissingScheduleDialog() {
+        _state.value = _state.value.copy(showMissingScheduleDialog = false)
+    }
+
     fun addToCalendar(callId: String, provider: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(calendarLoading = true, calendarMessage = null, showCalendarPicker = false)
@@ -204,22 +213,26 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
 
         val info = call.extractedInfoOrNull()
-        val date = info?.date?.takeIf { it.isNotBlank() }
-        val time = info?.time?.takeIf { it.isNotBlank() } ?: "00:00"
+        val schedule = call.resolveCalendarSchedule(info)
+        val date = schedule?.date
+        val time = schedule?.time ?: "00:00"
         if (date.isNullOrBlank()) {
-            _state.value = _state.value.copy(calendarMessage = "등록할 일정 날짜를 찾지 못했어요.")
+            _state.value = _state.value.copy(
+                calendarMessage = null,
+                showMissingScheduleDialog = true,
+            )
             return
         }
 
         val title = listOfNotNull(
-            info.customerName?.takeIf { it.isNotBlank() },
+            info?.customerName?.takeIf { it.isNotBlank() },
             call.callerName?.takeIf { it.isNotBlank() },
             call.callerNumber?.takeIf { it.isNotBlank() },
         ).firstOrNull() ?: "통화 일정"
 
         val description = buildString {
             val summary = call.summary?.takeIf { it.isNotBlank() }
-            val notes = info.specialNotes?.takeIf { it.isNotBlank() }
+            val notes = info?.specialNotes?.takeIf { it.isNotBlank() }
             if (summary != null) append(summary)
             if (notes != null) {
                 if (isNotBlank()) append("\n")
@@ -229,8 +242,8 @@ class CallSummaryDetailViewModel : ViewModel() {
         }
 
         val chip = when {
-            info.categoryCode == "reservation" || call.category == "예약" -> "RESERVATION"
-            info.categoryCode == "inquiry" || call.category == "문의" -> "INQUIRY"
+            info?.categoryCode == "reservation" || call.category == "예약" -> "RESERVATION"
+            info?.categoryCode == "inquiry" || call.category == "문의" -> "INQUIRY"
             else -> "OTHER"
         }
 
@@ -322,4 +335,71 @@ class CallSummaryDetailViewModel : ViewModel() {
     }
 
 
+}
+
+private data class CalendarScheduleCandidate(
+    val date: String,
+    val time: String,
+)
+
+private fun Call.resolveCalendarSchedule(info: com.callrecorder.app.data.model.ExtractedInfo?): CalendarScheduleCandidate? {
+    val keywordSchedule = internalKeywordsMap()
+        .entries
+        .firstOrNull { (label, value) ->
+            value.isNotBlank() && listOf("방문", "일정", "날짜", "예약").any { label.contains(it) }
+        }
+        ?.value
+        ?.toCalendarScheduleCandidate()
+
+    if (keywordSchedule != null) return keywordSchedule
+
+    val normalizedDate = info?.date?.takeIf { it.isNotBlank() }?.toCalendarDateOrNull()
+    if (normalizedDate != null) {
+        return CalendarScheduleCandidate(
+            date = normalizedDate,
+            time = info.time?.takeIf { it.isNotBlank() }?.toCalendarTimeOrNull() ?: "00:00",
+        )
+    }
+
+    return null
+}
+
+private fun String.toCalendarScheduleCandidate(): CalendarScheduleCandidate? {
+    val date = toCalendarDateOrNull() ?: return null
+    val time = toCalendarTimeOrNull() ?: "00:00"
+    return CalendarScheduleCandidate(date = date, time = time)
+}
+
+private fun String.toCalendarDateOrNull(): String? {
+    val text = trim()
+    val matchers = listOf(
+        Regex("""(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일"""),
+        Regex("""(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})"""),
+    )
+    for (regex in matchers) {
+        val match = regex.find(text) ?: continue
+        val year = match.groupValues[1].toIntOrNull() ?: continue
+        val month = match.groupValues[2].toIntOrNull() ?: continue
+        val day = match.groupValues[3].toIntOrNull() ?: continue
+        if (month !in 1..12 || day !in 1..31) continue
+        return "%04d-%02d-%02d".format(year, month, day)
+    }
+    return null
+}
+
+private fun String.toCalendarTimeOrNull(): String? {
+    val text = trim()
+    val colon = Regex("""(\d{1,2})\s*:\s*(\d{1,2})""").find(text)
+    if (colon != null) {
+        val hour = colon.groupValues[1].toIntOrNull() ?: return null
+        val minute = colon.groupValues[2].toIntOrNull() ?: return null
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return "%02d:%02d".format(hour, minute)
+    }
+
+    val korean = Regex("""(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?""").find(text) ?: return null
+    val hour = korean.groupValues[1].toIntOrNull() ?: return null
+    val minute = korean.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return "%02d:%02d".format(hour, minute)
 }

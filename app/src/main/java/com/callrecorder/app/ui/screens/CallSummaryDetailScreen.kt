@@ -77,6 +77,7 @@ private enum class DetailTab { ANALYSIS, TRANSCRIPT }
 fun CallSummaryDetailScreen(
     callId: String,
     onBack: () -> Unit,
+    onManualScheduleRequest: () -> Unit = {},
     initialCall: Call? = null,
     vm: CallSummaryDetailViewModel = viewModel(),
 ) {
@@ -115,9 +116,39 @@ fun CallSummaryDetailScreen(
                     onToggleCalendarPicker = { vm.toggleCalendarPicker(callId) },
                     onAddToCalendar = { provider -> vm.addToCalendar(callId, provider) },
                     onSummarySave = { summary, rows -> vm.updateSummaryAndKeywords(callId, summary, rows) },
+                    onSummaryEditStateReset = { vm.clearSummaryMessage() },
                 )
             }
         }
+    }
+
+    if (state.showMissingScheduleDialog) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissMissingScheduleDialog() },
+            text = {
+                Text(
+                    "등록할 일정을 찾지못했어요. 직접 등록하시겠어요?",
+                    style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp, color = Ink),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.dismissMissingScheduleDialog()
+                        onManualScheduleRequest()
+                    },
+                ) {
+                    Text("확인", color = AppColors.SignalRed600)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissMissingScheduleDialog() }) {
+                    Text("취소", color = LabelGrayActive)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(20.dp),
+        )
     }
 }
 
@@ -138,6 +169,7 @@ private fun DetailBody(
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
     onSummarySave: (String, List<Pair<String, String>>) -> Unit,
+    onSummaryEditStateReset: () -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
@@ -184,6 +216,7 @@ private fun DetailBody(
                     onToggleCalendarPicker = onToggleCalendarPicker,
                     onAddToCalendar = onAddToCalendar,
                     onSummarySave = onSummarySave,
+                    onSummaryEditStateReset = onSummaryEditStateReset,
                 )
                 DetailTab.TRANSCRIPT -> TranscriptTabContent(messages = messages, fullText = transcriptText)
             }
@@ -451,9 +484,10 @@ private fun AnalysisTabContent(
     onToggleCalendarPicker: () -> Unit,
     onAddToCalendar: (String) -> Unit,
     onSummarySave: (String, List<Pair<String, String>>) -> Unit,
+    onSummaryEditStateReset: () -> Unit,
 ) {
     var editingSummary by remember(call.id, call.summary) { mutableStateOf(false) }
-    var summaryDraft by remember(call.id, call.summary) { mutableStateOf(call.summary.orEmpty()) }
+    var summaryDraft by remember(call.id, call.summary) { mutableStateOf(formatDateText(call.summary.orEmpty())) }
 
     // internal_keywords → 라벨/값 줄
     val keywordRows: List<Pair<String, String>> = remember(call.internalKeywordsRaw) {
@@ -475,8 +509,13 @@ private fun AnalysisTabContent(
     var keywordDraftRows by remember(call.id, keywordRows) { mutableStateOf(keywordRows) }
     LaunchedEffect(editingSummary) {
         if (editingSummary) {
-            summaryDraft = call.summary.orEmpty()
-            keywordDraftRows = keywordRows
+            summaryDraft = formatDateText(call.summary.orEmpty())
+            keywordDraftRows = keywordRows.map { (label, value) -> label to formatSummaryKeywordValue(label, value) }
+        }
+    }
+    LaunchedEffect(summarySaving, summaryMessage) {
+        if (editingSummary && !summarySaving && summaryMessage == "요약을 저장했어요.") {
+            editingSummary = false
         }
     }
 
@@ -495,8 +534,9 @@ private fun AnalysisTabContent(
                             modifier = Modifier
                                 .size(32.dp)
                                 .clickable {
-                                    summaryDraft = call.summary.orEmpty()
-                                    keywordDraftRows = keywordRows
+                                    onSummaryEditStateReset()
+                                    summaryDraft = formatDateText(call.summary.orEmpty())
+                                    keywordDraftRows = keywordRows.map { (label, value) -> label to formatSummaryKeywordValue(label, value) }
                                     editingSummary = true
                                 },
                             contentAlignment = Alignment.Center,
@@ -510,20 +550,26 @@ private fun AnalysisTabContent(
                     }
                 }
                 if (editingSummary) {
-                    Text(
-                        "원본복원",
+                    Box(
                         modifier = Modifier
+                            .height(48.dp)
                             .padding(end = 8.dp)
                             .clickable(enabled = !summarySaving) {
-                                summaryDraft = originalSummary
-                                keywordDraftRows = originalKeywordRows
+                                onSummaryEditStateReset()
+                                summaryDraft = formatDateText(originalSummary)
+                                keywordDraftRows = originalKeywordRows.map { (label, value) -> label to formatSummaryKeywordValue(label, value) }
                             },
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            color = if (summarySaving) LabelGray else LabelGrayActive,
-                        ),
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "원본복원",
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp,
+                                color = if (summarySaving) LabelGray else LabelGrayActive,
+                            ),
+                        )
+                    }
                 } else {
                     ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
                         onToggleCalendarPicker()
@@ -564,28 +610,44 @@ private fun AnalysisTabContent(
 
             // 키워드 줄 (라벨 / 값)
             if (keywordRows.isNotEmpty()) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
                     if (editingSummary) {
                         keywordDraftRows.forEachIndexed { index, (label, value) ->
-                            Column(
+                            Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 2.dp),
+                                    .padding(top = 8.dp, bottom = 0.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                Box(
+                                    modifier = Modifier
+                                        .width(62.dp)
+                                        .height(22.dp),
                                 ) {
                                     InlineSummaryTextField(
                                         value = label,
                                         onValueChange = { next ->
                                             keywordDraftRows = keywordDraftRows.toMutableList().also {
-                                                it[index] = next to it[index].second
+                                                it[index] = next.takeSummaryLabelChars(6) to it[index].second
                                             }
                                         },
                                         textStyle = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
-                                        modifier = Modifier.width(62.dp),
+                                        modifier = Modifier.fillMaxSize(),
                                     )
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.BottomStart)
+                                            .fillMaxWidth()
+                                            .height(0.8.dp)
+                                            .background(AppColors.DeepBrown200),
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(22.dp),
+                                ) {
                                     InlineSummaryTextField(
                                         value = value,
                                         onValueChange = { next ->
@@ -594,37 +656,54 @@ private fun AnalysisTabContent(
                                             }
                                         },
                                         textStyle = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.BottomStart)
+                                            .fillMaxWidth()
+                                            .height(0.8.dp)
+                                            .background(AppColors.DeepBrown200),
                                     )
                                 }
-                                Spacer(Modifier.height(8.dp))
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(0.8.dp)
-                                        .background(AppColors.DeepBrown200),
-                                )
                             }
                         }
                     } else {
                         keywordRows.forEach { (label, value) ->
+                            val displayValue = formatSummaryKeywordValue(label, value)
                             Row(
-                                Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp),
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, bottom = 0.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(
-                                    label,
-                                    modifier = Modifier.width(62.dp),
-                                    style = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
-                                )
-                                Text(value, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
+                                Box(
+                                    modifier = Modifier
+                                        .width(62.dp)
+                                        .height(22.dp),
+                                    contentAlignment = Alignment.CenterStart,
+                                ) {
+                                    Text(
+                                        label,
+                                        style = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(22.dp),
+                                    contentAlignment = Alignment.CenterStart,
+                                ) {
+                                    Text(displayValue, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
+                                }
                             }
                         }
                     }
                 }
             }
 
-            summaryMessage?.let {
+            if (editingSummary) summaryMessage?.let {
                 Text(
                     it,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
@@ -636,7 +715,7 @@ private fun AnalysisTabContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 24.dp),
+                        .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
                 ) {
                     Surface(
                         color = Color.White,
@@ -657,7 +736,7 @@ private fun AnalysisTabContent(
                             },
                         )
                     }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(24.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -668,8 +747,9 @@ private fun AnalysisTabContent(
                             enabled = !summarySaving,
                             modifier = Modifier.weight(1f),
                         ) {
-                            summaryDraft = call.summary.orEmpty()
-                            keywordDraftRows = keywordRows
+                            onSummaryEditStateReset()
+                            summaryDraft = formatDateText(call.summary.orEmpty())
+                            keywordDraftRows = keywordRows.map { (label, value) -> label to formatSummaryKeywordValue(label, value) }
                             editingSummary = false
                         }
                         SummaryEditButton(
@@ -684,7 +764,7 @@ private fun AnalysisTabContent(
                 }
             } else if (!call.summary.isNullOrBlank()) {
                 Text(
-                    call.summary!!,
+                    formatDateText(call.summary!!),
                     modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
                     style = TextStyle(fontSize = 14.sp, color = Ink, lineHeight = 21.sp),
                 )
@@ -697,6 +777,36 @@ private fun AnalysisTabContent(
             Text("분석 결과가 아직 없어요.", style = TextStyle(fontSize = 13.sp, color = LabelGray))
         }
     }
+}
+
+private fun formatSummaryKeywordValue(label: String, value: String): String {
+    val shouldFormatDate = listOf("일정", "날짜", "방문").any { label.contains(it) }
+    if (!shouldFormatDate) return value
+    return formatDateText(value)
+}
+
+private fun String.takeSummaryLabelChars(max: Int): String =
+    codePoints().limit(max.toLong()).toArray().let { points ->
+        String(points, 0, points.size)
+    }
+
+private fun formatDateText(value: String): String {
+    fun paddedDate(year: String, month: String, day: String): String {
+        val mm = month.toIntOrNull()?.toString() ?: month
+        val dd = day.toIntOrNull()?.toString() ?: day
+        return "${year}년 ${mm}월 ${dd}일"
+    }
+
+    return value
+        .replace(Regex("""\b(\d{4})-(\d{1,2})-(\d{1,2})\b""")) { match ->
+            paddedDate(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+        }
+        .replace(Regex("""\b(\d{4})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})\.?""")) { match ->
+            paddedDate(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+        }
+        .replace(Regex("""\b(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\b""")) { match ->
+            paddedDate(match.groupValues[1], match.groupValues[2], match.groupValues[3])
+        }
 }
 
 @Composable
@@ -733,7 +843,7 @@ private fun InlineSummaryTextField(
         singleLine = singleLine,
         textStyle = textStyle,
         decorationBox = { innerTextField ->
-            Box {
+            Box(contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart) {
                 if (value.isBlank() && placeholder != null) placeholder()
                 innerTextField()
             }
