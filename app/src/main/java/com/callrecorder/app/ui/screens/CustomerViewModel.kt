@@ -112,6 +112,8 @@ class CustomerViewModel : ViewModel() {
     private val container = CallRecorderApp.instance.container
     private val notesRepo = container.notesRepo
     private val customerRepo = container.customerRepo
+    private val callRepo = container.callRepo
+    private val storeRepo = container.storeRepo
     private val api = container.api
     private val manualCustomerPrefs = app.getSharedPreferences("manual_customers", Context.MODE_PRIVATE)
     private val profileCachePrefs = app.getSharedPreferences("customer_profile_cache", Context.MODE_PRIVATE)
@@ -137,20 +139,33 @@ class CustomerViewModel : ViewModel() {
                 customers = mergeManualCustomers(emptyList()),
                 error = null,
             )
-            runCatching {
-                withTimeout(3_000L) {
-                    customerRepo.listCustomers().getOrThrow()
+            val serverCustomersDeferred = async {
+                runCatching {
+                    withTimeout(3_000L) {
+                        customerRepo.listCustomers().getOrThrow()
+                    }
                 }
-            }.fold(
-                onSuccess = { customers ->
-                    _state.value = CustomerUiState(
-                        loading = false,
-                        customers = mergeManualCustomers(customers.toCustomerUiItems()),
-                    )
-                },
-                onFailure = {
-                    _state.value = _state.value.copy(loading = false, error = it.message)
-                },
+            }
+            val callCustomersDeferred = async {
+                runCatching {
+                    val storeId = storeRepo.activeStoreId()
+                    withTimeout(6_000L) {
+                        callRepo.listCalls(storeId).getOrThrow()
+                    }.toCustomerUiItemsFromCalls()
+                }
+            }
+
+            val serverResult = serverCustomersDeferred.await()
+            val callResult = callCustomersDeferred.await()
+            val merged = mergeCallDerivedCustomers(
+                server = serverResult.getOrDefault(emptyList()).toCustomerUiItems(),
+                derived = callResult.getOrDefault(emptyList()),
+            )
+
+            _state.value = CustomerUiState(
+                loading = false,
+                customers = mergeManualCustomers(merged),
+                error = serverResult.exceptionOrNull()?.message?.takeIf { merged.isEmpty() },
             )
         }
     }
@@ -174,6 +189,61 @@ class CustomerViewModel : ViewModel() {
                     .thenByDescending { it.callCount }
                     .thenByDescending { it.lastCallAt ?: "" }
             )
+
+    private fun List<Call>.toCustomerUiItemsFromCalls(): List<CustomerUiItem> =
+        filter { !it.summary.isNullOrBlank() || it.status.equals("completed", ignoreCase = true) || it.status.equals("summarized", ignoreCase = true) }
+            .mapNotNull { call ->
+                val phone = call.callerNumber?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val key = phone.filter { it.isDigit() }
+                if (key.isBlank()) return@mapNotNull null
+                key to call
+            }
+            .groupBy({ it.first }, { it.second })
+            .map { (phoneKey, calls) ->
+                val sortedCalls = calls.sortedByDescending { it.createdAt.orEmpty() }
+                val latest = sortedCalls.first()
+                CustomerUiItem(
+                    phone = latest.callerNumber?.takeIf { it.isNotBlank() } ?: phoneKey,
+                    name = latest.callerName?.takeIf { it.isNotBlank() },
+                    callCount = calls.size,
+                    lastCallAt = latest.createdAt,
+                    lastSummary = latest.summary,
+                    categories = calls.mapNotNull { it.category?.takeIf(String::isNotBlank) }.distinct(),
+                    calls = sortedCalls,
+                    grade = CustomerGrade.of(calls.size),
+                )
+            }
+            .sortedWith(
+                compareByDescending<CustomerUiItem> { it.isPinned }
+                    .thenByDescending { it.callCount }
+                    .thenByDescending { it.lastCallAt ?: "" }
+            )
+
+    private fun mergeCallDerivedCustomers(
+        server: List<CustomerUiItem>,
+        derived: List<CustomerUiItem>,
+    ): List<CustomerUiItem> {
+        val derivedByKey = derived.associateBy { it.normalizedPhoneKey() }
+        val mergedServer = server.map { item ->
+            val fallback = derivedByKey[item.normalizedPhoneKey()] ?: return@map item
+            item.copy(
+                name = item.name?.takeIf { it.isNotBlank() } ?: fallback.name,
+                callCount = maxOf(item.callCount, fallback.callCount),
+                lastCallAt = item.lastCallAt ?: fallback.lastCallAt,
+                lastSummary = item.lastSummary ?: fallback.lastSummary,
+                categories = (item.categories + fallback.categories).distinct(),
+                calls = if (item.calls.isNotEmpty()) item.calls else fallback.calls,
+                isPinned = item.isPinned || fallback.isPinned,
+            )
+        }
+        val serverKeys = mergedServer.map { it.normalizedPhoneKey() }.toSet()
+        return (mergedServer + derived.filter { it.normalizedPhoneKey() !in serverKeys })
+            .sortedWith(
+                compareByDescending<CustomerUiItem> { it.isPinned }
+                    .thenByDescending { it.callCount }
+                    .thenByDescending { it.lastCallAt ?: "" }
+            )
+    }
 
     private fun mergeManualCustomers(serverCustomers: List<CustomerUiItem>): List<CustomerUiItem> {
         val manualByKey = manuallyAddedCustomers.associateBy { it.normalizedPhoneKey() }

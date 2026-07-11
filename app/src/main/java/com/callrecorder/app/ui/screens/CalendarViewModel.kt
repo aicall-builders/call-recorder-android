@@ -99,13 +99,19 @@ class CalendarViewModel : ViewModel() {
                 )
 
                 val hasExternalConnection = hasExternalCalendarConnection ?: run {
-                    val connectionsResult = withTimeoutOrNull(2_000) {
+                    val connectionsResult = withTimeoutOrNull(8_000) {
                         calendarRepo.getConnections()
                     }
-                    val connections = connectionsResult?.getOrDefault(emptyList()).orEmpty()
-                    hasExternalCalendarConnection = connections.isNotEmpty()
-                    _state.value = _state.value.copy(connections = connections)
-                    connections.isNotEmpty()
+                    connectionsResult?.fold(
+                        onSuccess = { connections ->
+                            hasExternalCalendarConnection = connections.isNotEmpty()
+                            _state.value = _state.value.copy(connections = connections)
+                            connections.isNotEmpty()
+                        },
+                        onFailure = {
+                            null
+                        },
+                    ) ?: false
                 }
 
                 if (!hasExternalConnection) {

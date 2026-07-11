@@ -2,6 +2,7 @@ package com.callrecorder.app.util
 
 import android.util.Log
 import com.callrecorder.app.BuildConfig
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 /**
  * SafeLog: masks sensitive info (phone numbers, file names) in logs.
@@ -10,20 +11,46 @@ import com.callrecorder.app.BuildConfig
  */
 object SafeLog {
 
+    fun setUser(userId: String?, provider: String? = null, email: String? = null) {
+        runCatching {
+            FirebaseCrashlytics.getInstance().apply {
+                setUserId(userId.orEmpty())
+                setCustomKey("login_provider", provider.orEmpty())
+                setCustomKey("account_email", mask(email.orEmpty()))
+            }
+        }
+    }
+
     fun d(tag: String, msg: String) {
-        if (BuildConfig.DEBUG) Log.d(tag, mask(msg))
+        val safe = mask(msg)
+        if (BuildConfig.DEBUG) Log.d(tag, safe)
     }
 
     fun i(tag: String, msg: String) {
-        if (BuildConfig.DEBUG) Log.i(tag, mask(msg))
+        val safe = mask(msg)
+        if (BuildConfig.DEBUG) Log.i(tag, safe)
     }
 
     fun w(tag: String, msg: String, e: Throwable? = null) {
-        if (e != null) Log.w(tag, mask(msg), e) else Log.w(tag, mask(msg))
+        val safe = mask(msg)
+        if (e != null) Log.w(tag, safe, e) else Log.w(tag, safe)
+        recordRemote("WARN", tag, safe, e)
     }
 
     fun e(tag: String, msg: String, e: Throwable? = null) {
-        if (e != null) Log.e(tag, mask(msg), e) else Log.e(tag, mask(msg))
+        val safe = mask(msg)
+        if (e != null) Log.e(tag, safe, e) else Log.e(tag, safe)
+        recordRemote("ERROR", tag, safe, e)
+    }
+
+    private fun recordRemote(level: String, tag: String, msg: String, e: Throwable?) {
+        runCatching {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            crashlytics.log("$level/$tag: $msg")
+            crashlytics.setCustomKey("last_log_level", level)
+            crashlytics.setCustomKey("last_log_tag", tag)
+            crashlytics.recordException(e ?: RuntimeException("$level/$tag: $msg"))
+        }
     }
 
     private fun mask(msg: String): String {

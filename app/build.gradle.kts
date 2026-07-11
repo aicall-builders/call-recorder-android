@@ -5,6 +5,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
 }
@@ -104,7 +105,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
-    // implementation("com.google.firebase:firebase-crashlytics-ktx")  // 諛쒗몴 ??異붽? ?덉젙
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
 
     // Kakao Login
     implementation("com.kakao.sdk:v2-user:2.20.1")

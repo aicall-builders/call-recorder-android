@@ -5,6 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.work.Configuration
+import com.callrecorder.app.util.SafeLog
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.callrecorder.app.di.AppContainer
 import com.kakao.sdk.common.KakaoSdk
 
@@ -30,6 +33,15 @@ class CallRecorderApp : Application(), Configuration.Provider {
 
         // DI 컨테이너 (수동 DI - Hilt 없이 가벼움 유지)
         container = AppContainer(this)
+
+        FirebaseCrashlytics.getInstance().apply {
+            setCrashlyticsCollectionEnabled(true)
+            setCustomKey("app_version", BuildConfig.VERSION_NAME)
+            setCustomKey("build_type", BuildConfig.BUILD_TYPE)
+        }
+        FirebaseAuth.getInstance().currentUser?.let { user ->
+            SafeLog.setUser(user.uid, email = user.email)
+        }
 
         createNotificationChannels()
     }

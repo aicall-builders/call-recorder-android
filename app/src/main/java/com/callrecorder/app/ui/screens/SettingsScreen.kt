@@ -100,13 +100,16 @@ fun SettingsScreen(
     hasNotification: Boolean = false,
     auth: AuthViewModel = viewModel(),
     vm: SettingsViewModel = viewModel(),
+    calendarVm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val calendarState by calendarVm.state.collectAsState()
     var currentSubScreen by remember { mutableStateOf<SettingsSubScreen?>(null) }
     var showCalendarSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.syncPrefs()
+        calendarVm.loadConnections()
     }
 
     currentSubScreen?.let { sub ->
@@ -134,6 +137,12 @@ fun SettingsScreen(
     }
 
     Scaffold(containerColor = FianoSettingsBg) { padding ->
+        val heroEmail = state.accountEmail.ifBlank { "계정 정보 없음" }
+        val heroProvider = loginProviderLabel(state.loginProvider)
+        val heroName = state.userName
+            .ifBlank { state.accountEmail.substringBefore("@").takeIf { it.isNotBlank() }.orEmpty() }
+            .ifBlank { heroProvider }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -161,19 +170,19 @@ fun SettingsScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        state.userName.take(1).ifBlank { "행" },
+                        heroName.take(1).ifBlank { "내" },
                         style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = FianoSettingsBg),
                     )
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        state.userName.ifBlank { "행복 부동산 사장님" },
+                        heroName,
                         style = TextStyle(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Color.White),
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        if (state.userPhone.isBlank()) "관리자 · owner@happyfood.kr" else "관리자 · ${state.userPhone}",
+                        "$heroProvider · $heroEmail",
                         style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = FianoSettingsSubText),
                     )
                 }
@@ -191,7 +200,7 @@ fun SettingsScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
                 ) {
                     item {
-                        SettingsMainSection(hasDivider = true, bottomPadding = 8.dp) {
+                        SettingsMainSection(bottomPadding = 8.dp) {
                             SettingsMainRow(
                                 title = "통화 자동 분석",
                                 trailing = {
@@ -225,9 +234,12 @@ fun SettingsScreen(
                     }
 
                     item {
-                        SettingsMainSection(hasDivider = true, verticalPadding = 8.dp) {
+                        val connectedProvider = calendarState.connections.firstOrNull()?.provider
+                        val connectedServiceName = connectedProvider?.calendarProviderLabel()
+                        SettingsMainSection(verticalPadding = 8.dp) {
                             SettingsMainRow(
                                 title = "외부 캘린더 연동",
+                                subtitle = connectedServiceName,
                                 onClick = {
                                     if (onExternalCalendarClick != null) {
                                         onExternalCalendarClick()
@@ -236,7 +248,12 @@ fun SettingsScreen(
                                     }
                                 },
                                 trailing = {
-                                    SettingsConnectionTag("연동하기")
+                                    SettingsConnectionTag(
+                                        text = if (connectedProvider != null) "연결 해제" else "연동하기",
+                                        onClick = connectedProvider?.let { provider ->
+                                            { calendarVm.disconnect(provider) }
+                                        },
+                                    )
                                 },
                             )
                         }
@@ -934,6 +951,13 @@ private fun loginProviderLabel(provider: String): String = when (provider.lowerc
     else -> "간편 로그인"
 }
 
+private fun String.calendarProviderLabel(): String = when (lowercase()) {
+    "google" -> "Google 캘린더"
+    "kakao" -> "카카오 캘린더"
+    "naver" -> "네이버 캘린더"
+    else -> this
+}
+
 @Composable
 private fun AccountInfoCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
@@ -1212,6 +1236,7 @@ private fun SettingsMainSection(
 @Composable
 private fun SettingsMainRow(
     title: String,
+    subtitle: String? = null,
     onClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit,
 ) {
@@ -1223,11 +1248,19 @@ private fun SettingsMainRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            title,
-            modifier = Modifier.weight(1f),
-            style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    subtitle,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal, color = FianoSettingsSubText),
+                )
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically, content = trailing)
     }
 }
@@ -1268,11 +1301,15 @@ private fun FianoSettingToggle(
 }
 
 @Composable
-private fun SettingsConnectionTag(text: String) {
+private fun SettingsConnectionTag(
+    text: String,
+    onClick: (() -> Unit)? = null,
+) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(FianoSettingsBg)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center,
     ) {

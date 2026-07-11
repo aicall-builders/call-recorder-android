@@ -52,10 +52,12 @@ class AuthRepository(
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
         )
+        val email = resp.user?.email ?: kakaoUser.kakaoAccount?.email
         tokenStore.saveLoginProfile(
             provider = "kakao",
-            email = resp.user?.email ?: kakaoUser.kakaoAccount?.email,
+            email = email,
         )
+        SafeLog.setUser(firebaseAuth.currentUser?.uid ?: resp.uid, provider = "kakao", email = email)
     }
 
     // ═══════════════════════════════════════════════
@@ -100,10 +102,12 @@ class AuthRepository(
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
         )
+        val email = resp.user?.email ?: googleEmail
         tokenStore.saveLoginProfile(
             provider = "google",
-            email = resp.user?.email ?: googleEmail,
+            email = email,
         )
+        SafeLog.setUser(firebaseAuth.currentUser?.uid ?: resp.uid, provider = "google", email = email)
     }
 
     // ═══════════════════════════════════════════════
@@ -141,10 +145,12 @@ class AuthRepository(
             userId = resp.user?.id ?: resp.uid ?: "",
             nickname = resp.user?.nickname ?: resp.nickname ?: resp.name ?: "",
         )
+        val email = resp.user?.email
         tokenStore.saveLoginProfile(
             provider = "naver",
-            email = resp.user?.email,
+            email = email,
         )
+        SafeLog.setUser(firebaseAuth.currentUser?.uid ?: resp.uid, provider = "naver", email = email)
     }
 
     // ═══════════════════════════════════════════════

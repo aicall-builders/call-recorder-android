@@ -15,6 +15,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object ApiClient {
@@ -68,6 +69,29 @@ object ApiClient {
             resp
         }
 
+        val apiFailureInterceptor = Interceptor { chain ->
+            val req = chain.request()
+            try {
+                val resp = chain.proceed(req)
+                if (resp.code >= 400 && !req.url.host.contains("s3.")) {
+                    SafeLog.w(
+                        "ApiClient",
+                        "HTTP ${resp.code} ${req.method} ${req.url.encodedPath}",
+                    )
+                }
+                resp
+            } catch (e: IOException) {
+                if (!req.url.host.contains("s3.")) {
+                    SafeLog.w(
+                        "ApiClient",
+                        "HTTP failed ${req.method} ${req.url.encodedPath}: ${e.message}",
+                        e,
+                    )
+                }
+                throw e
+            }
+        }
+
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
             else HttpLoggingInterceptor.Level.NONE
@@ -80,6 +104,7 @@ object ApiClient {
             .writeTimeout(300, TimeUnit.SECONDS)
             .addInterceptor(authInterceptor)
             .addInterceptor(unauthorizedInterceptor)
+            .addInterceptor(apiFailureInterceptor)
             .addInterceptor(logging)
             .build()
 

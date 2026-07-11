@@ -258,13 +258,20 @@ class HomeViewModel : ViewModel() {
                         .getOrDefault(emptyList())
                         .map { it.toHomeCalendarEvent() }
                     val hasExternalConnection = hasExternalCalendarConnection ?: run {
-                        val connections = runCatching {
-                            withTimeout(2_000L) {
-                                calendarRepo.getConnections().getOrDefault(emptyList())
+                        val connectionsResult = runCatching {
+                            withTimeout(8_000L) {
+                                calendarRepo.getConnections()
                             }
-                        }.getOrDefault(emptyList())
-                        hasExternalCalendarConnection = connections.isNotEmpty()
-                        connections.isNotEmpty()
+                        }.getOrNull()
+                        connectionsResult?.fold(
+                            onSuccess = { connections ->
+                                hasExternalCalendarConnection = connections.isNotEmpty()
+                                connections.isNotEmpty()
+                            },
+                            onFailure = {
+                                null
+                            },
+                        ) ?: false
                     }
                     val serverEvents = if (hasExternalConnection) {
                         runCatching {
