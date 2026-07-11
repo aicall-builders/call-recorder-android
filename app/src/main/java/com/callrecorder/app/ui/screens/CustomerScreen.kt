@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -42,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -156,6 +158,13 @@ fun CustomerScreen(
             openContactSheet()
         } else {
             contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
+
+    BackHandler(enabled = showContactSheet || selectedCustomer != null) {
+        when {
+            showContactSheet -> showContactSheet = false
+            selectedCustomer != null -> selectedCustomer = null
         }
     }
 
@@ -697,12 +706,12 @@ fun CustomerDetailScreen(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .height(184.dp)
+                    .heightIn(min = 184.dp)
                     .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
-                    Modifier.fillMaxWidth().height(52.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -711,8 +720,17 @@ fun CustomerDetailScreen(
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(displayName, style = TextStyle(fontSize = 20.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    displayName,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    style = TextStyle(fontSize = 20.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                                    maxLines = 2,
+                                )
                                 Surface(color = Color.White, shape = RoundedCornerShape(999.dp)) {
                                     Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, color = Ink))
@@ -727,13 +745,17 @@ fun CustomerDetailScreen(
                                 },
                             )
                         }
-                        Text(customer.phone, style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300))
+                        Text(
+                            customer.phone,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                            maxLines = 2,
+                        )
                     }
                 }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(88.dp)
+                        .heightIn(min = 88.dp)
                         .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -744,7 +766,6 @@ fun CustomerDetailScreen(
                     Text(
                         text,
                         style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300),
-                        maxLines = 2,
                     )
                 }
             }
@@ -828,7 +849,7 @@ private fun CustTabButton(text: String, selected: Boolean, modifier: Modifier = 
     val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     Box(
         modifier = modifier
-            .height(44.dp)
+            .heightIn(min = 44.dp)
             .clip(shape)
             .background(if (selected) Color.White else TabOffBg)
             .clickable { onClick() },
@@ -836,12 +857,13 @@ private fun CustTabButton(text: String, selected: Boolean, modifier: Modifier = 
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
+                .padding(start = 8.dp, top = 14.dp, end = 8.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink),
+                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink, textAlign = TextAlign.Center),
+                maxLines = 2,
             )
         }
     }
@@ -1968,12 +1990,12 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .height(184.dp)
+                .heightIn(min = 184.dp)
                 .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(
-                Modifier.fillMaxWidth().height(52.dp),
+                Modifier.fillMaxWidth().heightIn(min = 52.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -1982,18 +2004,27 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(displayName, style = TextStyle(fontSize = 20.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+                        Text(
+                            displayName,
+                            modifier = Modifier.weight(1f, fill = false),
+                            style = TextStyle(fontSize = 20.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                            maxLines = 2,
+                        )
                         Surface(color = Color.White, shape = RoundedCornerShape(999.dp)) {
                             Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = Ink))
                         }
                     }
-                    Text(customer.phone, style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300))
+                    Text(
+                        customer.phone,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                        maxLines = 2,
+                    )
                 }
             }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(88.dp)
+                    .heightIn(min = 88.dp)
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -2001,7 +2032,6 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                 Text(
                     detail.analysis?.analysis ?: "김민준 고객님은 매물 확인과 일정 조율에 관심이 높습니다.",
                     style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300),
-                    maxLines = 2,
                 )
             }
         }

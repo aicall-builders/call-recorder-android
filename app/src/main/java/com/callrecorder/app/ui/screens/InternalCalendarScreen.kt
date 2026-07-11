@@ -1,10 +1,17 @@
 package com.callrecorder.app.ui.screens
 
+import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
@@ -44,6 +52,7 @@ import com.callrecorder.app.data.model.CallCategoryCode
 import com.callrecorder.app.data.model.CallCategoryLabel
 import com.callrecorder.app.data.model.CalendarEvent as ApiEvent
 import com.callrecorder.app.ui.theme.AppColors
+import com.callrecorder.app.util.PhotoUtils
 import coil.compose.AsyncImage
 import java.io.File
 import java.util.Calendar
@@ -115,14 +124,17 @@ private fun ManualCalendarEventEntity.toCalEvent(): CalEvent? {
     val chipValue = ScheduleChip.values().firstOrNull {
         it.name == chip || it.label == chip
     } ?: ScheduleChip.OTHER
+    val linkedCallId = id.toLinkedCallIdOrNull()
+    val isAutoRegistered = linkedCallId != null
     return CalEvent(
         id = id,
         title = title,
         date = day,
         time = time,
-        type = EventType.MANUAL,
+        type = if (isAutoRegistered) EventType.AUTO else EventType.MANUAL,
         chip = chipValue,
         description = description,
+        callId = linkedCallId,
         dateLabel = date.replace("-", "."),
         hasAttachments = imageUris.isNotBlank(),
         imageUris = imageUris
@@ -133,6 +145,35 @@ private fun ManualCalendarEventEntity.toCalEvent(): CalEvent? {
         reminderEnabled = reminderEnabled,
     )
 }
+
+private fun String.toLinkedCallIdOrNull(): String? =
+    when {
+        startsWith("auto-call-") -> removePrefix("auto-call-").takeIf { it.isNotBlank() }
+        startsWith("call-") -> removePrefix("call-").takeIf { it.isNotBlank() }
+        else -> null
+    }
+
+private fun List<CalEvent>.dedupeCalendarEvents(): List<CalEvent> =
+    fold(linkedMapOf<String, CalEvent>()) { acc, event ->
+        val key = event.callId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "call:$it" }
+            ?: "event:${event.dateLabel}:${event.date}:${event.time}:${event.title}"
+        val existing = acc[key]
+        acc[key] = when {
+            existing == null -> event
+            existing.type == EventType.MANUAL && event.type == EventType.AUTO -> event.copy(
+                imageUris = (event.imageUris + existing.imageUris).distinct(),
+                hasAttachments = event.hasAttachments || existing.hasAttachments,
+            )
+            existing.description.isBlank() && event.description.isNotBlank() -> event
+            else -> existing.copy(
+                imageUris = (existing.imageUris + event.imageUris).distinct(),
+                hasAttachments = existing.hasAttachments || event.hasAttachments,
+            )
+        }
+        acc
+    }.values.toList()
 
 // ─────────────────────────────────────────────────────
 // 내부 캘린더 메인 화면 (다크 헤더 "일정관리", 탭 없음)
@@ -148,6 +189,7 @@ fun InternalCalendarScreen(
     hasNotification: Boolean = false,
     onScheduleChanged: () -> Unit = {},
     openAddRequestKey: Int = 0,
+    onAddRequestConsumed: () -> Unit = {},
 ) {
     val calState by calVm.state.collectAsState()
 
@@ -163,7 +205,12 @@ fun InternalCalendarScreen(
         if (openAddRequestKey > 0) {
             editingManualEvent = null
             showAddDialog = true
+            onAddRequestConsumed()
         }
+    }
+
+    LaunchedEffect(Unit) {
+        calVm.refreshMonthEvents(currentYear, currentMonth)
     }
 
     // API 일정 + 저장된 수동 일정 병합
@@ -174,7 +221,7 @@ fun InternalCalendarScreen(
         calState.manualEvents.mapNotNull { it.toCalEvent() }
     }
     val allEvents = remember(apiEvents, manualEvents) {
-        apiEvents + manualEvents
+        (apiEvents + manualEvents).dedupeCalendarEvents()
     }
 
     Scaffold(containerColor = LightBg) { padding ->
@@ -218,26 +265,45 @@ fun InternalCalendarScreen(
                     editingManualEvent = event
                     showAddDialog = true
                 },
+                onDeleteClick = { event ->
+                    calVm.deleteManualEvent(
+                        eventId = event.id,
+                        year = currentYear,
+                        month = currentMonth,
+                    ) {
+                        onScheduleChanged()
+                    }
+                },
             )
         }
     }
 
     if (showAddDialog) {
         AddEventDialog(
+            initialYear = currentYear,
+            initialMonth = currentMonth,
             defaultDay = selectedDay,
             initialEvent = editingManualEvent,
             onDismiss = {
                 showAddDialog = false
                 editingManualEvent = null
             },
-            onConfirm = { title, time, day, description, chip, imageUris, reminderEnabled ->
+            onConfirm = { title, time, year, month, day, description, chip, imageUris, reminderEnabled ->
+                val normalizedDay = day.coerceIn(1, daysInMonth(year, month))
+                val savedEventId = editingManualEvent?.let { event ->
+                    if (event.type == EventType.AUTO && !event.callId.isNullOrBlank()) {
+                        "auto-call-${event.callId}"
+                    } else {
+                        event.id
+                    }
+                } ?: System.currentTimeMillis().toString()
                 val savedEvent = ManualCalendarEventEntity(
-                    id = editingManualEvent?.id ?: System.currentTimeMillis().toString(),
+                    id = savedEventId,
                     title = title,
                     date = "%04d-%02d-%02d".format(
-                        currentYear,
-                        currentMonth,
-                        day.coerceIn(1, daysInMonth(currentYear, currentMonth)),
+                        year,
+                        month,
+                        normalizedDay,
                     ),
                     time = time,
                     chip = chip.name,
@@ -246,12 +312,13 @@ fun InternalCalendarScreen(
                     reminderEnabled = reminderEnabled,
                     updatedAt = System.currentTimeMillis(),
                 )
-                val normalizedDay = day.coerceIn(1, daysInMonth(currentYear, currentMonth))
                 calVm.saveManualEvent(
                     event = savedEvent,
-                    year = currentYear,
-                    month = currentMonth,
+                    year = year,
+                    month = month,
                 ) {
+                    currentYear = year
+                    currentMonth = month
                     selectedDay = normalizedDay
                     showAddDialog = false
                     editingManualEvent = null
@@ -300,12 +367,14 @@ private fun InternalCalendarTab(
     onCallDetailClick: (String) -> Unit,
     onMemoImageClick: (callId: String, title: String) -> Unit,
     onManualEditClick: (CalEvent) -> Unit,
+    onDeleteClick: (CalEvent) -> Unit,
 ) {
     val daysInMonth = daysInMonth(year, month)
     val firstDayOfWeek = firstDayOfWeek(year, month)
 
     val selectedEvents = events
         .filter { it.date == selectedDay }
+        .dedupeCalendarEvents()
         .sortedWith(compareBy<CalEvent> { it.time.toSortMinutes() }.thenBy { it.title })
     val eventDays = events.groupBy { it.date }
 
@@ -435,6 +504,7 @@ private fun InternalCalendarTab(
                     onCallDetailClick = onCallDetailClick,
                     onMemoImageClick = onMemoImageClick,
                     onManualEditClick = onManualEditClick,
+                    onDeleteClick = onDeleteClick,
                     modifier = Modifier.padding(horizontal = 24.dp),
                 )
             }
@@ -500,8 +570,10 @@ private fun CalendarDayCell(
         }
         if (events.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(top = 2.dp)) {
-                events.take(2).forEach { ev ->
-                    Box(Modifier.size(4.dp).clip(CircleShape).background(eventDotColor(ev.type)))
+                listOf(EventType.AUTO, EventType.MANUAL)
+                    .filter { type -> events.any { it.type == type } }
+                    .forEach { type ->
+                        Box(Modifier.size(4.dp).clip(CircleShape).background(eventDotColor(type)))
                 }
             }
         }
@@ -594,6 +666,7 @@ private fun TimelineEvent(
     onCallDetailClick: (String) -> Unit,
     onMemoImageClick: (callId: String, title: String) -> Unit,
     onManualEditClick: (CalEvent) -> Unit,
+    onDeleteClick: (CalEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -669,22 +742,18 @@ private fun TimelineEvent(
                     }
                 }
             }
-            val footerLabel = if (event.type == EventType.MANUAL) "수정하기" else "메모 / 이미지 추가하기+"
-            Text(
-                footerLabel,
-                modifier = Modifier
-                    .padding(8.dp)
-                    .then(
-                        when (event.type) {
-                            EventType.MANUAL -> Modifier.clickable { onManualEditClick(event) }
-                            EventType.AUTO -> event.callId
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let { callId -> Modifier.clickable { onMemoImageClick(callId, event.title) } }
-                                ?: Modifier
-                        },
-                    ),
-                style = TextStyle(fontSize = 12.sp, color = AppColors.SignalRed700, lineHeight = 16.sp),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "+수정하기",
+                    modifier = Modifier.clickable { onManualEditClick(event) },
+                    style = TextStyle(fontSize = 12.sp, color = AppColors.SignalRed700, lineHeight = 16.sp),
+                )
+                Text(
+                    "-삭제",
+                    modifier = Modifier.clickable { onDeleteClick(event) },
+                    style = TextStyle(fontSize = 12.sp, color = AppColors.SignalRed700, lineHeight = 16.sp),
+                )
+            }
         }
     }
 }
@@ -858,21 +927,57 @@ private fun ExternalProviderCard(
 
 @Composable
 private fun AddEventDialog(
+    initialYear: Int,
+    initialMonth: Int,
     defaultDay: Int,
     initialEvent: CalEvent? = null,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, time: String, day: Int, description: String, chip: ScheduleChip, imageUris: List<Uri>, reminderEnabled: Boolean) -> Unit,
+    onConfirm: (title: String, time: String, year: Int, month: Int, day: Int, description: String, chip: ScheduleChip, imageUris: List<Uri>, reminderEnabled: Boolean) -> Unit,
 ) {
     val initialKey = initialEvent?.id ?: "new-$defaultDay"
     val context = LocalContext.current
+    val initialDate = remember(initialKey, initialYear, initialMonth, defaultDay, initialEvent?.dateLabel) {
+        initialEvent?.dateLabel?.toCalendarDateParts()
+            ?: CalendarDateParts(initialYear, initialMonth, defaultDay.coerceIn(1, daysInMonth(initialYear, initialMonth)))
+    }
     var title by remember(initialKey) { mutableStateOf(initialEvent?.title.orEmpty()) }
-    var time by remember(initialKey) { mutableStateOf(initialEvent?.time.orEmpty()) }
-    var dayText by remember(initialKey) { mutableStateOf((initialEvent?.date ?: defaultDay).toString()) }
+    var selectedYear by remember(initialKey) { mutableStateOf(initialDate.year) }
+    var selectedMonth by remember(initialKey) { mutableStateOf(initialDate.month) }
+    var selectedDay by remember(initialKey) { mutableStateOf(initialDate.day) }
+    var time by remember(initialKey) { mutableStateOf(initialEvent?.time?.takeIf { it.isNotBlank() } ?: "00:00") }
     var description by remember(initialKey) { mutableStateOf(initialEvent?.description.orEmpty()) }
     var selectedChip by remember(initialKey) { mutableStateOf(initialEvent?.chip ?: ScheduleChip.RESERVATION) }
     var imageUris by remember(initialKey) { mutableStateOf(initialEvent?.imageUris.orEmpty()) }
     var reminderEnabled by remember(initialKey) { mutableStateOf(initialEvent?.reminderEnabled ?: true) }
     var imageError by remember(initialKey) { mutableStateOf<String?>(null) }
+    var cameraImageUri by remember(initialKey) { mutableStateOf<Uri?>(null) }
+    val datePicker = remember(selectedYear, selectedMonth, selectedDay) {
+        DatePickerDialog(
+            context,
+            R.style.Theme_Fiano_DateTimePicker,
+            { _, year, monthZeroBased, dayOfMonth ->
+                selectedYear = year
+                selectedMonth = monthZeroBased + 1
+                selectedDay = dayOfMonth
+            },
+            selectedYear,
+            selectedMonth - 1,
+            selectedDay,
+        ).apply { setFianoDialogButtonColors() }
+    }
+    val timePicker = remember(time) {
+        val (hour, minute) = time.toHourMinute()
+        TimePickerDialog(
+            context,
+            R.style.Theme_Fiano_DateTimePicker,
+            { _, selectedHour, selectedMinute ->
+                time = "%02d:%02d".format(selectedHour, selectedMinute)
+            },
+            hour,
+            minute,
+            true,
+        ).apply { setFianoDialogButtonColors() }
+    }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
     ) { uris ->
@@ -884,6 +989,48 @@ private fun AddEventDialog(
         if (copiedUris.isNotEmpty()) {
             imageError = null
             imageUris = (imageUris + copiedUris).distinct()
+        }
+    }
+    fun appendScheduleImage(uri: Uri?) {
+        if (uri == null) return
+        copyScheduleImageToAppStorage(context, uri)
+            .onSuccess { copiedUri ->
+                imageError = null
+                imageUris = (imageUris + copiedUri).distinct()
+            }
+            .onFailure {
+                imageError = "이미지를 불러오지 못했어요. 다시 촬영해 주세요."
+            }
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { success ->
+        if (success) appendScheduleImage(cameraImageUri)
+    }
+    fun launchCamera() {
+        val file = PhotoUtils.createTempImageFile(context)
+        val uri = FileProvider.getUriForFile(context, PhotoUtils.authority(context), file)
+        cameraImageUri = uri
+        cameraLauncher.launch(uri)
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            launchCamera()
+        } else {
+            imageError = "카메라 권한이 필요해요."
+        }
+    }
+    fun onCameraClick() {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            launchCamera()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -901,8 +1048,23 @@ private fun AddEventDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("일정 제목", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("시간 (예: 14:00)", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = dayText, onValueChange = { dayText = it }, label = { Text("날짜 (일)", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ScheduleSelectField(
+                        label = "날짜",
+                        value = "%04d년 %d월 %d일".format(selectedYear, selectedMonth, selectedDay),
+                        onClick = { datePicker.show() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    ScheduleSelectField(
+                        label = "시간",
+                        value = time,
+                        onClick = { timePicker.show() },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
@@ -912,10 +1074,26 @@ private fun AddEventDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text("이미지", style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary))
-                OutlinedButton(onClick = { imagePickerLauncher.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Add, null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (imageUris.isEmpty()) "이미지 추가" else "이미지 추가 (${imageUris.size})")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.Add, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (imageUris.isEmpty()) "이미지 추가" else "이미지 추가 (${imageUris.size})")
+                    }
+                    OutlinedButton(
+                        onClick = { onCameraClick() },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Filled.PhotoCamera, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("카메라")
+                    }
                 }
                 imageError?.let { message ->
                     Text(
@@ -1013,8 +1191,19 @@ private fun AddEventDialog(
                     label = if (initialEvent == null) "추가" else "저장",
                     type = PopupActionType.FILL,
                     onClick = {
-                        val day = dayText.toIntOrNull() ?: defaultDay
-                        if (title.isNotBlank()) onConfirm(title, time.ifBlank { "00:00" }, day, description, selectedChip, imageUris, reminderEnabled)
+                        if (title.isNotBlank()) {
+                            onConfirm(
+                                title,
+                                time.ifBlank { "00:00" },
+                                selectedYear,
+                                selectedMonth,
+                                selectedDay,
+                                description,
+                                selectedChip,
+                                imageUris,
+                                reminderEnabled,
+                            )
+                        }
                     },
                     modifier = Modifier.weight(1f),
                 )
@@ -1046,6 +1235,51 @@ private fun copyScheduleImageToAppStorage(context: Context, sourceUri: Uri): Res
 private fun deleteLocalScheduleImage(uri: Uri) {
     if (uri.scheme == "file") {
         runCatching { File(uri.path.orEmpty()).delete() }
+    }
+}
+
+private fun android.app.AlertDialog.setFianoDialogButtonColors() {
+    setOnShowListener {
+        getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            ?.setTextColor(AndroidColor.parseColor("#FF3A22"))
+        getButton(android.app.AlertDialog.BUTTON_NEGATIVE)
+            ?.setTextColor(AndroidColor.parseColor("#6B7078"))
+        getButton(android.app.AlertDialog.BUTTON_NEUTRAL)
+            ?.setTextColor(AndroidColor.parseColor("#6B7078"))
+    }
+}
+
+@Composable
+private fun ScheduleSelectField(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = Color.White,
+        border = BorderStroke(1.dp, AppColors.DeepBrown200),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                label,
+                style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = OnLightSub),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                value,
+                maxLines = 1,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, color = OnLightPrimary),
+            )
+        }
     }
 }
 
@@ -1134,4 +1368,28 @@ private fun firstDayOfWeek(year: Int, month: Int): Int {
     val cal = Calendar.getInstance()
     cal.set(year, month - 1, 1)
     return cal.get(Calendar.DAY_OF_WEEK) - 1
+}
+
+private data class CalendarDateParts(
+    val year: Int,
+    val month: Int,
+    val day: Int,
+)
+
+private fun String.toCalendarDateParts(): CalendarDateParts? {
+    val normalized = trim().replace(".", "-").replace("/", "-")
+    val parts = normalized.split("-").map { it.trim() }
+    if (parts.size < 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    if (year !in 2000..2100 || month !in 1..12 || day !in 1..daysInMonth(year, month)) return null
+    return CalendarDateParts(year, month, day)
+}
+
+private fun String.toHourMinute(): Pair<Int, Int> {
+    val parts = split(":")
+    val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 0
+    val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+    return hour to minute
 }

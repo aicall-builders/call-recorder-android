@@ -239,6 +239,19 @@ interface ManualCalendarEventDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(event: ManualCalendarEventEntity)
 
+    @Query("SELECT * FROM manual_calendar_events WHERE id = :id LIMIT 1")
+    suspend fun findById(id: String): ManualCalendarEventEntity?
+
+    @Query("""
+        SELECT * FROM manual_calendar_events
+        WHERE id = :legacyId OR id = :canonicalId
+        ORDER BY updatedAt DESC
+    """)
+    suspend fun findLinkedCallEvents(
+        legacyId: String,
+        canonicalId: String,
+    ): List<ManualCalendarEventEntity>
+
     @Query("""
         SELECT * FROM manual_calendar_events
         WHERE date BETWEEN :fromDate AND :toDate
@@ -248,6 +261,12 @@ interface ManualCalendarEventDao {
 
     @Query("DELETE FROM manual_calendar_events WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM manual_calendar_events WHERE id = :legacyId")
+    suspend fun deleteLegacyLinkedCallEvent(legacyId: String)
+
+    @Query("DELETE FROM manual_calendar_events WHERE id = :canonicalId OR id = :legacyId")
+    suspend fun deleteLinkedCallEvents(canonicalId: String, legacyId: String)
 }
 
 val MIGRATION_3_4 = object : Migration(3, 4) {

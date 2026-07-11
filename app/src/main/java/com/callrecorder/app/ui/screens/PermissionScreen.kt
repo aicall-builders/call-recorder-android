@@ -1,10 +1,7 @@
 package com.callrecorder.app.ui.screens
 
 import android.Manifest
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -81,11 +78,6 @@ fun PermissionScreen(onGranted: () -> Unit) {
     val notifPerm = if (Build.VERSION.SDK_INT >= 33) {
         rememberPermissionState(Manifest.permission.POST_NOTIFICATIONS)
     } else null
-    var audioToggleOn by remember { mutableStateOf(false) }
-    var contactsToggleOn by remember { mutableStateOf(false) }
-    var callLogToggleOn by remember { mutableStateOf(false) }
-    var notificationsToggleOn by remember { mutableStateOf(false) }
-
     // 핵심 권한(녹음) 허용되면 백그라운드 서비스/워커 시작
     LaunchedEffect(audioPerm.status.isGranted) {
         if (audioPerm.status.isGranted) {
@@ -93,39 +85,28 @@ fun PermissionScreen(onGranted: () -> Unit) {
             UploadWorker.enqueuePeriodic(context)
         }
     }
-    LaunchedEffect(audioPerm.status.isGranted) {
-        if (audioPerm.status.isGranted && audioToggleOn) audioToggleOn = true
-    }
-    LaunchedEffect(contactsPerm.status.isGranted) {
-        if (contactsPerm.status.isGranted && contactsToggleOn) contactsToggleOn = true
-    }
-    LaunchedEffect(callLogPerm.status.isGranted) {
-        if (callLogPerm.status.isGranted && callLogToggleOn) callLogToggleOn = true
-    }
-    LaunchedEffect(notifPerm?.status?.isGranted) {
-        if ((notifPerm?.status?.isGranted ?: false) && notificationsToggleOn) notificationsToggleOn = true
-    }
+    val audioGranted = audioPerm.status.isGranted
+    val contactsGranted = contactsPerm.status.isGranted
+    val callLogGranted = callLogPerm.status.isGranted
+    val notificationsGranted = notifPerm?.status?.isGranted ?: true
+    val requiredGranted = audioGranted && contactsGranted && callLogGranted
 
     PermissionContent(
-        audioGranted = audioToggleOn,
-        contactsGranted = contactsToggleOn,
-        callLogGranted = callLogToggleOn,
-        notificationsGranted = notificationsToggleOn,
-        canContinue = audioPerm.status.isGranted,
+        audioGranted = audioGranted,
+        contactsGranted = contactsGranted,
+        callLogGranted = callLogGranted,
+        notificationsGranted = notificationsGranted,
+        canContinue = requiredGranted,
         onAudioToggle = {
-            audioToggleOn = true
             handlePermissionToggle(context, audioPerm)
         },
         onContactsToggle = {
-            contactsToggleOn = true
             handlePermissionToggle(context, contactsPerm)
         },
         onCallLogToggle = {
-            callLogToggleOn = true
             handlePermissionToggle(context, callLogPerm)
         },
         onNotificationsToggle = {
-            notificationsToggleOn = true
             notifPerm?.let { handlePermissionToggle(context, it) }
         },
         onGranted = onGranted,
@@ -278,21 +259,14 @@ private fun handlePermissionToggle(
     permState: PermissionState,
 ) {
     if (permState.status.isGranted) {
-        // 이미 허용됨 -> 설정에서 해제하라고 안내 (시스템 설정 열기)
-        openAppSettings(context)
+        // 이미 허용된 권한은 온보딩 토글에서 다시 설정으로 보내지 않는다.
+        // 권한 해제는 설정 > 앱 권한 관리 흐름에서 처리한다.
+        return
     } else {
         // 거부 상태 (처음이든 두 번째든) -> 다이얼로그 요청 시도.
         // 영구 거부 후엔 다이얼로그가 안 뜨므로, 사용자가 한 번 더 누르면 설정으로 이동.
         permState.launchPermissionRequest()
     }
-}
-
-private fun openAppSettings(context: android.content.Context) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = Uri.parse("package:${context.packageName}")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    }
-    runCatching { context.startActivity(intent) }
 }
 
 /* ─────────────────────────────────────────────────

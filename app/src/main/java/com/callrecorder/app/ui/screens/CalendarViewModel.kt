@@ -219,6 +219,25 @@ class CalendarViewModel : ViewModel() {
         }
     }
 
+    fun deleteManualEvent(
+        eventId: String,
+        year: Int,
+        month: Int,
+        onDeleted: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            calendarRepo.deleteManualEvent(eventId).fold(
+                onSuccess = {
+                    onDeleted()
+                    refreshMonthEvents(year, month)
+                },
+                onFailure = {
+                    _state.value = _state.value.copy(error = it.message)
+                },
+            )
+        }
+    }
+
     fun getOAuthUrl(provider: String, redirectUri: String, state: String, onResult: (String) -> Unit) {
         viewModelScope.launch {
             _state.value = _state.value.copy(actionLoading = true, error = null)

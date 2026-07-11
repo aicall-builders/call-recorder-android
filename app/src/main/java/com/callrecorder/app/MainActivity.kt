@@ -285,10 +285,7 @@ fun Context.hasRecordingFilePermission(): Boolean {
 
 fun Context.hasCompletedPermissionOnboarding(): Boolean {
     val prefs = getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
-    if (prefs.getBoolean(KEY_PERMISSION_ONBOARDING_DONE, false)) return true
-    return ContextCompat.checkSelfPermission(
-        this, Manifest.permission.RECORD_AUDIO
-    ) == PackageManager.PERMISSION_GRANTED
+    return prefs.getBoolean(KEY_PERMISSION_ONBOARDING_DONE, false) && hasCoreServicePermissions()
 }
 
 fun Context.markPermissionOnboardingDone() {
@@ -296,6 +293,21 @@ fun Context.markPermissionOnboardingDone() {
         .edit()
         .putBoolean(KEY_PERMISSION_ONBOARDING_DONE, true)
         .apply()
+}
+
+private fun Context.hasCoreServicePermissions(): Boolean {
+    val audioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return listOf(
+        audioPermission,
+        Manifest.permission.READ_CONTACTS,
+        Manifest.permission.READ_CALL_LOG,
+    ).all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
 }
 
 object Routes {

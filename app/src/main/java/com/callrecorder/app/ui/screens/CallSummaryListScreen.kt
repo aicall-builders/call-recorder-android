@@ -28,6 +28,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,6 +79,7 @@ fun CallSummaryListScreen(
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     startOnPendingTab: Boolean = false,
+    pendingTabRequestKey: Int = 0,
     vm: HomeViewModel = viewModel(),
     approvalVm: PendingApprovalViewModel = viewModel(),
 ) {
@@ -101,6 +103,7 @@ fun CallSummaryListScreen(
         onPendingTabVisible = { approvalVm.load() },
         initialTab = if (startOnPendingTab) AnalysisTab.PENDING else AnalysisTab.DONE,
         startOnPendingTab = startOnPendingTab,
+        pendingTabRequestKey = pendingTabRequestKey,
         onNotificationClick = onNotificationClick,
         hasNotification = hasNotification,
     )
@@ -120,6 +123,7 @@ private fun CallSummaryListContent(
     onPendingTabVisible: () -> Unit = {},
     initialTab: AnalysisTab = AnalysisTab.DONE,
     startOnPendingTab: Boolean = false,
+    pendingTabRequestKey: Int = 0,
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
 ) {
@@ -130,8 +134,8 @@ private fun CallSummaryListContent(
     var completionBaselineIds by remember { mutableStateOf<Set<String>?>(null) }
     var pendingDeleteCallId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(startOnPendingTab) {
-        if (startOnPendingTab) {
+    LaunchedEffect(startOnPendingTab, pendingTabRequestKey) {
+        if (startOnPendingTab || pendingTabRequestKey > 0) {
             tab = AnalysisTab.PENDING
             filter = CallFilter.ALL
         }
@@ -550,7 +554,7 @@ private fun AnalysisTabButton(
     val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     Box(
         modifier = modifier
-            .height(44.dp)
+            .heightIn(min = 44.dp)
             .clip(shape)
             .background(if (selected) Color.White else TabInactiveBg)
             .clickable { onClick() },
@@ -558,12 +562,13 @@ private fun AnalysisTabButton(
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
+                .padding(start = 8.dp, top = 14.dp, end = 8.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink),
+                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink, textAlign = TextAlign.Center),
+                maxLines = 2,
             )
         }
     }

@@ -146,7 +146,7 @@ private fun AnalysisDoneNotification(call: Call, onClick: () -> Unit) {
         Image(
             painter = painterResource(R.drawable.icon_call_up),
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(32.dp),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(

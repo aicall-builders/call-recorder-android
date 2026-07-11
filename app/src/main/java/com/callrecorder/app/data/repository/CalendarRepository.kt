@@ -54,14 +54,121 @@ class CalendarRepository(
     }
 
     suspend fun getManualEventsInRange(from: String, to: String): Result<List<ManualCalendarEventEntity>> = runCatching {
+        val events = manualCalendarEventDao.getInRange(fromDate = from, toDate = to)
+        events
+            .filter { it.id.startsWith("call-") || it.id.startsWith("auto-call-") }
+            .mapNotNull { it.linkedCallIdOrNull() }
+            .distinct()
+            .forEach { callId ->
+                normalizeLinkedCallDuplicate(
+                    ManualCalendarEventEntity(
+                        id = "auto-call-$callId",
+                        title = "",
+                        date = "",
+                        time = "",
+                    )
+                )
+            }
         manualCalendarEventDao.getInRange(fromDate = from, toDate = to)
+            .dedupeLinkedCallEvents()
     }
 
     suspend fun saveManualEvent(event: ManualCalendarEventEntity): Result<Unit> = runCatching {
-        manualCalendarEventDao.upsert(event)
+        manualCalendarEventDao.upsert(event.normalizedLinkedCallEvent())
+        normalizeLinkedCallDuplicate(event)
     }
 
     suspend fun deleteManualEvent(eventId: String): Result<Unit> = runCatching {
         manualCalendarEventDao.deleteById(eventId)
     }
+
+    suspend fun deleteLinkedCallEvents(callId: String): Result<Unit> = runCatching {
+        manualCalendarEventDao.deleteLinkedCallEvents(
+            canonicalId = "auto-call-$callId",
+            legacyId = "call-$callId",
+        )
+    }
+
+    suspend fun hasLinkedCallEvent(callId: String): Result<Boolean> = runCatching {
+        manualCalendarEventDao
+            .findLinkedCallEvents(
+                legacyId = "call-$callId",
+                canonicalId = "auto-call-$callId",
+            )
+            .isNotEmpty()
+    }
+
+    private suspend fun normalizeLinkedCallDuplicate(event: ManualCalendarEventEntity) {
+        val callId = event.linkedCallIdOrNull() ?: return
+        val legacyId = "call-$callId"
+        val canonicalId = "auto-call-$callId"
+        val linkedEvents = manualCalendarEventDao.findLinkedCallEvents(legacyId, canonicalId)
+        if (linkedEvents.size <= 1) return
+
+        val merged = linkedEvents
+            .reduce { acc, next -> acc.mergeLinkedCallEvent(next, canonicalId) }
+            .copy(id = canonicalId)
+        manualCalendarEventDao.upsert(merged)
+        manualCalendarEventDao.deleteLegacyLinkedCallEvent(legacyId)
+    }
+
+    private fun List<ManualCalendarEventEntity>.dedupeLinkedCallEvents(): List<ManualCalendarEventEntity> {
+        val mergedByCall = linkedMapOf<String, ManualCalendarEventEntity>()
+        val passthrough = mutableListOf<ManualCalendarEventEntity>()
+
+        forEach { event ->
+            val callId = event.linkedCallIdOrNull()
+            if (callId == null) {
+                passthrough += event
+            } else {
+                val canonicalId = "auto-call-$callId"
+                val normalized = event.normalizedLinkedCallEvent()
+                mergedByCall[callId] = mergedByCall[callId]
+                    ?.mergeLinkedCallEvent(normalized, canonicalId)
+                    ?: normalized.copy(id = canonicalId)
+            }
+        }
+
+        return (passthrough + mergedByCall.values)
+            .sortedWith(compareBy<ManualCalendarEventEntity> { it.date }.thenBy { it.time }.thenBy { it.title })
+    }
+
+    private fun ManualCalendarEventEntity.normalizedLinkedCallEvent(): ManualCalendarEventEntity {
+        val callId = linkedCallIdOrNull() ?: return this
+        return copy(id = "auto-call-$callId")
+    }
+
+    private fun ManualCalendarEventEntity.mergeLinkedCallEvent(
+        other: ManualCalendarEventEntity,
+        canonicalId: String,
+    ): ManualCalendarEventEntity {
+        val primary = if (other.updatedAt >= updatedAt) other else this
+        val secondary = if (primary === other) this else other
+        return primary.copy(
+            id = canonicalId,
+            title = primary.title.ifBlank { secondary.title },
+            date = primary.date.ifBlank { secondary.date },
+            time = primary.time.ifBlank { secondary.time },
+            description = primary.description.ifBlank { secondary.description },
+            chip = primary.chip.ifBlank { secondary.chip },
+            imageUris = mergeImageUris(primary.imageUris, secondary.imageUris),
+            reminderEnabled = primary.reminderEnabled || secondary.reminderEnabled,
+            createdAt = minOf(primary.createdAt, secondary.createdAt),
+            updatedAt = maxOf(primary.updatedAt, secondary.updatedAt),
+        )
+    }
+
+    private fun ManualCalendarEventEntity.linkedCallIdOrNull(): String? =
+        when {
+            id.startsWith("auto-call-") -> id.removePrefix("auto-call-").takeIf { it.isNotBlank() }
+            id.startsWith("call-") -> id.removePrefix("call-").takeIf { it.isNotBlank() }
+            else -> null
+        }
+
+    private fun mergeImageUris(first: String, second: String): String =
+        (first.lineSequence() + second.lineSequence())
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString("\n")
 }

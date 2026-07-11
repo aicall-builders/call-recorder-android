@@ -198,7 +198,7 @@ fun FeatureTourOverlay(
                 }
                 drawPath(path, scrim)
                 drawRoundRect(
-                    color = AppColors.Surface.copy(alpha = 0.95f),
+                    color = AppColors.SignalRed500,
                     topLeft = Offset(spot.left, spot.top),
                     size = Size(spot.width, spot.height),
                     cornerRadius = CornerRadius(cornerPx, cornerPx),

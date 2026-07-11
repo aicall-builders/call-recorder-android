@@ -4,4 +4,18 @@
         <item name="android:statusBarColor">#FFF8F3</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <style name="Theme.Fiano.DateTimePicker" parent="@android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#101418</item>
+        <item name="android:textColorHighlight">#FFFFE1DC</item>
+        <item name="android:textColorLink">#FF3A22</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:datePickerStyle">@style/Widget.Fiano.DatePicker</item>
+    </style>
+
+    <style name="Widget.Fiano.DatePicker" parent="@android:style/Widget.Material.DatePicker">
+        <item name="android:colorAccent">#101418</item>
+        <item name="android:textColorHighlight">#FFFFE1DC</item>
+        <item name="android:textColorLink">#FF3A22</item>
+    </style>
 </resources>

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.callrecorder.app.R
@@ -110,6 +111,13 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         vm.syncPrefs()
         calendarVm.loadConnections()
+    }
+
+    BackHandler(enabled = showCalendarSheet || currentSubScreen != null) {
+        when {
+            showCalendarSheet -> showCalendarSheet = false
+            currentSubScreen != null -> currentSubScreen = null
+        }
     }
 
     currentSubScreen?.let { sub ->

@@ -1,5 +1,11 @@
 package com.callrecorder.app.ui.screens
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -56,6 +63,7 @@ import com.callrecorder.app.onboarding.FeatureTourController
 import com.callrecorder.app.onboarding.TourKeys
 import com.callrecorder.app.onboarding.tourTarget
 import com.callrecorder.app.ui.theme.AppColors
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -90,6 +98,7 @@ fun HomeScreen(
     onSeeAllSchedules: () -> Unit = {},
     onSeeAllCustomers: () -> Unit = {},
     onUploadingClick: () -> Unit = {},
+    onRefreshRecordings: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     tourController: FeatureTourController,
@@ -131,11 +140,17 @@ fun HomeScreen(
                     autoSummaryOn = state.autoSummaryEnabled,
                     importantFilterOn = state.importantFilterEnabled,
                     uploadingCount = state.uploadingCount,
+                    autoDetectedCount = state.activeUploads.count { it.status.equals("PENDING", ignoreCase = true) },
+                    autoAnalyzingCount = state.activeUploads.count {
+                        it.status.equals("UPLOADING", ignoreCase = true) ||
+                                it.status.equals("UPLOADED", ignoreCase = true) ||
+                                it.status.equals("PROCESSING", ignoreCase = true)
+                    },
                     onAutoSummaryChange = { vm.setAutoSummary(it) },
                     onImportantFilterChange = { vm.setImportantFilter(it) },
                     onApprovalClick = onApprovalClick,
                     onUploadClick = onUploadClick,
-                    onRefresh = { vm.refresh() },
+                    onRefresh = onRefreshRecordings,
                     onUploadingClick = onUploadingClick,
                     tourController = tourController,
                     modifier = Modifier.onGloballyPositioned {
@@ -236,6 +251,8 @@ private fun Hero(
     autoSummaryOn: Boolean,
     importantFilterOn: Boolean,
     uploadingCount: Int,
+    autoDetectedCount: Int,
+    autoAnalyzingCount: Int,
     onAutoSummaryChange: (Boolean) -> Unit,
     onImportantFilterChange: (Boolean) -> Unit,
     onApprovalClick: () -> Unit,
@@ -246,12 +263,63 @@ private fun Hero(
     modifier: Modifier = Modifier,
 ) {
     val today = remember { todayFullDateLabel() }
+    val autoStatusMessages = remember(autoSummaryOn, autoDetectedCount, autoAnalyzingCount) {
+        if (!autoSummaryOn) {
+            emptyList()
+        } else {
+            buildList {
+                if (autoDetectedCount > 0) add("분석 감지 ${autoDetectedCount}건")
+                if (autoAnalyzingCount > 0) add("자동 분석중 ${autoAnalyzingCount}건")
+            }.ifEmpty { listOf("자동 분석 준비됨") }
+        }
+    }
+    var autoStatusIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(autoStatusMessages) {
+        autoStatusIndex = 0
+        while (autoStatusMessages.size > 1) {
+            delay(2_000L)
+            autoStatusIndex = (autoStatusIndex + 1) % autoStatusMessages.size
+        }
+    }
+    val primaryStatusText = if (autoSummaryOn) {
+        autoStatusMessages.getOrElse(autoStatusIndex) { "자동 분석 준비됨" }
+    } else {
+        "분석 승인 요청 ${pendingCount}건"
+    }
+    val refreshTransition = rememberInfiniteTransition(label = "auto-analysis-refresh")
+    val refreshRotation by refreshTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 6_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "auto-analysis-refresh-rotation",
+    )
     Column(modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp)) {
             Text(today, style = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = OnDark))
             Spacer(Modifier.height(16.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    onClick = onRefresh,
+                    color = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.size(64.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(id = R.drawable.home_icon_refresh),
+                            contentDescription = "녹음 파일 새로 감지",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .graphicsLayer {
+                                    rotationZ = if (autoSummaryOn) refreshRotation else 0f
+                                },
+                        )
+                    }
+                }
                 Surface(
                     onClick = onApprovalClick,
                     color = Color.White,
@@ -264,15 +332,15 @@ private fun Hero(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.home_icon_refresh),
-                            contentDescription = "새로고침",
-                            modifier = Modifier
-                                .width(24.dp)
-                                .height(26.dp)
-                                .clickable { onRefresh() },
+                            painter = painterResource(id = R.drawable.home_icon_auto_status),
+                            contentDescription = if (autoSummaryOn) "자동 분석 상태" else "분석 승인 요청",
+                            modifier = Modifier.size(18.dp),
                         )
-                        Text("통화 분석 대기 ${pendingCount}건",
-                            style = TextStyle(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Navy))
+                        Text(
+                            primaryStatusText,
+                            style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Navy),
+                            maxLines = 1,
+                        )
                     }
                 }
                 Surface(

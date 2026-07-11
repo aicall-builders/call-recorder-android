@@ -4,6 +4,8 @@ import android.app.NotificationManager
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -92,6 +94,7 @@ fun MainScreen(
     var showExternalCalendarSheet by remember { mutableStateOf(false) }
     var showNotifications by remember { mutableStateOf(false) }
     var openCallsOnPendingTab by remember { mutableStateOf(false) }
+    var openCallsPendingRequestKey by remember { mutableStateOf(0) }
     var openCalendarAddRequestKey by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
@@ -131,7 +134,39 @@ fun MainScreen(
         noteEditCallId = null
         selected = BottomTab.CALLS
         callDetailId = callId
-        callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
+        callDetailInitial = homeVm.findLoadedCall(callId)
+    }
+
+    BackHandler(
+        enabled = tourController.isActive ||
+                showApproval ||
+                showExternalCalendarSheet ||
+                showNotifications ||
+                noteEditCallId != null ||
+                callDetailId != null ||
+                selected != BottomTab.HOME,
+    ) {
+        when {
+            tourController.isActive -> tourController.finish { context.markFeatureTourDone() }
+            showApproval -> {
+                showApproval = false
+                homeVm.refresh()
+            }
+            showExternalCalendarSheet -> showExternalCalendarSheet = false
+            showNotifications -> showNotifications = false
+            noteEditCallId != null -> noteEditCallId = null
+            callDetailId != null -> {
+                callDetailId = null
+                callDetailInitial = null
+            }
+            selected != BottomTab.HOME -> {
+                selected = BottomTab.HOME
+                openCallsOnPendingTab = false
+                callDetailId = null
+                callDetailInitial = null
+                noteEditCallId = null
+            }
+        }
     }
 
     // 파일 피커 런처 — Scaffold 밖 선언
@@ -162,8 +197,34 @@ fun MainScreen(
                     val durationSeconds = readAudioDurationSeconds(destFile.absolutePath)
 
                     val existing = recordingDao.findActiveByFileNameAndSize(fileName, destFile.length())
-                    if (existing != null) {
+                    val staleCompletedDuplicate = existing
+                        ?.takeIf { it.status == RecordingStatus.DONE && !it.serverCallId.isNullOrBlank() }
+                        ?.let { completed ->
+                            val stillExists = container.callRepo
+                                .getDetail(completed.serverCallId.orEmpty())
+                                .isSuccess
+                            if (!stillExists) {
+                                recordingDao.deleteOne(completed.id)
+                            }
+                            !stillExists
+                        } ?: false
+                    if (existing != null && !staleCompletedDuplicate) {
                         destFile.delete()
+                        homeVm.refresh()
+                        delay(300)
+                        callDetailId = null
+                        callDetailInitial = null
+                        if (existing.status == RecordingStatus.DONE && !existing.serverCallId.isNullOrBlank()) {
+                            Toast.makeText(context, "이미 분석 완료된 파일이에요.", Toast.LENGTH_SHORT).show()
+                            selected = BottomTab.CALLS
+                            callDetailId = existing.serverCallId
+                        } else {
+                            Toast.makeText(context, "이미 분석 대기 중인 파일이에요.", Toast.LENGTH_SHORT).show()
+                            openCallsOnPendingTab = true
+                            openCallsPendingRequestKey += 1
+                            selected = BottomTab.CALLS
+                        }
+                        return@launch
                     } else {
                         val insertedId = recordingDao.insert(
                             RecordingEntity(
@@ -187,6 +248,7 @@ fun MainScreen(
                     UploadWorker.enqueueOneShot(context)
                     homeVm.refresh()
                     approvalRefreshKey += 1
+                    openCallsPendingRequestKey += 1
                     delay(300)
                     callDetailId = null
                     openCallsOnPendingTab = true
@@ -216,7 +278,7 @@ fun MainScreen(
                             noteEditCallId = null
                             selected = BottomTab.CALLS
                             callDetailId = callId
-                            callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
+                            callDetailInitial = homeVm.findLoadedCall(callId)
                         },
                         vm = homeVm,
                     )
@@ -233,13 +295,20 @@ fun MainScreen(
                             onCallClick = handleCallClick,
                             onSettings = { selected = BottomTab.SETTINGS },
                             onApprovalClick = {
-                                approvalRefreshKey += 1
-                                showApproval = true
+                                callDetailId = null
+                                openCallsOnPendingTab = true
+                                openCallsPendingRequestKey += 1
+                                selected = BottomTab.CALLS
                             },
                             onUploadClick = { uploadLauncher.launch("audio/*") },
+                            onRefreshRecordings = {
+                                UploadWorker.enqueueOneShot(context)
+                                homeVm.refresh()
+                            },
                             onUploadingClick = {
                                 callDetailId = null
                                 openCallsOnPendingTab = true
+                                openCallsPendingRequestKey += 1
                                 selected = BottomTab.CALLS
                             },
                             onSeeAllCalls = {
@@ -269,11 +338,12 @@ fun MainScreen(
                                 CallSummaryListScreen(
                                     onCallClick = { callId ->
                                         callDetailId = callId
-                                        callDetailInitial = homeState.recentCalls.firstOrNull { it.id == callId }
+                                        callDetailInitial = homeVm.findLoadedCall(callId)
                                     },
                                     onNotificationClick = { showNotifications = true },
                                     hasNotification = hasNotification,
                                     startOnPendingTab = openCallsOnPendingTab,
+                                    pendingTabRequestKey = openCallsPendingRequestKey,
                                     vm = homeVm,
                                 )
                             }
@@ -294,6 +364,7 @@ fun MainScreen(
                             hasNotification = hasNotification,
                             onScheduleChanged = { homeVm.refresh(silent = true) },
                             openAddRequestKey = openCalendarAddRequestKey,
+                            onAddRequestConsumed = { openCalendarAddRequestKey = 0 },
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
                             onBack = { selected = BottomTab.HOME },

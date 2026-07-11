@@ -10,6 +10,8 @@ import com.callrecorder.app.data.model.Call
 import com.callrecorder.app.data.model.CalendarEvent
 import com.callrecorder.app.data.model.CallStatus
 import com.callrecorder.app.data.model.CustomerListItem
+import com.callrecorder.app.data.model.extractedInfoOrNull
+import com.callrecorder.app.data.model.internalKeywordsMap
 import com.callrecorder.app.worker.UploadWorker
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
@@ -46,7 +48,7 @@ data class HomeUiState(
     val pendingApprovalCount: Int = 0,
     val schedules: List<CalendarEvent> = emptyList(),
     val error: String? = null,
-    val autoSummaryEnabled: Boolean = true,
+    val autoSummaryEnabled: Boolean = false,
     val importantFilterEnabled: Boolean = false,
     val uploadingCount: Int = 0,
     val activeUploads: List<UploadItem> = emptyList(),
@@ -208,9 +210,17 @@ class HomeViewModel : ViewModel() {
         _state.value = _state.value.copy(recentCalls = filtered.take(20))
     }
 
+    fun findLoadedCall(callId: String): Call? =
+        _allCalls.firstOrNull { it.id == callId }
+            ?: _state.value.recentCalls.firstOrNull { it.id == callId }
+
     fun deleteCall(callId: String) {
         viewModelScope.launch {
-            callRepo.deleteCall(callId)
+            callRepo.deleteCall(callId).onFailure {
+                _state.value = _state.value.copy(error = it.message)
+            }
+            runCatching { recordingDao.deleteByServerCallId(callId) }
+            calendarRepo.deleteLinkedCallEvents(callId)
             // 로컬 목록에서도 즉시 제거
             _allCalls = _allCalls.filter { it.id != callId }
             applyFilter()
@@ -351,6 +361,7 @@ class HomeViewModel : ViewModel() {
                     } else {
                         markMissingProcessingAsFailed(calls, snapshot.listedStoreIds)
                     }
+                    autoRegisterDetectedSchedules(calls)
                     val categories = getImportantCategories()
                     val filtered = if (_state.value.importantFilterEnabled) {
                         calls.filter { it.category in categories }
@@ -415,6 +426,31 @@ class HomeViewModel : ViewModel() {
                 )
             }
         }
+    }
+
+    private suspend fun autoRegisterDetectedSchedules(calls: List<Call>) {
+        calls
+            .filter { call ->
+                call.status.equals(CallStatus.COMPLETED, true) ||
+                        call.status.equals(CallStatus.SUMMARIZED, true) ||
+                        !call.summary.isNullOrBlank()
+            }
+            .forEach { call ->
+                val schedule = call.detectScheduleCandidate() ?: return@forEach
+                calendarRepo.saveManualEvent(
+                    ManualCalendarEventEntity(
+                        id = "auto-call-${call.id}",
+                        title = call.detectScheduleTitle(),
+                        date = schedule.date,
+                        time = schedule.time,
+                        description = call.summary?.takeIf { it.isNotBlank() }
+                            ?: "통화에서 자동 추출된 일정입니다.",
+                        chip = call.detectScheduleChip(),
+                        reminderEnabled = true,
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                )
+            }
     }
 
     private fun mergeManualPinnedCustomers(serverCustomers: List<CustomerListItem>): List<CustomerListItem> {
@@ -543,6 +579,81 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    private data class AutoScheduleCandidate(
+        val date: String,
+        val time: String,
+    )
+
+    private fun Call.detectScheduleCandidate(): AutoScheduleCandidate? {
+        val info = extractedInfoOrNull()
+        val base = createdAt.toAutoScheduleBase()
+        val infoDate = info?.date?.takeIf { it.isNotBlank() }?.toAutoScheduleDateOrNull(base)
+        if (infoDate != null) {
+            return AutoScheduleCandidate(
+                date = infoDate,
+                time = info.time?.takeIf { it.isNotBlank() }?.toAutoScheduleTimeOrNull() ?: "00:00",
+            )
+        }
+
+        val scheduleLabels = listOf(
+            "방문", "일정", "날짜", "예약", "시간", "미팅", "상담",
+            "visit", "schedule", "date", "reservation", "appointment", "meeting", "time",
+        )
+        val texts = buildList {
+            internalKeywordsMap()
+                .filter { (label, value) -> value.isNotBlank() && scheduleLabels.any { label.contains(it, ignoreCase = true) } }
+                .forEach { (label, value) ->
+                    add("$label $value")
+                    add(value)
+                }
+            info?.date?.takeIf { it.isNotBlank() }?.let { add(it) }
+            info?.time?.takeIf { it.isNotBlank() }?.let { add(it) }
+            sttResult?.takeIf { it.isNotBlank() }?.let { add(it) }
+            info?.specialNotes?.takeIf { it.isNotBlank() }?.let { add(it) }
+            summary?.takeIf { it.isNotBlank() }?.let { add(it) }
+        }
+        texts.forEach { text ->
+            val date = text.toAutoScheduleDateOrNull(base) ?: return@forEach
+            val time = text.toAutoScheduleTimeOrNull() ?: "00:00"
+            return AutoScheduleCandidate(date = date, time = time)
+        }
+        return null
+    }
+
+    private fun Call.detectScheduleTitle(): String =
+        callerName?.takeIf { it.isNotBlank() }
+            ?: callerNumber?.takeIf { it.isNotBlank() }
+            ?: extractedInfoOrNull()?.customerName?.takeIf { it.isNotBlank() }
+            ?: "통화 일정"
+
+    private fun Call.detectScheduleChip(): String {
+        val info = extractedInfoOrNull()
+        val raw = buildString {
+            append(category.orEmpty()).append(' ')
+            append(info?.categoryCode.orEmpty()).append(' ')
+            append(info?.specialNotes.orEmpty()).append(' ')
+            append(summary.orEmpty()).append(' ')
+            append(sttResult.orEmpty()).append(' ')
+            internalKeywordsMap().forEach { (label, value) ->
+                append(label).append(' ').append(value).append(' ')
+            }
+        }.lowercase()
+
+        return when {
+            raw.contains("예약") ||
+                    raw.contains("reservation") ||
+                    raw.contains("appointment") ||
+                    raw.contains("방문") ||
+                    raw.contains("미팅") ||
+                    raw.contains("상담") ||
+                    raw.contains("일정") -> "RESERVATION"
+            raw.contains("문의") ||
+                    raw.contains("inquiry") ||
+                    raw.contains("question") -> "INQUIRY"
+            else -> "OTHER"
+        }
+    }
+
     private fun countToday(calls: List<Call>): Int =
         calls.count { isToday(it.createdAt) }
 
@@ -649,6 +760,216 @@ class HomeViewModel : ViewModel() {
             startAt = startAt,
             reminderEnabled = reminderEnabled,
         )
+    }
+
+    private fun String.toAutoScheduleDateOrNull(base: Calendar = Calendar.getInstance(TimeZone.getDefault(), Locale.getDefault())): String? {
+        val text = trim()
+        autoAbsoluteDateOrNull(text, base)?.let { return it }
+        autoRelativeDateOrNull(text, base)?.let { return it }
+        autoWeekdayDateOrNull(text, base)?.let { return it }
+        return null
+    }
+
+    private fun autoAbsoluteDateOrNull(text: String, base: Calendar): String? {
+        val lower = text.lowercase(Locale.US)
+        val fullMatchers = listOf(
+            Regex("""(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일"""),
+            Regex("""(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})"""),
+        )
+        for (regex in fullMatchers) {
+            val match = regex.find(text) ?: continue
+            val year = match.groupValues[1].toIntOrNull() ?: continue
+            val month = match.groupValues[2].toIntOrNull() ?: continue
+            val day = match.groupValues[3].toIntOrNull() ?: continue
+            return autoMakeDateOrNull(year, month, day)
+        }
+
+        val monthDayMatchers = listOf(
+            Regex("""(?<!\d)(\d{1,2})\s*월\s*(\d{1,2})\s*일"""),
+            Regex("""(?<!\d)(\d{1,2})[./]\s*(\d{1,2})(?!\d)"""),
+        )
+        for (regex in monthDayMatchers) {
+            val match = regex.find(text) ?: continue
+            val month = match.groupValues[1].toIntOrNull() ?: continue
+            val day = match.groupValues[2].toIntOrNull() ?: continue
+            return autoMonthDayDate(month, day, null, base)
+        }
+        autoEnglishMonthDayOrNull(lower, base)?.let { return it }
+        return null
+    }
+
+    private fun autoRelativeDateOrNull(text: String, base: Calendar): String? {
+        val lower = text.lowercase(Locale.US)
+        val days = when {
+            text.contains("그글피") -> 3
+            text.contains("모레") -> 2
+            text.contains("내일") -> 1
+            text.contains("오늘") -> 0
+            Regex("""\bday\s+after\s+tomorrow\b""").containsMatchIn(lower) -> 2
+            Regex("""\btomorrow\b""").containsMatchIn(lower) -> 1
+            Regex("""\btoday\b""").containsMatchIn(lower) -> 0
+            else -> null
+        } ?: return null
+        return base.autoCopyInDeviceZone().apply { add(Calendar.DAY_OF_MONTH, days) }.autoDateString()
+    }
+
+    private fun autoWeekdayDateOrNull(text: String, base: Calendar): String? {
+        val lower = text.lowercase(Locale.US)
+        val koreanWeekdays = listOf(
+            "일요일" to Calendar.SUNDAY, "월요일" to Calendar.MONDAY, "화요일" to Calendar.TUESDAY,
+            "수요일" to Calendar.WEDNESDAY, "목요일" to Calendar.THURSDAY, "금요일" to Calendar.FRIDAY,
+            "토요일" to Calendar.SATURDAY, "일욜" to Calendar.SUNDAY, "월욜" to Calendar.MONDAY,
+            "화욜" to Calendar.TUESDAY, "수욜" to Calendar.WEDNESDAY, "목욜" to Calendar.THURSDAY,
+            "금욜" to Calendar.FRIDAY, "토욜" to Calendar.SATURDAY, "일" to Calendar.SUNDAY,
+            "월" to Calendar.MONDAY, "화" to Calendar.TUESDAY, "수" to Calendar.WEDNESDAY,
+            "목" to Calendar.THURSDAY, "금" to Calendar.FRIDAY, "토" to Calendar.SATURDAY,
+        )
+        val englishWeekdays = listOf(
+            "sunday" to Calendar.SUNDAY, "sun" to Calendar.SUNDAY,
+            "monday" to Calendar.MONDAY, "mon" to Calendar.MONDAY,
+            "tuesday" to Calendar.TUESDAY, "tue" to Calendar.TUESDAY, "tues" to Calendar.TUESDAY,
+            "wednesday" to Calendar.WEDNESDAY, "wed" to Calendar.WEDNESDAY,
+            "thursday" to Calendar.THURSDAY, "thu" to Calendar.THURSDAY, "thur" to Calendar.THURSDAY, "thurs" to Calendar.THURSDAY,
+            "friday" to Calendar.FRIDAY, "fri" to Calendar.FRIDAY,
+            "saturday" to Calendar.SATURDAY, "sat" to Calendar.SATURDAY,
+        )
+        val target = koreanWeekdays.firstOrNull { (label, _) ->
+            Regex("""(?<![가-힣])${Regex.escape(label)}(?:요일|욜)?(?![가-힣])""").containsMatchIn(text)
+        }?.second ?: englishWeekdays.firstOrNull { (label, _) ->
+            Regex("""\b${Regex.escape(label)}(?:day)?\b""", RegexOption.IGNORE_CASE).containsMatchIn(lower)
+        }?.second ?: return null
+
+        val result = base.autoCopyInDeviceZone()
+        val current = result.get(Calendar.DAY_OF_WEEK)
+        var diff = (target - current + 7) % 7
+        if (text.contains("다음주") || text.contains("다음 주") || Regex("""\bnext\s+week\b""").containsMatchIn(lower)) {
+            diff = autoDaysUntilNextWeekdayFromMonday(result, target)
+        } else if (Regex("""\bnext\b""").containsMatchIn(lower)) {
+            diff = if (diff == 0) 7 else diff
+        } else if (diff == 0 && !text.contains("오늘") && !text.contains("이번") && !Regex("""\btoday\b|\bthis\b""").containsMatchIn(lower)) {
+            diff = 7
+        }
+        return result.apply { add(Calendar.DAY_OF_MONTH, diff) }.autoDateString()
+    }
+
+    private fun String.toAutoScheduleTimeOrNull(): String? {
+        val text = trim()
+        val lower = text.lowercase(Locale.US)
+        val ampm = Regex("""\b(\d{1,2})(?::\s*(\d{1,2}))?\s*(a\.?m\.?|p\.?m\.?)\b""").find(lower)
+        if (ampm != null) {
+            var hour = ampm.groupValues[1].toIntOrNull() ?: return null
+            val minute = ampm.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+            val marker = ampm.groupValues[3]
+            if (hour !in 1..12 || minute !in 0..59) return null
+            if (marker.startsWith("p") && hour != 12) hour += 12
+            if (marker.startsWith("a") && hour == 12) hour = 0
+            return "%02d:%02d".format(hour, minute)
+        }
+        Regex("""(\d{1,2})\s*:\s*(\d{1,2})""").find(text)?.let {
+            val hour = it.groupValues[1].toIntOrNull() ?: return null
+            val minute = it.groupValues[2].toIntOrNull() ?: return null
+            if (hour !in 0..23 || minute !in 0..59) return null
+            return "%02d:%02d".format(hour, minute)
+        }
+        val korean = Regex("""(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?""").find(text) ?: return null
+        val hour = korean.groupValues[1].toIntOrNull() ?: return null
+        val minute = korean.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }?.toIntOrNull() ?: 0
+        if (hour !in 0..23 || minute !in 0..59) return null
+        return "%02d:%02d".format(hour, minute)
+    }
+
+    private fun String?.toAutoScheduleBase(): Calendar {
+        val zone = TimeZone.getDefault()
+        val locale = Locale.getDefault()
+        val fallback = Calendar.getInstance(zone, locale)
+        if (isNullOrBlank()) return fallback
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd",
+        )
+        for (format in formats) {
+            val parsed = runCatching {
+                SimpleDateFormat(format, Locale.US).apply {
+                    timeZone = if (format.endsWith("'Z'")) TimeZone.getTimeZone("UTC") else zone
+                }.parse(this)
+            }.getOrNull() ?: continue
+            return Calendar.getInstance(zone, locale).apply { time = parsed }
+        }
+        return fallback
+    }
+
+    private val autoEnglishMonths = mapOf(
+        "january" to 1, "jan" to 1, "february" to 2, "feb" to 2, "march" to 3, "mar" to 3,
+        "april" to 4, "apr" to 4, "may" to 5, "june" to 6, "jun" to 6, "july" to 7, "jul" to 7,
+        "august" to 8, "aug" to 8, "september" to 9, "sep" to 9, "sept" to 9, "october" to 10,
+        "oct" to 10, "november" to 11, "nov" to 11, "december" to 12, "dec" to 12,
+    )
+
+    private fun autoEnglishMonthDayOrNull(text: String, base: Calendar): String? {
+        val monthAlternatives = autoEnglishMonths.keys.joinToString("|") { Regex.escape(it) }
+        Regex("""\b($monthAlternatives)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b""").find(text)?.let {
+            val month = autoEnglishMonths[it.groupValues[1].trimEnd('.')] ?: return@let
+            val day = it.groupValues[2].toIntOrNull() ?: return@let
+            return autoMonthDayDate(month, day, it.groupValues.getOrNull(3), base)
+        }
+        Regex("""\b(\d{1,2})(?:st|nd|rd|th)?\s+($monthAlternatives)\.?(?:,?\s+(\d{4}))?\b""").find(text)?.let {
+            val day = it.groupValues[1].toIntOrNull() ?: return@let
+            val month = autoEnglishMonths[it.groupValues[2].trimEnd('.')] ?: return@let
+            return autoMonthDayDate(month, day, it.groupValues.getOrNull(3), base)
+        }
+        return null
+    }
+
+    private fun autoMonthDayDate(month: Int, day: Int, yearText: String?, base: Calendar): String? {
+        val explicitYear = yearText?.takeIf { it.isNotBlank() }?.toIntOrNull()
+        if (explicitYear != null) return autoMakeDateOrNull(explicitYear, month, day)
+        val candidate = base.autoCopyInDeviceZone().apply {
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        if (!autoIsValidDate(candidate, month, day)) return null
+        if (candidate.before(base.autoStartOfDay())) candidate.add(Calendar.YEAR, 1)
+        return candidate.autoDateString()
+    }
+
+    private fun autoMakeDateOrNull(year: Int, month: Int, day: Int): String? {
+        if (year !in 2000..2100 || month !in 1..12 || day !in 1..31) return null
+        val candidate = Calendar.getInstance(TimeZone.getDefault(), Locale.getDefault()).apply {
+            clear()
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        if (!autoIsValidDate(candidate, month, day)) return null
+        return candidate.autoDateString()
+    }
+
+    private fun autoIsValidDate(calendar: Calendar, month: Int, day: Int): Boolean =
+        calendar.get(Calendar.MONTH) == month - 1 && calendar.get(Calendar.DAY_OF_MONTH) == day
+
+    private fun Calendar.autoCopyInDeviceZone(): Calendar =
+        (clone() as Calendar).apply { timeZone = TimeZone.getDefault() }
+
+    private fun Calendar.autoStartOfDay(): Calendar =
+        autoCopyInDeviceZone().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+    private fun Calendar.autoDateString(): String =
+        "%04d-%02d-%02d".format(get(Calendar.YEAR), get(Calendar.MONTH) + 1, get(Calendar.DAY_OF_MONTH))
+
+    private fun autoDaysUntilNextWeekdayFromMonday(base: Calendar, targetDayOfWeek: Int): Int {
+        val daysUntilNextMonday = (Calendar.MONDAY - base.get(Calendar.DAY_OF_WEEK) + 7) % 7
+            .let { if (it == 0) 7 else it }
+        val targetOffsetFromMonday = (targetDayOfWeek - Calendar.MONDAY + 7) % 7
+        return daysUntilNextMonday + targetOffsetFromMonday
     }
 
     private fun String.withSeconds(): String =

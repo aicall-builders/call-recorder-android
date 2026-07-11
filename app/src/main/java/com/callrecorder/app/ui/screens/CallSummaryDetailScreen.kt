@@ -105,6 +105,7 @@ fun CallSummaryDetailScreen(
                     audioUrl = state.audioUrl,
                     calendarLoading = state.calendarLoading,
                     calendarMessage = state.calendarMessage,
+                    internalCalendarRegistered = state.internalCalendarRegistered,
                     summarySaving = state.summarySaving,
                     summaryMessage = state.summaryMessage,
                     connectedCalendars = state.connectedCalendars,
@@ -158,6 +159,7 @@ private fun DetailBody(
     audioUrl: String?,
     calendarLoading: Boolean,
     calendarMessage: String?,
+    internalCalendarRegistered: Boolean,
     summarySaving: Boolean,
     summaryMessage: String?,
     connectedCalendars: List<String>,
@@ -208,6 +210,7 @@ private fun DetailBody(
                     connectedCalendars = connectedCalendars,
                     calendarLoading = calendarLoading,
                     calendarMessage = calendarMessage,
+                    internalCalendarRegistered = internalCalendarRegistered,
                     summarySaving = summarySaving,
                     summaryMessage = summaryMessage,
                     showCalendarPicker = showCalendarPicker,
@@ -309,14 +312,14 @@ private fun detailCallTitle(call: Call, info: ExtractedInfo?): String {
 
 private fun detailCallTypeIconRes(call: Call): Int {
     return when (call.direction?.lowercase()) {
-        "inbound", "incoming" -> R.drawable.icon_reception_white
-        "outbound", "outgoing" -> R.drawable.icon_outgoing_white
-        "manual", "upload", "uploaded" -> R.drawable.icon_call_up_white
+        "inbound", "incoming", "received", "receive", "reception", "수신" -> R.drawable.icon_reception_white
+        "outbound", "outgoing", "sent", "send", "발신" -> R.drawable.icon_outgoing_white
+        "manual", "upload", "uploaded", "file" -> R.drawable.icon_call_up_white
         else -> {
             if (call.callerName.isNullOrBlank() && call.callerNumber.isNullOrBlank() && !call.s3Key.isNullOrBlank()) {
                 R.drawable.icon_call_up_white
             } else {
-                R.drawable.call_icon_type_default
+                R.drawable.icon_reception_white
             }
         }
     }
@@ -452,7 +455,7 @@ private fun DetailTabButton(text: String, selected: Boolean, modifier: Modifier 
     val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     Box(
         modifier = modifier
-            .height(44.dp)
+            .heightIn(min = 44.dp)
             .clip(shape)
             .background(if (selected) Color.White else TabOffBg)
             .clickable { onClick() },
@@ -460,10 +463,14 @@ private fun DetailTabButton(text: String, selected: Boolean, modifier: Modifier 
         Box(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
+                .padding(start = 8.dp, top = 14.dp, end = 8.dp, bottom = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text, style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink))
+            Text(
+                text,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Ink, textAlign = TextAlign.Center),
+                maxLines = 2,
+            )
         }
     }
 }
@@ -476,6 +483,7 @@ private fun AnalysisTabContent(
     connectedCalendars: List<String>,
     calendarLoading: Boolean,
     calendarMessage: String?,
+    internalCalendarRegistered: Boolean,
     summarySaving: Boolean,
     summaryMessage: String?,
     showCalendarPicker: Boolean,
@@ -571,7 +579,15 @@ private fun AnalysisTabContent(
                         )
                     }
                 } else {
-                    ActionCircle(iconRes = R.drawable.detail_icon_calendar_plus, loading = calendarLoading) {
+                    ActionCircle(
+                        iconRes = if (internalCalendarRegistered) {
+                            R.drawable.detail_icon_calendar_completed
+                        } else {
+                            R.drawable.detail_icon_calendar_plus
+                        },
+                        loading = calendarLoading,
+                        enabled = !internalCalendarRegistered,
+                    ) {
                         onToggleCalendarPicker()
                     }
                 }
@@ -813,10 +829,15 @@ private fun formatDateText(value: String): String {
 private fun ActionCircle(
     iconRes: Int,
     loading: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Box(
-        modifier = Modifier.size(48.dp).clip(CircleShape).background(Ink).clickable { onClick() },
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(Ink)
+            .clickable(enabled = enabled && !loading) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         if (loading) {
