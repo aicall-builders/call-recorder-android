@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppRoot() {
     val nav = rememberNavController()
+    val context = LocalContext.current
     val auth: AuthViewModel = viewModel()
     val calendarVm: CalendarViewModel = viewModel()
     val token by auth.isLoggedIn.collectAsState(initial = AuthTokenState.Checking)
@@ -134,14 +135,23 @@ private fun AppRoot() {
     NavHost(navController = nav, startDestination = start) {
         composable(Routes.INTRO) {
             IntroScreen(
-                onStart = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
-                onSkip = { nav.navigate(Routes.PRIVACY_CONSENT) },
+                onStart = {
+                    val destination = if (context.hasAcceptedRequiredConsent()) Routes.LOGIN else Routes.PRIVACY_CONSENT
+                    nav.navigate(destination)
+                },
+                onSkip = {
+                    val destination = if (context.hasAcceptedRequiredConsent()) Routes.LOGIN else Routes.PRIVACY_CONSENT
+                    nav.navigate(destination)
+                },
             )
         }
         composable(Routes.PRIVACY_CONSENT) {
             PrivacyConsentScreen(
                 onBack = { nav.popBackStack() },
-                onNext = { nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } } },
+                onNext = {
+                    context.markRequiredConsentAccepted()
+                    nav.navigate(Routes.LOGIN) { popUpTo(Routes.INTRO) { inclusive = true } }
+                },
             )
         }
         composable(Routes.LOGIN) {
@@ -258,6 +268,7 @@ private fun PermissionRoute(nav: NavHostController, route: String, force: Boolea
  * ───────────────────────────────────────────────────── */
 private const val APP_PREFS = "app_prefs"
 private const val KEY_PERMISSION_ONBOARDING_DONE = "permission_onboarding_done"
+private const val KEY_REQUIRED_CONSENT_ACCEPTED_AT = "required_consent_accepted_at"
 
 val REQUIRED_PERMISSIONS: List<String> = buildList {
     add(Manifest.permission.RECORD_AUDIO)
@@ -292,6 +303,18 @@ fun Context.markPermissionOnboardingDone() {
     getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
         .edit()
         .putBoolean(KEY_PERMISSION_ONBOARDING_DONE, true)
+        .apply()
+}
+
+fun Context.hasAcceptedRequiredConsent(): Boolean {
+    val prefs = getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+    return prefs.getLong(KEY_REQUIRED_CONSENT_ACCEPTED_AT, 0L) > 0L
+}
+
+fun Context.markRequiredConsentAccepted() {
+    getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
+        .edit()
+        .putLong(KEY_REQUIRED_CONSENT_ACCEPTED_AT, System.currentTimeMillis())
         .apply()
 }
 
