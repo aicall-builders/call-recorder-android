@@ -206,9 +206,10 @@ fun SettingsScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item {
-                        SettingsMainSection(bottomPadding = 8.dp) {
+                        SettingsMainSection {
                             SettingsMainRow(
                                 title = "통화 자동 분석",
                                 trailing = {
@@ -244,7 +245,7 @@ fun SettingsScreen(
                     item {
                         val connectedProvider = calendarState.connections.firstOrNull()?.provider
                         val connectedServiceName = connectedProvider?.calendarProviderLabel()
-                        SettingsMainSection(verticalPadding = 8.dp) {
+                        SettingsMainSection {
                             SettingsMainRow(
                                 title = "외부 캘린더 연동",
                                 subtitle = connectedServiceName,
@@ -268,7 +269,7 @@ fun SettingsScreen(
                     }
 
                     item {
-                        SettingsMainSection(verticalPadding = 8.dp) {
+                        SettingsMainSection {
                             SettingsMainRow(
                                 title = "계정 정보",
                                 onClick = { currentSubScreen = SettingsSubScreen.USER_INFO },
@@ -1243,8 +1244,9 @@ private fun SettingsMainRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

@@ -104,18 +104,32 @@ fun MainScreen(
     val recordingDao = container.recordingDao
     val homeState by homeVm.state.collectAsState()
     var hasSystemNotification by remember { mutableStateOf(context.hasActiveFianoSummaryNotification()) }
-    val hasDataNotification = remember(homeState.recentCalls, homeState.schedules) {
+    val notificationSignature = remember(homeState.recentCalls, homeState.schedules) {
         val today = mainTodayDate()
-        homeState.recentCalls.any {
-            it.status.equals("summarized", true) || !it.summary.isNullOrBlank()
-        } || homeState.schedules.any {
-            it.reminderEnabled && it.startAt?.startsWith(today) == true
-        }
+        buildFianoNotificationSignature(
+            completedCallIds = homeState.recentCalls
+                .filter { it.status.equals("summarized", true) || !it.summary.isNullOrBlank() }
+                .map { it.id },
+            todayScheduleIds = homeState.schedules
+                .filter { it.reminderEnabled && it.startAt?.startsWith(today) == true }
+                .map { it.id },
+        )
     }
+    var seenNotificationSignature by remember { mutableStateOf(context.getSeenFianoNotificationSignature()) }
+    val hasDataNotification = notificationSignature.isNotBlank() &&
+        notificationSignature != seenNotificationSignature
     val hasNotification = hasDataNotification || hasSystemNotification
 
     LaunchedEffect(showNotifications, homeState.recentCalls, homeState.schedules) {
         hasSystemNotification = context.hasActiveFianoSummaryNotification()
+    }
+
+    fun openNotifications() {
+        seenNotificationSignature = notificationSignature
+        context.setSeenFianoNotificationSignature(notificationSignature)
+        context.clearFianoSummaryNotifications()
+        hasSystemNotification = false
+        showNotifications = true
     }
 
     // ── 기능 투어 컨트롤러 ──
@@ -334,7 +348,7 @@ fun MainScreen(
                             },
                             onSeeAllSchedules = { navigateTo(BottomTab.CALENDAR) },
                             onSeeAllCustomers = { navigateTo(BottomTab.CUSTOMERS) },
-                            onNotificationClick = { showNotifications = true },
+                            onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
                             tourController = tourController,
                         )
@@ -357,7 +371,7 @@ fun MainScreen(
                                         callDetailId = callId
                                         callDetailInitial = homeVm.findLoadedCall(callId)
                                     },
-                                    onNotificationClick = { showNotifications = true },
+                                    onNotificationClick = { openNotifications() },
                                     hasNotification = hasNotification,
                                     startOnPendingTab = openCallsOnPendingTab,
                                     pendingTabRequestKey = openCallsPendingRequestKey,
@@ -367,7 +381,7 @@ fun MainScreen(
                         }
                         BottomTab.CUSTOMERS -> CustomerScreen(
                             onCallDetailClick = handleCallClick,
-                            onNotificationClick = { showNotifications = true },
+                            onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
                             onCustomerPinnedChanged = { homeVm.refresh(silent = true) },
                         )
@@ -377,7 +391,7 @@ fun MainScreen(
                                 noteEditCallId = callId
                                 noteEditTitle = title.ifBlank { "통화 메모" }
                             },
-                            onNotificationClick = { showNotifications = true },
+                            onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
                             onScheduleChanged = { homeVm.refresh(silent = true) },
                             openAddRequestKey = openCalendarAddRequestKey,
@@ -388,7 +402,7 @@ fun MainScreen(
                             onChangeStore = onChangeStore,
                             onLoggedOut = onLoggedOut,
                             onExternalCalendarClick = { showExternalCalendarSheet = true },
-                            onNotificationClick = { showNotifications = true },
+                            onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
                         )
                     }
@@ -611,6 +625,44 @@ private fun StrokeIcon(pathData: String, color: Color, modifier: Modifier = Modi
                 style = Stroke(width = 1.667f, cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
         }
+    }
+}
+
+private const val FIANO_NOTIFICATION_PREFS = "fiano_notification_state"
+private const val FIANO_NOTIFICATION_SEEN_SIGNATURE = "seen_signature"
+
+private fun buildFianoNotificationSignature(
+    completedCallIds: List<String>,
+    todayScheduleIds: List<String>,
+): String {
+    val calls = completedCallIds.filter { it.isNotBlank() }.distinct().sorted()
+    val schedules = todayScheduleIds.filter { it.isNotBlank() }.distinct().sorted()
+    if (calls.isEmpty() && schedules.isEmpty()) return ""
+    return "calls=${calls.joinToString(",")}|schedules=${schedules.joinToString(",")}"
+}
+
+private fun android.content.Context.getSeenFianoNotificationSignature(): String =
+    getSharedPreferences(FIANO_NOTIFICATION_PREFS, android.content.Context.MODE_PRIVATE)
+        .getString(FIANO_NOTIFICATION_SEEN_SIGNATURE, "")
+        .orEmpty()
+
+private fun android.content.Context.setSeenFianoNotificationSignature(signature: String) {
+    getSharedPreferences(FIANO_NOTIFICATION_PREFS, android.content.Context.MODE_PRIVATE)
+        .edit()
+        .putString(FIANO_NOTIFICATION_SEEN_SIGNATURE, signature)
+        .apply()
+}
+
+private fun android.content.Context.clearFianoSummaryNotifications() {
+    runCatching {
+        val compat = androidx.core.app.NotificationManagerCompat.from(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.activeNotifications
+                .filter { it.notification.channelId == CallRecorderApp.CHANNEL_SUMMARY }
+                .forEach { compat.cancel(it.id) }
+        }
+        compat.cancel(5001)
     }
 }
 

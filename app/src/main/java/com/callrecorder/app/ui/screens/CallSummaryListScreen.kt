@@ -135,8 +135,11 @@ private fun CallSummaryListContent(
     var pendingDeleteCallId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(startOnPendingTab, pendingTabRequestKey) {
-        if (startOnPendingTab || pendingTabRequestKey > 0) {
+        if (startOnPendingTab) {
             tab = AnalysisTab.PENDING
+            filter = CallFilter.ALL
+        } else {
+            tab = AnalysisTab.DONE
             filter = CallFilter.ALL
         }
     }
@@ -827,7 +830,7 @@ private fun PendingCallCard(
                                     .clickable { onEditContact() },
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(callTime, style = TextStyle(fontSize = 13.sp, color = AccentBlue))
+                            Text(callTime, style = TextStyle(fontSize = 13.sp, color = AppColors.FianoBlack700))
                         }
                         PhaseBadge(phase)
                     }
@@ -942,7 +945,7 @@ private fun CallListCard(
                                     .clickable { onEditContact() },
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(callTime, style = TextStyle(fontSize = 13.sp, color = AccentBlue))
+                            Text(callTime, style = TextStyle(fontSize = 13.sp, color = AppColors.FianoBlack700))
                         }
                         CategoryBadge(call.category)
                     }
