@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -117,6 +119,8 @@ fun CustomerScreen(
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     onCustomerPinnedChanged: () -> Unit = {},
+    openCustomerPhone: String? = null,
+    openCustomerRequestKey: Int = 0,
 ) {
     val state by vm.state.collectAsState()
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
@@ -161,6 +165,16 @@ fun CustomerScreen(
         }
     }
 
+    LaunchedEffect(openCustomerPhone, openCustomerRequestKey, state.customers) {
+        val targetKey = openCustomerPhone?.customerPhoneKey().orEmpty()
+        if (targetKey.isBlank()) return@LaunchedEffect
+        state.customers.firstOrNull { it.phone.customerPhoneKey() == targetKey }?.let {
+            selectedCustomer = it
+            filter = CustFilter.ALL
+            searchText = TextFieldValue("")
+        }
+    }
+
     BackHandler(enabled = showContactSheet || selectedCustomer != null) {
         when {
             showContactSheet -> showContactSheet = false
@@ -169,8 +183,11 @@ fun CustomerScreen(
     }
 
     if (selectedCustomer != null) {
+        val currentCustomer = state.customers.firstOrNull {
+            it.phone.customerPhoneKey() == selectedCustomer!!.phone.customerPhoneKey()
+        } ?: selectedCustomer!!
         CustomerDetailScreen(
-            customer = selectedCustomer!!,
+            customer = currentCustomer,
             vm = vm,
             onBack = { selectedCustomer = null },
             onCallDetailClick = onCallDetailClick,
@@ -216,6 +233,13 @@ fun CustomerScreen(
                     onSearchTextChange = { searchText = it },
                     onNotificationClick = onNotificationClick,
                     hasNotification = hasNotification,
+                    searchTrailing = {
+                        AddCustomerFromContactButton(
+                            loading = importingContact,
+                            onClick = { if (!importingContact) startContactImport() },
+                            modifier = Modifier.fillMaxHeight(),
+                        )
+                    },
                 )
             }
 
@@ -241,17 +265,6 @@ fun CustomerScreen(
                                 GradeFilterChip("단골$regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
                                 GradeFilterChip("일반$normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
                                 GradeFilterChip("신규$newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                AddCustomerFromContactButton(
-                                    loading = importingContact,
-                                    onClick = { if (!importingContact) startContactImport() },
-                                )
                             }
                         }
                     }
@@ -351,30 +364,34 @@ private fun GradeFilterChip(label: String, selected: Boolean, onClick: () -> Uni
 private fun AddCustomerFromContactButton(
     loading: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val contentColor = if (loading) AppColors.FianoBlack300 else Ink
     Surface(
         onClick = onClick,
         enabled = !loading,
-        color = Ink,
+        interactionSource = interactionSource,
+        color = when {
+            loading -> AppColors.FianoBlack200
+            pressed -> AppColors.FianoBlack100
+            else -> Color.White
+        },
         shape = RoundedCornerShape(999.dp),
+        modifier = modifier.height(48.dp),
     ) {
         Row(
-            modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = Color.White,
-                )
-            } else {
-                Text("+", style = TextStyle(fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
-            }
+            Text("+", style = TextStyle(fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = contentColor))
             Text(
-                if (loading) "추가 중" else "고객 추가",
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White),
+                "고객 추가",
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = contentColor),
             )
         }
     }
@@ -388,7 +405,8 @@ private fun ContactMultiSelectBottomSheet(
     onSelectedKeysChange: (Set<String>) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
-) {
+    ) {
+    val allSelected = contacts.isNotEmpty() && selectedKeys.size == contacts.size
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.White,
@@ -397,13 +415,38 @@ private fun ContactMultiSelectBottomSheet(
         sheetMaxWidth = Dp.Unspecified,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(top = 24.dp),
         ) {
-            Text(
-                "연락처에서 고객 추가",
-                modifier = Modifier.padding(horizontal = 24.dp),
-                style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = Ink),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "연락처에서 고객 추가",
+                    modifier = Modifier.weight(1f),
+                    style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = Ink),
+                )
+                TextButton(
+                    enabled = contacts.isNotEmpty(),
+                    onClick = {
+                        onSelectedKeysChange(
+                            if (allSelected) emptySet() else contacts.map { it.key }.toSet(),
+                        )
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        if (allSelected) "전체 해제" else "전체 선택",
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink),
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "${selectedKeys.size}명 선택됨",
@@ -487,8 +530,7 @@ private fun ContactSheetButtonBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FianoSheetActionButton(
@@ -517,26 +559,38 @@ private fun FianoSheetActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val backgroundColor = when {
+        primary && !enabled -> AppColors.FianoBlack200
+        primary && pressed -> AppColors.FianoBlack950
+        primary -> Ink
+        !enabled -> Color.White
+        pressed -> AppColors.FianoBlack100
+        else -> Color.White
+    }
+    val textColor = when {
+        primary && enabled -> Color.White
+        !enabled -> AppColors.FianoBlack300
+        else -> Ink
+    }
     Surface(
         onClick = onClick,
         enabled = enabled,
-        color = when {
-            primary && enabled -> Ink
-            primary -> AppColors.DeepBrown200
-            else -> Color.White
-        },
-        shape = RoundedCornerShape(12.dp),
-        border = if (primary) null else androidx.compose.foundation.BorderStroke(1.dp, Divider),
-        modifier = modifier.height(52.dp),
+        interactionSource = interactionSource,
+        color = backgroundColor,
+        shape = RoundedCornerShape(999.dp),
+        border = if (primary) null else androidx.compose.foundation.BorderStroke(1.dp, if (enabled) Ink else AppColors.FianoBlack200),
+        modifier = modifier.height(48.dp),
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
                 label,
                 style = TextStyle(
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     lineHeight = 20.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (primary) Color.White else Ink,
+                    color = textColor,
                 ),
             )
         }
@@ -640,6 +694,8 @@ private fun CustomerCard(customer: CustomerUiItem, onClick: () -> Unit) {
         }
     }
 }
+
+private fun String.customerPhoneKey(): String = filter { it.isDigit() }.ifBlank { this }
 
 // ─────────────────────────────────────────────────────
 // 고객 상세 (탭: 고객 정보 / 히스토리)
@@ -1651,29 +1707,32 @@ private fun HistoryTab(
     onEditCall: (Call) -> Unit,
     onCallDetailClick: (String) -> Unit,
 ) {
-    val reservationCount = customer.calls.count { it.category == "예약" }
-    val relatedSchedule = customer.calls.count {
+    val historyCalls = remember(customer.calls) {
+        customer.calls.distinctBy { it.id }.sortedByDescending { it.createdAt.orEmpty() }
+    }
+    val reservationCount = historyCalls.count { it.category == "예약" }
+    val relatedSchedule = historyCalls.count {
         val info = it.extractedInfoOrNull(); info?.date != null
     }
     MetricsRow(
-        totalCalls = customer.callCount,
+        totalCalls = historyCalls.size,
         reservationCount = reservationCount,
         relatedSchedule = relatedSchedule,
     )
     Spacer(Modifier.height(24.dp))
 
-    if (customer.calls.isEmpty()) {
+    if (historyCalls.isEmpty()) {
         Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
             Text("통화 기록이 없어요", style = TextStyle(fontSize = 13.sp, color = PlaceholderGray))
         }
         return
     }
-    customer.calls.forEachIndexed { idx, call ->
+    historyCalls.forEachIndexed { idx, call ->
         HistoryRow(
             call = call,
             note = detail.notes[call.id],
             isFirst = idx == 0,
-            isLast = idx == customer.calls.lastIndex,
+            isLast = idx == historyCalls.lastIndex,
             onEditClick = { onEditCall(call) },
             onCallDetailClick = { onCallDetailClick(call.id) },
         )

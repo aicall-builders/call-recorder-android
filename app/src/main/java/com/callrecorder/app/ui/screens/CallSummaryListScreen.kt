@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -82,16 +83,24 @@ fun CallSummaryListScreen(
     pendingTabRequestKey: Int = 0,
     vm: HomeViewModel = viewModel(),
     approvalVm: PendingApprovalViewModel = viewModel(),
+    customerVm: CustomerViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
     val approvalState by approvalVm.state.collectAsState()
+    val customerState by customerVm.state.collectAsState()
     CallSummaryListContent(
         state = state,
         approvalState = approvalState,
+        registeredCustomers = customerState.customers,
         onCallClick = onCallClick,
         onDeleteCall = { vm.deleteCall(it) },
         onDeleteUpload = { vm.deleteUpload(it) },
         onRetryUpload = { vm.retryUpload(it) },
+        onUpdateCallTitle = { callId, number, title ->
+            vm.updateCaller(callId, number, title) {
+                customerVm.loadCustomers()
+            }
+        },
         onApproveRecording = { id ->
             approvalVm.approveOne(id)
             vm.refresh(silent = true)
@@ -114,10 +123,12 @@ fun CallSummaryListScreen(
 private fun CallSummaryListContent(
     state: HomeUiState,
     approvalState: PendingApprovalUiState,
+    registeredCustomers: List<CustomerUiItem>,
     onCallClick: (String) -> Unit,
     onDeleteCall: (String) -> Unit,
     onDeleteUpload: (Long) -> Unit,
     onRetryUpload: (Long) -> Unit,
+    onUpdateCallTitle: (callId: String, number: String, title: String) -> Unit,
     onApproveRecording: (Long) -> Unit,
     onDeleteRecording: (Long) -> Unit,
     onPendingTabVisible: () -> Unit = {},
@@ -133,6 +144,8 @@ private fun CallSummaryListContent(
     var tab by remember { mutableStateOf(initialTab) }
     var completionBaselineIds by remember { mutableStateOf<Set<String>?>(null) }
     var pendingDeleteCallId by remember { mutableStateOf<String?>(null) }
+    var titleEditCall by remember { mutableStateOf<Call?>(null) }
+    var titleDraft by remember { mutableStateOf(TextFieldValue("")) }
 
     LaunchedEffect(startOnPendingTab, pendingTabRequestKey) {
         if (startOnPendingTab) {
@@ -248,6 +261,108 @@ private fun CallSummaryListContent(
                 pendingDeleteCallId = null
                 onDeleteCall(callId)
             },
+        )
+    }
+
+    titleEditCall?.let { call ->
+        AlertDialog(
+            onDismissRequest = { titleEditCall = null },
+            title = {
+                Text(
+                    "고객수정",
+                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink),
+                )
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = titleDraft,
+                        onValueChange = { titleDraft = it },
+                        singleLine = true,
+                        label = { Text("고객명") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "등록된 고객에 연결",
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (registeredCustomers.isEmpty()) {
+                        Text(
+                            "등록된 고객이 없어요.",
+                            style = TextStyle(fontSize = 13.sp, color = LabelGray),
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            items(registeredCustomers, key = { it.phone }) { customer ->
+                                Surface(
+                                    onClick = {
+                                        onUpdateCallTitle(
+                                            call.id,
+                                            customer.phone,
+                                            customer.displayCustomerTitle(),
+                                        )
+                                        titleEditCall = null
+                                    },
+                                    color = AppColors.DeepBrown50,
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                customer.displayCustomerTitle(),
+                                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Ink),
+                                                maxLines = 1,
+                                            )
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                customer.phone,
+                                                style = TextStyle(fontSize = 12.sp, color = LabelGray),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                        Text(
+                                            "연결",
+                                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.SignalRed700),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newTitle = titleDraft.text.trim()
+                        if (newTitle.isNotBlank()) {
+                            onUpdateCallTitle(call.id, call.callerNumber.orEmpty(), newTitle)
+                        }
+                        titleEditCall = null
+                    },
+                ) {
+                    Text("저장", color = Ink)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { titleEditCall = null }) {
+                    Text("취소", color = LabelGray)
+                }
+            },
+            containerColor = Color.White,
         )
     }
 
@@ -429,7 +544,10 @@ private fun CallSummaryListContent(
                                             CallListCard(
                                                 call = call,
                                                 onClick = { onCallClick(call.id) },
-                                                onEditContact = { openContactEditor(context, call.callerNumber, call.callerName) },
+                                                onEditTitle = {
+                                                    titleEditCall = call
+                                                    titleDraft = TextFieldValue(call.displayTitle())
+                                                },
                                             )
                                         }
                                     }
@@ -519,10 +637,12 @@ private fun CallSummaryPendingWithApprovalsPreview() {
             duplicateIds = setOf(1002L),
             loading = false,
         ),
+        registeredCustomers = emptyList(),
         onCallClick = {},
         onDeleteCall = {},
         onDeleteUpload = {},
         onRetryUpload = {},
+        onUpdateCallTitle = { _, _, _ -> },
         onApproveRecording = {},
         onDeleteRecording = {},
         initialTab = AnalysisTab.PENDING,
@@ -898,7 +1018,7 @@ private fun String.toPendingPhase(): PendingPhase {
 private fun CallListCard(
     call: Call,
     onClick: () -> Unit,
-    onEditContact: () -> Unit,
+    onEditTitle: () -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val callTime = formatTimeShort(call.createdAt)
@@ -939,10 +1059,10 @@ private fun CallListCard(
                             Spacer(Modifier.width(4.dp))
                             Image(
                                 painter = painterResource(id = R.drawable.call_icon_edit),
-                                contentDescription = "연락처 수정",
+                                contentDescription = "타이틀 수정",
                                 modifier = Modifier
                                     .size(20.dp)
-                                    .clickable { onEditContact() },
+                                    .clickable { onEditTitle() },
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(callTime, style = TextStyle(fontSize = 13.sp, color = AppColors.FianoBlack700))
@@ -1004,6 +1124,14 @@ private fun callDirectionLabel(call: Call): String {
         else -> "미상"
     }
 }
+
+private fun Call.displayTitle(): String =
+    callerName?.takeIf { it.isNotBlank() }
+        ?: callerNumber?.takeIf { it.isNotBlank() }
+        ?: "발신번호 없음"
+
+private fun CustomerUiItem.displayCustomerTitle(): String =
+    name?.takeIf { it.isNotBlank() } ?: phone
 
 private fun callTypeIconRes(call: Call): Int {
     if (isManualUploadCall(call)) return R.drawable.icon_call_up

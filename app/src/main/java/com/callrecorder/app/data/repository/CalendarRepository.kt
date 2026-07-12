@@ -98,6 +98,15 @@ class CalendarRepository(
             .isNotEmpty()
     }
 
+    suspend fun getLinkedCallEvent(callId: String): Result<ManualCalendarEventEntity?> = runCatching {
+        val events = manualCalendarEventDao.findLinkedCallEvents(
+            legacyId = "call-$callId",
+            canonicalId = "auto-call-$callId",
+        )
+        events.reduceOrNull { acc, next -> acc.mergeLinkedCallEvent(next, "auto-call-$callId") }
+            ?.copy(id = "auto-call-$callId")
+    }
+
     private suspend fun normalizeLinkedCallDuplicate(event: ManualCalendarEventEntity) {
         val callId = event.linkedCallIdOrNull() ?: return
         val legacyId = "call-$callId"

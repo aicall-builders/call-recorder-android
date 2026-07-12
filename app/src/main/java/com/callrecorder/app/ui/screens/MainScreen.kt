@@ -97,6 +97,10 @@ fun MainScreen(
     var openCallsOnPendingTab by remember { mutableStateOf(false) }
     var openCallsPendingRequestKey by remember { mutableStateOf(0) }
     var openCalendarAddRequestKey by remember { mutableStateOf(0) }
+    var openCalendarDate by remember { mutableStateOf<String?>(null) }
+    var openCalendarDateRequestKey by remember { mutableStateOf(0) }
+    var openCustomerPhone by remember { mutableStateOf<String?>(null) }
+    var openCustomerRequestKey by remember { mutableStateOf(0) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -172,6 +176,15 @@ fun MainScreen(
         navigateTo(BottomTab.CALLS)
         callDetailId = callId
         callDetailInitial = homeVm.findLoadedCall(callId)
+    }
+
+    fun openCustomerDetail(phone: String) {
+        noteEditCallId = null
+        callDetailId = null
+        callDetailInitial = null
+        openCustomerPhone = phone
+        openCustomerRequestKey += 1
+        navigateTo(BottomTab.CUSTOMERS)
     }
 
     BackHandler(
@@ -364,6 +377,14 @@ fun MainScreen(
                                         navigateTo(BottomTab.CALENDAR)
                                         openCalendarAddRequestKey += 1
                                     },
+                                    onCustomerClick = { phone -> openCustomerDetail(phone) },
+                                    onOpenRegisteredSchedule = { date ->
+                                        callDetailId = null
+                                        callDetailInitial = null
+                                        openCalendarDate = date
+                                        openCalendarDateRequestKey += 1
+                                        navigateTo(BottomTab.CALENDAR)
+                                    },
                                 )
                             } else {
                                 CallSummaryListScreen(
@@ -384,6 +405,8 @@ fun MainScreen(
                             onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
                             onCustomerPinnedChanged = { homeVm.refresh(silent = true) },
+                            openCustomerPhone = openCustomerPhone,
+                            openCustomerRequestKey = openCustomerRequestKey,
                         )
                         BottomTab.CALENDAR -> InternalCalendarScreen(
                             onCallDetailClick = handleCallClick,
@@ -396,6 +419,8 @@ fun MainScreen(
                             onScheduleChanged = { homeVm.refresh(silent = true) },
                             openAddRequestKey = openCalendarAddRequestKey,
                             onAddRequestConsumed = { openCalendarAddRequestKey = 0 },
+                            openDate = openCalendarDate,
+                            openDateRequestKey = openCalendarDateRequestKey,
                         )
                         BottomTab.SETTINGS -> SettingsScreen(
                             onBack = { navigateBackTab() },

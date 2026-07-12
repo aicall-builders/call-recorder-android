@@ -39,6 +39,7 @@ data class CallSummaryDetailUiState(
     val connectedCalendars: List<String> = emptyList(),
     val showCalendarPicker: Boolean = false,
     val internalCalendarRegistered: Boolean = false,
+    val internalCalendarDate: String? = null,
     val summarySaving: Boolean = false,
     val summaryMessage: String? = null,
     val originalCallId: String? = null,
@@ -197,10 +198,21 @@ class CallSummaryDetailViewModel : ViewModel() {
         viewModelScope.launch {
             calendarRepo.hasLinkedCallEvent(callId).fold(
                 onSuccess = { registered ->
-                    _state.value = _state.value.copy(internalCalendarRegistered = registered)
+                    if (!registered) {
+                        _state.value = _state.value.copy(
+                            internalCalendarRegistered = false,
+                            internalCalendarDate = null,
+                        )
+                        return@fold
+                    }
+                    val eventDate = calendarRepo.getLinkedCallEvent(callId).getOrNull()?.date
+                    _state.value = _state.value.copy(
+                        internalCalendarRegistered = true,
+                        internalCalendarDate = eventDate,
+                    )
                 },
                 onFailure = {
-                    _state.value = _state.value.copy(internalCalendarRegistered = false)
+                    _state.value = _state.value.copy(internalCalendarRegistered = false, internalCalendarDate = null)
                 },
             )
         }
@@ -298,6 +310,7 @@ class CallSummaryDetailViewModel : ViewModel() {
                         calendarLoading = false,
                         calendarMessage = "내부 캘린더에 등록됐어요.",
                         internalCalendarRegistered = true,
+                        internalCalendarDate = date,
                     )
                 },
                 onFailure = {

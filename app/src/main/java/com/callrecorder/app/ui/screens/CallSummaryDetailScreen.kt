@@ -1,10 +1,14 @@
 package com.callrecorder.app.ui.screens
 
+import android.app.DownloadManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -78,6 +82,8 @@ fun CallSummaryDetailScreen(
     callId: String,
     onBack: () -> Unit,
     onManualScheduleRequest: () -> Unit = {},
+    onCustomerClick: (String) -> Unit = {},
+    onOpenRegisteredSchedule: (String?) -> Unit = {},
     initialCall: Call? = null,
     vm: CallSummaryDetailViewModel = viewModel(),
 ) {
@@ -106,6 +112,7 @@ fun CallSummaryDetailScreen(
                     calendarLoading = state.calendarLoading,
                     calendarMessage = state.calendarMessage,
                     internalCalendarRegistered = state.internalCalendarRegistered,
+                    internalCalendarDate = state.internalCalendarDate,
                     summarySaving = state.summarySaving,
                     summaryMessage = state.summaryMessage,
                     connectedCalendars = state.connectedCalendars,
@@ -118,6 +125,8 @@ fun CallSummaryDetailScreen(
                     onAddToCalendar = { provider -> vm.addToCalendar(callId, provider) },
                     onSummarySave = { summary, rows -> vm.updateSummaryAndKeywords(callId, summary, rows) },
                     onSummaryEditStateReset = { vm.clearSummaryMessage() },
+                    onCustomerClick = onCustomerClick,
+                    onOpenRegisteredSchedule = { onOpenRegisteredSchedule(state.internalCalendarDate) },
                 )
             }
         }
@@ -143,6 +152,7 @@ private fun DetailBody(
     calendarLoading: Boolean,
     calendarMessage: String?,
     internalCalendarRegistered: Boolean,
+    internalCalendarDate: String?,
     summarySaving: Boolean,
     summaryMessage: String?,
     connectedCalendars: List<String>,
@@ -155,6 +165,8 @@ private fun DetailBody(
     onAddToCalendar: (String) -> Unit,
     onSummarySave: (String, List<Pair<String, String>>) -> Unit,
     onSummaryEditStateReset: () -> Unit,
+    onCustomerClick: (String) -> Unit,
+    onOpenRegisteredSchedule: () -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
     val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
@@ -164,7 +176,7 @@ private fun DetailBody(
     Column(Modifier.fillMaxSize()) {
         // ═══ 상단 다크 영역 (헤더 + 발신자 + 플레이어) — 고정 ═══
         DetailTopBar(onBack = onBack)
-        DetailHero(call = call, info = info, audioUrl = audioUrl)
+        DetailHero(call = call, info = info, audioUrl = audioUrl, onCustomerClick = onCustomerClick)
 
         // ═══ 탭 (시트 상단 라운드) ═══
         Row(
@@ -194,6 +206,7 @@ private fun DetailBody(
                     calendarLoading = calendarLoading,
                     calendarMessage = calendarMessage,
                     internalCalendarRegistered = internalCalendarRegistered,
+                    internalCalendarDate = internalCalendarDate,
                     summarySaving = summarySaving,
                     summaryMessage = summaryMessage,
                     showCalendarPicker = showCalendarPicker,
@@ -203,6 +216,7 @@ private fun DetailBody(
                     onAddToCalendar = onAddToCalendar,
                     onSummarySave = onSummarySave,
                     onSummaryEditStateReset = onSummaryEditStateReset,
+                    onOpenRegisteredSchedule = onOpenRegisteredSchedule,
                 )
                 DetailTab.TRANSCRIPT -> TranscriptTabContent(messages = messages, fullText = transcriptText)
             }
@@ -235,7 +249,12 @@ private fun DetailTopBar(onBack: () -> Unit) {
 }
 
 @Composable
-private fun DetailHero(call: Call, info: ExtractedInfo?, audioUrl: String?) {
+private fun DetailHero(
+    call: Call,
+    info: ExtractedInfo?,
+    audioUrl: String?,
+    onCustomerClick: (String) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -243,15 +262,23 @@ private fun DetailHero(call: Call, info: ExtractedInfo?, audioUrl: String?) {
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ContactBlock(call = call, info = info)
+        ContactBlock(call = call, info = info, audioUrl = audioUrl, onCustomerClick = onCustomerClick)
         AudioPlayerDark(audioUrl = audioUrl)
     }
 }
 
 /* ─────────────── 발신자 정보 ─────────────── */
 @Composable
-private fun ContactBlock(call: Call, info: ExtractedInfo?) {
+private fun ContactBlock(
+    call: Call,
+    info: ExtractedInfo?,
+    audioUrl: String?,
+    onCustomerClick: (String) -> Unit,
+) {
+    val context = LocalContext.current
     val displayTitle = detailCallTitle(call, info)
+    val customerPhone = call.callerNumber?.takeIf { it.isNotBlank() }
+        ?: info?.phone?.takeIf { it.isNotBlank() }
     val timeLabel = formatCallDateTime(call.createdAt)
     val durationLabel = formatDuration(call.duration)
 
@@ -267,7 +294,13 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
             modifier = Modifier.size(36.dp),
         )
         Column(Modifier.weight(1f)) {
-            Text(displayTitle, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White))
+            Text(
+                displayTitle,
+                modifier = Modifier.then(
+                    if (customerPhone != null) Modifier.clickable { onCustomerClick(customerPhone) } else Modifier,
+                ),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White),
+            )
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(timeLabel, style = TextStyle(fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f)))
@@ -280,10 +313,46 @@ private fun ContactBlock(call: Call, info: ExtractedInfo?) {
         Image(
             painter = painterResource(R.drawable.detail_icon_download),
             contentDescription = "다운로드",
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier
+                .size(24.dp)
+                .clickable {
+                    downloadCallAudio(
+                        context = context,
+                        audioUrl = audioUrl,
+                        fileName = "${displayTitle.toSafeDownloadFileName()}_${call.id}.m4a",
+                    )
+                },
         )
     }
 }
+
+private fun downloadCallAudio(context: android.content.Context, audioUrl: String?, fileName: String) {
+    if (audioUrl.isNullOrBlank()) {
+        Toast.makeText(context, "다운로드할 음성 파일이 없어요.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    runCatching {
+        val request = DownloadManager.Request(Uri.parse(audioUrl))
+            .setTitle(fileName)
+            .setDescription("FIANO 통화 음성 파일")
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
+        val manager = context.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as DownloadManager
+        manager.enqueue(request)
+    }.fold(
+        onSuccess = {
+            Toast.makeText(context, "다운로드를 시작했어요.", Toast.LENGTH_SHORT).show()
+        },
+        onFailure = {
+            Toast.makeText(context, "다운로드를 시작하지 못했어요.", Toast.LENGTH_SHORT).show()
+        },
+    )
+}
+
+private fun String.toSafeDownloadFileName(): String =
+    replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "fiano_call_audio" }
 
 private fun detailCallTitle(call: Call, info: ExtractedInfo?): String {
     return call.callerName?.takeIf { it.isNotBlank() }
@@ -426,7 +495,8 @@ private fun DarkSeekBar(progress: Float, enabled: Boolean, onSeek: (Float) -> Un
                 Modifier
                     .size(14.dp)
                     .clip(CircleShape)
-                    .background(Ink),
+                    .background(Ink)
+                    .border(2.dp, Color.White, CircleShape),
             )
         }
     }
@@ -467,6 +537,7 @@ private fun AnalysisTabContent(
     calendarLoading: Boolean,
     calendarMessage: String?,
     internalCalendarRegistered: Boolean,
+    internalCalendarDate: String?,
     summarySaving: Boolean,
     summaryMessage: String?,
     showCalendarPicker: Boolean,
@@ -476,6 +547,7 @@ private fun AnalysisTabContent(
     onAddToCalendar: (String) -> Unit,
     onSummarySave: (String, List<Pair<String, String>>) -> Unit,
     onSummaryEditStateReset: () -> Unit,
+    onOpenRegisteredSchedule: () -> Unit,
 ) {
     var editingSummary by remember(call.id, call.summary) { mutableStateOf(false) }
     var summaryDraft by remember(call.id, call.summary) { mutableStateOf(formatDateText(call.summary.orEmpty())) }
@@ -569,9 +641,13 @@ private fun AnalysisTabContent(
                             R.drawable.detail_icon_calendar_plus
                         },
                         loading = calendarLoading,
-                        enabled = !internalCalendarRegistered,
+                        enabled = !calendarLoading,
                     ) {
-                        onToggleCalendarPicker()
+                        if (internalCalendarRegistered) {
+                            onOpenRegisteredSchedule()
+                        } else {
+                            onToggleCalendarPicker()
+                        }
                     }
                 }
             }

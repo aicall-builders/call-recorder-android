@@ -284,6 +284,7 @@ fun SettingsScreen(
                                 onClick = { auth.logout(); onLoggedOut() },
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(top = 32.dp)
                                     .height(48.dp),
                                 shape = RoundedCornerShape(999.dp),
                                 border = BorderStroke(1.dp, FianoSettingsBg),

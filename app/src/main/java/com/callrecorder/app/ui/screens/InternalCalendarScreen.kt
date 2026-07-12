@@ -189,6 +189,8 @@ fun InternalCalendarScreen(
     onScheduleChanged: () -> Unit = {},
     openAddRequestKey: Int = 0,
     onAddRequestConsumed: () -> Unit = {},
+    openDate: String? = null,
+    openDateRequestKey: Int = 0,
 ) {
     val calState by calVm.state.collectAsState()
 
@@ -205,6 +207,16 @@ fun InternalCalendarScreen(
             editingManualEvent = null
             showAddDialog = true
             onAddRequestConsumed()
+        }
+    }
+
+    LaunchedEffect(openDate, openDateRequestKey) {
+        val parts = openDate?.toCalendarDateParts()
+        if (parts != null && openDateRequestKey > 0) {
+            currentYear = parts.year
+            currentMonth = parts.month
+            selectedDay = parts.day.coerceIn(1, daysInMonth(parts.year, parts.month))
+            calVm.loadMonthEvents(parts.year, parts.month)
         }
     }
 

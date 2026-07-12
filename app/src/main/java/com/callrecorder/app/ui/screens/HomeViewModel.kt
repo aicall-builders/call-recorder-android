@@ -228,7 +228,7 @@ class HomeViewModel : ViewModel() {
     }
 
     /** 발신자 번호/이름 수정 → 서버 저장 후 목록 반영 */
-    fun updateCaller(callId: String, number: String, name: String) {
+    fun updateCaller(callId: String, number: String, name: String, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val n = number.trim()
             val nm = name.trim()
@@ -241,6 +241,7 @@ class HomeViewModel : ViewModel() {
                     ) else it
                 }
                 applyFilter()
+                onSuccess()
                 // 서버에서 재동기화
                 refresh(silent = true)
             }

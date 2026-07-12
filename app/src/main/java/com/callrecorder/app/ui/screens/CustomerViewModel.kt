@@ -200,17 +200,17 @@ class CustomerViewModel : ViewModel() {
             }
             .groupBy({ it.first }, { it.second })
             .map { (phoneKey, calls) ->
-                val sortedCalls = calls.sortedByDescending { it.createdAt.orEmpty() }
+                val sortedCalls = calls.distinctCustomerCalls()
                 val latest = sortedCalls.first()
                 CustomerUiItem(
                     phone = latest.callerNumber?.takeIf { it.isNotBlank() } ?: phoneKey,
                     name = latest.callerName?.takeIf { it.isNotBlank() },
-                    callCount = calls.size,
+                    callCount = sortedCalls.size,
                     lastCallAt = latest.createdAt,
                     lastSummary = latest.summary,
-                    categories = calls.mapNotNull { it.category?.takeIf(String::isNotBlank) }.distinct(),
+                    categories = sortedCalls.mapNotNull { it.category?.takeIf(String::isNotBlank) }.distinct(),
                     calls = sortedCalls,
-                    grade = CustomerGrade.of(calls.size),
+                    grade = CustomerGrade.of(sortedCalls.size),
                 )
             }
             .sortedWith(
@@ -232,7 +232,7 @@ class CustomerViewModel : ViewModel() {
                 lastCallAt = item.lastCallAt ?: fallback.lastCallAt,
                 lastSummary = item.lastSummary ?: fallback.lastSummary,
                 categories = (item.categories + fallback.categories).distinct(),
-                calls = if (item.calls.isNotEmpty()) item.calls else fallback.calls,
+                calls = (item.calls + fallback.calls).distinctCustomerCalls(),
                 isPinned = item.isPinned || fallback.isPinned,
             )
         }
@@ -260,6 +260,7 @@ class CustomerViewModel : ViewModel() {
                     lastCallAt = server.lastCallAt ?: local.lastCallAt,
                     lastSummary = server.lastSummary ?: local.lastSummary,
                     categories = (server.categories + local.categories).distinct(),
+                    calls = (server.calls + local.calls).distinctCustomerCalls(),
                     isPinned = server.isPinned || local.isPinned,
                 )
             }
@@ -275,6 +276,10 @@ class CustomerViewModel : ViewModel() {
 
     private fun CustomerUiItem.normalizedPhoneKey(): String =
         phone.filter { it.isDigit() }
+
+    private fun List<Call>.distinctCustomerCalls(): List<Call> =
+        distinctBy { it.id }
+            .sortedByDescending { it.createdAt.orEmpty() }
 
     fun deleteCustomer(customer: CustomerUiItem) {
         val key = customer.normalizedPhoneKey()

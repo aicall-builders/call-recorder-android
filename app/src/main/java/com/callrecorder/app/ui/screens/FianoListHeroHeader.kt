@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,6 +93,7 @@ fun FianoListHeroHeader(
     placeholder: String = "전화번호 또는 요약 검색",
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
+    searchTrailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     Column(
         modifier
@@ -118,52 +120,61 @@ fun FianoListHeroHeader(
                     color = Color.White,
                 ),
             )
-            Surface(
-                color = Color.White,
-                shape = RoundedCornerShape(999.dp),
-                border = BorderStroke(1.dp, Color(0xFFE8ECF2)),
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE8ECF2)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
                 ) {
-                    Box(Modifier.weight(1f)) {
-                        if (searchText.text.isEmpty()) {
-                            Text(
-                                placeholder,
-                                style = TextStyle(
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            if (searchText.text.isEmpty()) {
+                                Text(
+                                    placeholder,
+                                    style = TextStyle(
+                                        fontSize = 14.sp,
+                                        lineHeight = 16.sp,
+                                        color = AppColors.DeepBrown500,
+                                    ),
+                                )
+                            }
+                            BasicTextField(
+                                value = searchText,
+                                onValueChange = onSearchTextChange,
+                                textStyle = TextStyle(
                                     fontSize = 14.sp,
                                     lineHeight = 16.sp,
-                                    color = AppColors.DeepBrown500,
+                                    color = AppColors.DeepBrown950,
                                 ),
+                                cursorBrush = SolidColor(AppColors.DeepBrown950),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                        BasicTextField(
-                            value = searchText,
-                            onValueChange = onSearchTextChange,
-                            textStyle = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
-                                color = AppColors.DeepBrown950,
-                            ),
-                            cursorBrush = SolidColor(AppColors.DeepBrown950),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                        Image(
+                            painter = painterResource(R.drawable.call_icon_search),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            contentScale = ContentScale.Fit,
                         )
                     }
-                    Image(
-                        painter = painterResource(R.drawable.call_icon_search),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        contentScale = ContentScale.Fit,
-                    )
                 }
+                searchTrailing?.invoke(this)
             }
         }
     }
