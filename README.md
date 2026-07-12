@@ -1,5 +1,7 @@
 # FIANO Android
 
+Deployment URL: https://dsoh4vn0si08a.cloudfront.net/
+
 소상공인을 위한 AI 통화 요약 서비스 FIANO의 Android 앱입니다. 통화 녹음 파일을 감지해 업로드하고, 서버에서 처리된 STT·AI 요약·고객 히스토리·일정 정보를 앱에서 확인합니다.
 
 ## 주요 기능
