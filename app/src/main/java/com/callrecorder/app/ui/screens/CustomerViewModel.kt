@@ -10,6 +10,7 @@ import com.callrecorder.app.data.model.CustomerHistoryItem
 import com.callrecorder.app.data.model.CustomerListItem
 import com.callrecorder.app.data.model.CustomerProfile
 import com.callrecorder.app.data.model.UpdateCustomerRequest
+import com.callrecorder.app.data.model.extractedInfoOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import kotlinx.serialization.json.JsonObject as KxJsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
 /** 고객 등급 (통화 횟수 기준 자동) */
 enum class CustomerGrade(val label: String) {
@@ -190,21 +192,28 @@ class CustomerViewModel : ViewModel() {
                     .thenByDescending { it.lastCallAt ?: "" }
             )
 
+    private data class CallCustomerIdentity(
+        val key: String,
+        val displayPhone: String,
+        val displayName: String?,
+    )
+
     private fun List<Call>.toCustomerUiItemsFromCalls(): List<CustomerUiItem> =
-        filter { !it.summary.isNullOrBlank() || it.status.equals("completed", ignoreCase = true) || it.status.equals("summarized", ignoreCase = true) }
+        filter { it.hasCustomerListAnalysis() }
             .mapNotNull { call ->
-                val phone = call.callerNumber?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val key = phone.filter { it.isDigit() }
-                if (key.isBlank()) return@mapNotNull null
-                key to call
+                call.customerIdentityOrNull()?.let { identity -> identity to call }
             }
-            .groupBy({ it.first }, { it.second })
-            .map { (phoneKey, calls) ->
-                val sortedCalls = calls.distinctCustomerCalls()
+            .groupBy({ it.first.key }, { it })
+            .map { (_, items) ->
+                val sortedCalls = items.map { it.second }.distinctCustomerCalls()
                 val latest = sortedCalls.first()
+                val latestIdentity = items.firstOrNull { it.second.id == latest.id }?.first
+                    ?: latest.customerIdentityOrNull()
                 CustomerUiItem(
-                    phone = latest.callerNumber?.takeIf { it.isNotBlank() } ?: phoneKey,
-                    name = latest.callerName?.takeIf { it.isNotBlank() },
+                    phone = latestIdentity?.displayPhone
+                        ?: latest.callerNumber?.takeIf { it.isNotBlank() }
+                        ?: latest.id,
+                    name = latestIdentity?.displayName,
                     callCount = sortedCalls.size,
                     lastCallAt = latest.createdAt,
                     lastSummary = latest.summary,
@@ -275,7 +284,45 @@ class CustomerViewModel : ViewModel() {
     }
 
     private fun CustomerUiItem.normalizedPhoneKey(): String =
-        phone.filter { it.isDigit() }
+        phone.filter { it.isDigit() }.ifBlank { phone.trim().lowercase(Locale.KOREAN) }
+
+    private fun Call.hasCustomerListAnalysis(): Boolean {
+        val statusKey = status.lowercase(Locale.US)
+        return !summary.isNullOrBlank() ||
+            extractedInfoRaw != null ||
+            statusKey == "completed" ||
+            statusKey == "summarized" ||
+            statusKey == "analyzed" ||
+            statusKey == "done"
+    }
+
+    private fun Call.customerIdentityOrNull(): CallCustomerIdentity? {
+        val extracted = extractedInfoOrNull()
+        val phone = callerNumber?.takeIf { it.isNotBlank() }
+            ?: extracted?.phone?.takeIf { it.isNotBlank() }
+        val phoneKey = phone?.filter { it.isDigit() }.orEmpty()
+        val name = callerName?.takeIf { it.isNotBlank() }
+            ?: extracted?.customerName?.takeIf { it.isNotBlank() }
+
+        if (phoneKey.isNotBlank()) {
+            return CallCustomerIdentity(
+                key = "phone:$phoneKey",
+                displayPhone = phone.orEmpty(),
+                displayName = name,
+            )
+        }
+
+        if (!name.isNullOrBlank()) {
+            val normalizedName = name.trim().lowercase(Locale.KOREAN).replace(Regex("\\s+"), "")
+            return CallCustomerIdentity(
+                key = "name:$normalizedName",
+                displayPhone = name,
+                displayName = name,
+            )
+        }
+
+        return null
+    }
 
     private fun List<Call>.distinctCustomerCalls(): List<Call> =
         distinctBy { it.id }

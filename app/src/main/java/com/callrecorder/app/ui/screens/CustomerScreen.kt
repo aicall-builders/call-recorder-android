@@ -166,6 +166,10 @@ fun CustomerScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        vm.refresh()
+    }
+
     LaunchedEffect(openCustomerPhone, openCustomerRequestKey, state.customers) {
         val targetKey = openCustomerPhone?.customerPhoneKey().orEmpty()
         if (targetKey.isBlank()) return@LaunchedEffect
