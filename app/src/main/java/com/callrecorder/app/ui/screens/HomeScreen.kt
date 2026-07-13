@@ -92,6 +92,7 @@ private object HomeFigmaTokens {
     val SignalRed600 = AppColors.SignalRed600                 // primitive/signal-red-600
     val SignalRed500 = AppColors.SignalRed500                 // primitive/signal-red-500
     val SignalRed300 = AppColors.SignalRed300                 // primitive/signal-red-300
+    val SignalRed100 = AppColors.SignalRed100                 // primitive/signal-red-100
     val Space0 = 0.dp                                         // primitive/space-0
     val Space2 = 2.dp                                         // primitive/space-2
     val Space4 = 4.dp                                         // primitive/space-4
@@ -119,7 +120,7 @@ private val TimeBlue    = HomeFigmaTokens.FianoBlack700
 private val SchedTimeHi = HomeFigmaTokens.SignalRed600
 private val SchedTimeSm = HomeFigmaTokens.SignalRed300
 private val SchedMeta   = HomeFigmaTokens.FianoBlack700
-private val Connector   = HomeFigmaTokens.SignalRed300
+private val Connector   = HomeFigmaTokens.SignalRed100
 private val AvatarBg    = HomeFigmaTokens.FianoBlack50
 private val AvatarText  = HomeFigmaTokens.FianoBlack700
 private val AccentBlue  = HomeFigmaTokens.SignalRed500
@@ -1126,23 +1127,32 @@ private fun PinnedCustomerGridItem(
         ) {
             Text(
                 name.take(1),
-                style = TextStyle(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = Navy),
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = Navy),
             )
         }
         Text(
             name,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, color = Navy),
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = Navy),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            customer.latestSummary?.takeIf { it.isNotBlank() } ?: "납품 일정 확인",
-            style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = Navy),
+            customer.homePinnedSummary(),
+            style = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, color = Navy),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }
 }
+
+private fun CustomerListItem.homePinnedSummary(): String =
+    listOfNotNull(
+        latestSummary?.takeIf { it.isNotBlank() },
+        specialNotes?.takeIf { it.isNotBlank() },
+        tendency?.takeIf { it.isNotBlank() },
+        latestCategory?.takeIf { it.isNotBlank() }?.let { "최근 $it 상담" },
+        callCount.takeIf { it > 0 }?.let { "누적 통화 ${it}건" },
+    ).firstOrNull() ?: "아직 정리된 고객 히스토리가 없어요"
 
 
 @Composable
@@ -1175,8 +1185,8 @@ private fun ScheduleTimelineItem(
                     Box(
                         Modifier
                             .size(8.dp)
-                            .border(1.dp, Connector, CircleShape)
-                            .clip(CircleShape),
+                            .clip(CircleShape)
+                            .background(HomeFigmaTokens.SignalRed300),
                     )
                 }
             }
@@ -1188,7 +1198,7 @@ private fun ScheduleTimelineItem(
                 .padding(
                     start = 0.dp,
                     top = if (isFirst) 2.dp else 0.dp,
-                    bottom = if (isFirst) 24.dp else 16.dp,
+                    bottom = if (isFirst) 8.dp else 4.dp,
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1196,10 +1206,12 @@ private fun ScheduleTimelineItem(
                 listOfNotNull(scheduleDateLabel(event), event.time.takeIf { it.isNotBlank() }).joinToString("  "),
                 style = TextStyle(
                     fontSize = timeFontSize,
-                    lineHeight = timeFontSize,
+                    lineHeight = if (isFirst) 20.sp else 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isFirst) SchedTimeHi else SchedTimeSm,
                 ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -1210,15 +1222,19 @@ private fun ScheduleTimelineItem(
                         color = Navy,
                         lineHeight = if (isFirst) 18.sp else 16.sp,
                     ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     event.description.takeIf { it.isNotBlank() } ?: "통화 자동 등록",
                     style = TextStyle(
                         fontSize = detailFontSize,
-                        lineHeight = if (isFirst) 16.sp else 12.sp,
+                        lineHeight = if (isFirst) 16.sp else 14.sp,
                         fontWeight = FontWeight.Normal,
                         color = SchedMeta,
                     ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

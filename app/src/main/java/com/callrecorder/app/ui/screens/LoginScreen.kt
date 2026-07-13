@@ -187,7 +187,7 @@ private fun LoginContent(
 
                 Text(
                     text = "로그인 시 이용약관 및 개인정보 처리방침에\n동의하는 것으로 간주됩니다.",
-                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF474B6B), lineHeight = 16.sp),
+                    style = TextStyle(fontSize = 14.sp, color = Color(0xFF474B6B), lineHeight = 20.sp),
                     textAlign = TextAlign.Center,
                 )
             }

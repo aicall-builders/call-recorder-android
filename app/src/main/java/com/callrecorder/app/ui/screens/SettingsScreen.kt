@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -186,12 +187,16 @@ fun SettingsScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         heroName,
-                        style = TextStyle(fontSize = 18.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                        style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "$heroProvider · $heroEmail",
-                        style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, color = FianoSettingsSubText),
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = FianoSettingsSubText),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -478,7 +483,7 @@ private fun ExternalCalendarSheetButton(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
         color = if (filled) FianoSettingsBg else Color.White,
         shape = RoundedCornerShape(999.dp),
         border = if (filled) null else BorderStroke(1.dp, FianoSettingsBg),
@@ -742,14 +747,14 @@ fun CallFilterScreen(
                         Spacer(Modifier.height(24.dp))
                         OutlinedButton(
                             onClick = {},
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                             shape = RoundedCornerShape(999.dp),
                             border = BorderStroke(1.dp, AppColors.DeepBrown900),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.DeepBrown900),
                         ) {
                             Text(
                                 "키워드 저장",
-                                style = TextStyle(fontSize = 16.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+                                style = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
                             )
                         }
                         Spacer(Modifier.height(80.dp))
@@ -1187,6 +1192,7 @@ private fun FianoSettingsSubHeader(
                     color = Color.White,
                 ),
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (showAlarm) {

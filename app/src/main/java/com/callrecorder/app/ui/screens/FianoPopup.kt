@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,18 +35,21 @@ fun FianoPopupActionButton(
     val isFill = type == FianoPopupActionType.FILL
     Surface(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
+        modifier = modifier.heightIn(min = 40.dp),
         shape = RoundedCornerShape(999.dp),
         color = if (isFill) AppColors.DeepBrown900 else androidx.compose.ui.graphics.Color.White,
         border = if (isFill) null else BorderStroke(1.dp, AppColors.DeepBrown950),
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
                 label,
                 textAlign = TextAlign.Center,
                 style = TextStyle(
                     fontSize = 14.sp,
-                    lineHeight = 16.sp,
+                    lineHeight = 18.sp,
                     fontWeight = if (isFill) FontWeight.Bold else FontWeight.Medium,
                     color = if (isFill) androidx.compose.ui.graphics.Color.White else AppColors.DeepBrown900,
                 ),

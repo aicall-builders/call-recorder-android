@@ -364,7 +364,7 @@ private fun BottomSheetActionButton(
         color = if (isFill) AppColors.DeepBrown900 else Color.White,
         shape = RoundedCornerShape(999.dp),
         border = if (isFill) null else BorderStroke(1.dp, AppColors.DeepBrown900),
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 10.dp),
@@ -402,7 +402,7 @@ private fun AddPhotoButton(
         color = Color.White,
         shape = RoundedCornerShape(999.dp),
         border = BorderStroke(1.dp, AppColors.DeepBrown950),
-        modifier = modifier.height(40.dp),
+        modifier = modifier.heightIn(min = 40.dp),
     ) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),

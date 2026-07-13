@@ -615,7 +615,7 @@ private fun AnalysisTabContent(
                 if (editingSummary) {
                     Box(
                         modifier = Modifier
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                             .padding(end = 8.dp)
                             .clickable(enabled = !summarySaving) {
                                 onSummaryEditStateReset()
@@ -945,7 +945,7 @@ private fun SummaryEditButton(
         color = if (filled) Ink else Color.Transparent,
         shape = RoundedCornerShape(999.dp),
         border = if (filled) null else BorderStroke(1.dp, Ink),
-        modifier = modifier.height(44.dp),
+        modifier = modifier.heightIn(min = 44.dp),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(

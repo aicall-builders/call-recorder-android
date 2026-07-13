@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.callrecorder.app.R
@@ -48,7 +49,7 @@ fun OnboardingPrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
@@ -60,7 +61,8 @@ fun OnboardingPrimaryButton(
     ) {
         Text(
             text = text,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, lineHeight = 16.sp),
+            textAlign = TextAlign.Center,
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White, lineHeight = 20.sp),
         )
     }
 }
@@ -76,7 +78,7 @@ fun OnboardingOutlineButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .height(48.dp)
+            .heightIn(min = 48.dp)
             .border(1.dp, borderColor, RoundedCornerShape(999.dp)),
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = contentColor),
@@ -84,7 +86,8 @@ fun OnboardingOutlineButton(
     ) {
         Text(
             text = text,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = contentColor, lineHeight = 16.sp),
+            textAlign = TextAlign.Center,
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = contentColor, lineHeight = 20.sp),
         )
     }
 }

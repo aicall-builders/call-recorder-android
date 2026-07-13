@@ -313,6 +313,7 @@ private fun PermissionCard(
                     text = title,
                     style = TextStyle(
                         fontSize = 13.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1A1A21),
                     ),

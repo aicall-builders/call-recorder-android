@@ -46,6 +46,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -255,16 +256,16 @@ fun CustomerScreen(
                         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Column(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 12.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp)) {
                             Row(
                                 Modifier.padding(horizontal = 16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                GradeFilterChip("전체$totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
-                                GradeFilterChip("VIP$vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
-                                GradeFilterChip("단골$regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
-                                GradeFilterChip("일반$normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
-                                GradeFilterChip("신규$newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
+                                GradeFilterChip("전체 $totalCount", filter == CustFilter.ALL) { filter = CustFilter.ALL }
+                                GradeFilterChip("VIP $vipCount", filter == CustFilter.VIP) { filter = CustFilter.VIP }
+                                GradeFilterChip("단골 $regCount", filter == CustFilter.REGULAR) { filter = CustFilter.REGULAR }
+                                GradeFilterChip("일반 $normalCount", filter == CustFilter.NORMAL) { filter = CustFilter.NORMAL }
+                                GradeFilterChip("신규 $newCount", filter == CustFilter.NEW) { filter = CustFilter.NEW }
                             }
                         }
                     }
@@ -354,9 +355,15 @@ private fun GradeFilterChip(label: String, selected: Boolean, onClick: () -> Uni
         shape = RoundedCornerShape(999.dp),
         border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Ink),
     ) {
-        Text(label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = TextStyle(fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) Color.White else Ink))
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) Color.White else Ink,
+            ),
+        )
     }
 }
 
@@ -499,12 +506,14 @@ private fun ContactMultiSelectBottomSheet(
                                 contact.name.ifBlank { contact.phone },
                                 style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink),
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
                                 contact.phone,
                                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = PhoneGray),
                                 maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -784,8 +793,9 @@ fun CustomerDetailScreen(
                                 Text(
                                     displayName,
                                     modifier = Modifier.weight(1f, fill = false),
-                                    style = TextStyle(fontSize = 20.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                                    style = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, color = Color.White),
                                     maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Surface(color = Color.White, shape = RoundedCornerShape(999.dp)) {
                                     Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -803,8 +813,9 @@ fun CustomerDetailScreen(
                         }
                         Text(
                             customer.phone,
-                            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = AppColors.DeepBrown300),
                             maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -815,13 +826,15 @@ fun CustomerDetailScreen(
                         .padding(horizontal = 16.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
+                    Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
                     val text = remember(detail.profile, detail.manualHistory, detail.analysis, customer.lastSummary) {
                         customerComprehensiveAnalysis(detail, customer)
                     }
                     Text(
                         text,
-                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300),
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -2066,8 +2079,9 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                         Text(
                             displayName,
                             modifier = Modifier.weight(1f, fill = false),
-                            style = TextStyle(fontSize = 20.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                            style = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, color = Color.White),
                             maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Surface(color = Color.White, shape = RoundedCornerShape(999.dp)) {
                             Text(badgeLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = Ink))
@@ -2075,8 +2089,9 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                     }
                     Text(
                         customer.phone,
-                        style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = AppColors.DeepBrown300),
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -2087,10 +2102,12 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
+                Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
                 Text(
                     detail.analysis?.analysis ?: "김민준 고객님은 매물 확인과 일정 조율에 관심이 높습니다.",
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown300),
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

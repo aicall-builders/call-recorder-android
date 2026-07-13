@@ -235,7 +235,7 @@ private fun ApprovalActionButton(
         color = if (fill) AppColors.DeepBrown900 else Color.White,
         shape = RoundedCornerShape(999.dp),
         border = if (fill) null else BorderStroke(1.dp, strokeColor),
-        modifier = modifier.height(48.dp),
+        modifier = modifier.heightIn(min = 48.dp),
     ) {
         Box(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
             Text(
