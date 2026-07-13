@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -962,20 +963,8 @@ private fun AddEventDialog(
     var reminderEnabled by remember(initialKey) { mutableStateOf(initialEvent?.reminderEnabled ?: true) }
     var imageError by remember(initialKey) { mutableStateOf<String?>(null) }
     var cameraImageUri by remember(initialKey) { mutableStateOf<Uri?>(null) }
-    var showDatePicker by remember(initialKey) { mutableStateOf(false) }
-    val timePicker = remember(time) {
-        val (hour, minute) = time.toHourMinute()
-        TimePickerDialog(
-            context,
-            R.style.Theme_Fiano_DateTimePicker,
-            { _, selectedHour, selectedMinute ->
-                time = "%02d:%02d".format(selectedHour, selectedMinute)
-            },
-            hour,
-            minute,
-            true,
-        ).apply { setFianoDialogButtonColors() }
-    }
+    var dateExpanded by remember(initialKey) { mutableStateOf(false) }
+    var timeExpanded by remember(initialKey) { mutableStateOf(false) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
     ) { uris ->
@@ -1055,14 +1044,39 @@ private fun AddEventDialog(
                     ScheduleSelectField(
                         label = "날짜",
                         value = "%04d년 %d월 %d일".format(selectedYear, selectedMonth, selectedDay),
-                        onClick = { showDatePicker = true },
+                        onClick = {
+                            dateExpanded = !dateExpanded
+                            if (dateExpanded) timeExpanded = false
+                        },
                         modifier = Modifier.weight(1f),
                     )
                     ScheduleSelectField(
                         label = "시간",
                         value = time,
-                        onClick = { timePicker.show() },
+                        onClick = {
+                            timeExpanded = !timeExpanded
+                            if (timeExpanded) dateExpanded = false
+                        },
                         modifier = Modifier.weight(1f),
+                    )
+                }
+                if (dateExpanded) {
+                    ScheduleDateAccordion(
+                        selectedYear = selectedYear,
+                        selectedMonth = selectedMonth,
+                        selectedDay = selectedDay,
+                        onSelect = { year, month, day ->
+                            selectedYear = year
+                            selectedMonth = month
+                            selectedDay = day
+                            dateExpanded = false
+                        },
+                    )
+                }
+                if (timeExpanded) {
+                    ScheduleTimeAccordion(
+                        time = time,
+                        onTimeChange = { time = it },
                     )
                 }
                 OutlinedTextField(
@@ -1213,20 +1227,6 @@ private fun AddEventDialog(
         shape = RoundedCornerShape(24.dp),
     )
 
-    if (showDatePicker) {
-        FianoDatePickerDialog(
-            initialYear = selectedYear,
-            initialMonth = selectedMonth,
-            initialDay = selectedDay,
-            onDismiss = { showDatePicker = false },
-            onConfirm = { year, month, day ->
-                selectedYear = year
-                selectedMonth = month
-                selectedDay = day
-                showDatePicker = false
-            },
-        )
-    }
 }
 
 private fun copyScheduleImageToAppStorage(context: Context, sourceUri: Uri): Result<Uri> = runCatching {
@@ -1463,6 +1463,167 @@ private fun ScheduleSelectField(
                 style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, color = OnLightPrimary),
             )
         }
+    }
+}
+
+@Composable
+private fun ScheduleDateAccordion(
+    selectedYear: Int,
+    selectedMonth: Int,
+    selectedDay: Int,
+    onSelect: (year: Int, month: Int, day: Int) -> Unit,
+) {
+    var visibleYear by remember(selectedYear, selectedMonth) { mutableStateOf(selectedYear) }
+    var visibleMonth by remember(selectedYear, selectedMonth) { mutableStateOf(selectedMonth) }
+    val today = remember { Calendar.getInstance() }
+    val weekdays = remember { listOf("일", "월", "화", "수", "목", "금", "토") }
+
+    fun moveMonth(delta: Int) {
+        val next = Calendar.getInstance().apply {
+            set(Calendar.YEAR, visibleYear)
+            set(Calendar.MONTH, visibleMonth - 1)
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.MONTH, delta)
+        }
+        visibleYear = next.get(Calendar.YEAR)
+        visibleMonth = next.get(Calendar.MONTH) + 1
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.DeepBrown50)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            IconButton(onClick = { moveMonth(-1) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "이전 달", tint = AppColors.DeepBrown900)
+            }
+            Text(
+                "%04d년 %d월".format(visibleYear, visibleMonth),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown950),
+            )
+            IconButton(onClick = { moveMonth(1) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = "다음 달", tint = AppColors.DeepBrown900)
+            }
+        }
+
+        Row(Modifier.fillMaxWidth()) {
+            weekdays.forEachIndexed { index, label ->
+                val color = when (index) {
+                    0 -> AppColors.SignalRed600
+                    6 -> AppColors.DeepBrown600
+                    else -> AppColors.DeepBrown500
+                }
+                Text(
+                    label,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = color),
+                )
+            }
+        }
+
+        val days = daysInMonth(visibleYear, visibleMonth)
+        val firstOffset = firstDayOfWeek(visibleYear, visibleMonth)
+        val cells = remember(visibleYear, visibleMonth) {
+            List(firstOffset) { 0 } + (1..days).toList()
+        }
+        cells.chunked(7).forEach { week ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                (week + List(7 - week.size) { 0 }).forEach { day ->
+                    if (day == 0) {
+                        Spacer(Modifier.weight(1f).height(36.dp))
+                    } else {
+                        FianoDateCell(
+                            day = day,
+                            selected = visibleYear == selectedYear && visibleMonth == selectedMonth && day == selectedDay,
+                            today = visibleYear == today.get(Calendar.YEAR) &&
+                                visibleMonth == today.get(Calendar.MONTH) + 1 &&
+                                day == today.get(Calendar.DAY_OF_MONTH),
+                            onClick = { onSelect(visibleYear, visibleMonth, day) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleTimeAccordion(
+    time: String,
+    onTimeChange: (String) -> Unit,
+) {
+    val (selectedHour, selectedMinute) = time.toHourMinute()
+    val minuteOptions = remember { listOf(0, 10, 20, 30, 40, 50) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.DeepBrown50)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "시간 선택",
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items((0..23).toList()) { hour ->
+                ScheduleTimeChip(
+                    label = "%02d시".format(hour),
+                    selected = selectedHour == hour,
+                    onClick = { onTimeChange("%02d:%02d".format(hour, selectedMinute)) },
+                )
+            }
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(minuteOptions) { minute ->
+                ScheduleTimeChip(
+                    label = "%02d분".format(minute),
+                    selected = selectedMinute == minute,
+                    onClick = { onTimeChange("%02d:%02d".format(selectedHour, minute)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleTimeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) AppColors.DeepBrown900 else Color.White,
+        border = if (selected) null else BorderStroke(1.dp, AppColors.DeepBrown200),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = TextStyle(
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = if (selected) Color.White else AppColors.DeepBrown900,
+            ),
+        )
     }
 }
 

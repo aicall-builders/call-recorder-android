@@ -123,6 +123,9 @@ class ScanAndUploadWorker(
                                 rec,
                                 resolvedNumber = info?.number,
                                 resolvedName = info?.name,
+                                resolvedStartedAtMillis = info?.startedAtMillis,
+                                resolvedDurationSeconds = info?.durationSeconds,
+                                resolvedDirection = info?.direction,
                             )
                             if (r.isSuccess) {
                                 successCount.incrementAndGet()

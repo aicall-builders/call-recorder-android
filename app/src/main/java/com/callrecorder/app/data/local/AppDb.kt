@@ -216,6 +216,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings WHERE status = 'AWAITING_APPROVAL' ORDER BY createdAt DESC")
     suspend fun getAwaitingApproval(): List<RecordingEntity>
 
+    @Query("DELETE FROM recordings WHERE status = 'AWAITING_APPROVAL'")
+    suspend fun deleteAwaitingApproval()
+
     @Query("""
         SELECT COUNT(*) FROM recordings
         WHERE fileName = :fileName

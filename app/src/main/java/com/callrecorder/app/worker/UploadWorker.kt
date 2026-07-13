@@ -52,6 +52,9 @@ class UploadWorker(
                         rec,
                         resolvedNumber = info?.number,
                         resolvedName = info?.name,
+                        resolvedStartedAtMillis = info?.startedAtMillis,
+                        resolvedDurationSeconds = info?.durationSeconds,
+                        resolvedDirection = info?.direction,
                     )
                     val finished = done.incrementAndGet()
                     runCatching { setForeground(buildForegroundInfo("업로드 중 ($finished/$total)")) }

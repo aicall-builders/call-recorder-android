@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.provider.CallLog
 import androidx.core.content.ContextCompat
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 기기 통화기록(CallLog)에서 녹음(통화) 시각에 해당하는
@@ -19,13 +21,19 @@ import kotlin.math.abs
  */
 object CallLogHelper {
 
-    data class CallerInfo(val number: String?, val name: String?)
+    data class CallerInfo(
+        val number: String?,
+        val name: String?,
+        val startedAtMillis: Long,
+        val durationSeconds: Int,
+        val direction: String?,
+    )
 
     /**
      * @param startedAtMillis 녹음(통화) 시작 추정 시각 (epoch ms)
-     * @param durationSeconds 녹음 길이(초). 보조 정보, 매칭엔 미사용
+     * @param durationSeconds 녹음 길이(초). 시작/종료 시각과 함께 매칭 점수에 사용
      * @param toleranceMillis 시각 허용 오차 (기본 5분)
-     * @return 가장 가까운 통화기록의 (번호, 이름). 없으면 null
+     * @return 가장 가까운 통화기록의 번호/이름/정확한 시작시각/방향. 없으면 null
      */
     fun lookup(
         context: Context,
@@ -45,9 +53,16 @@ object CallLogHelper {
                 CallLog.Calls.NUMBER,
                 CallLog.Calls.CACHED_NAME,
                 CallLog.Calls.DATE,
+                CallLog.Calls.DURATION,
+                CallLog.Calls.TYPE,
             )
-            val from = startedAtMillis - toleranceMillis
-            val to = startedAtMillis + toleranceMillis
+            val estimatedEndAtMillis = if (durationSeconds > 0) {
+                startedAtMillis + durationSeconds * 1000L
+            } else {
+                startedAtMillis
+            }
+            val from = min(startedAtMillis, estimatedEndAtMillis) - toleranceMillis
+            val to = max(startedAtMillis, estimatedEndAtMillis) + toleranceMillis
             val selection = "${CallLog.Calls.DATE} BETWEEN ? AND ?"
             val args = arrayOf(from.toString(), to.toString())
 
@@ -61,19 +76,34 @@ object CallLogHelper {
                 val numIdx = c.getColumnIndex(CallLog.Calls.NUMBER)
                 val nameIdx = c.getColumnIndex(CallLog.Calls.CACHED_NAME)
                 val dateIdx = c.getColumnIndex(CallLog.Calls.DATE)
+                val durationIdx = c.getColumnIndex(CallLog.Calls.DURATION)
+                val typeIdx = c.getColumnIndex(CallLog.Calls.TYPE)
 
                 var best: CallerInfo? = null
-                var bestDiff = Long.MAX_VALUE
+                var bestScore = Long.MAX_VALUE
                 while (c.moveToNext()) {
                     val date = if (dateIdx >= 0) c.getLong(dateIdx) else continue
-                    val diff = abs(date - startedAtMillis)
-                    if (diff < bestDiff) {
-                        bestDiff = diff
+                    val callDurationSeconds = if (durationIdx >= 0) c.getInt(durationIdx) else 0
+                    val callEndAtMillis = date + callDurationSeconds * 1000L
+                    val durationDiff = if (durationSeconds > 0 && callDurationSeconds > 0) {
+                        abs(callDurationSeconds - durationSeconds) * 1000L
+                    } else {
+                        0L
+                    }
+                    val startDiff = abs(date - startedAtMillis)
+                    val endDiff = abs(callEndAtMillis - estimatedEndAtMillis)
+                    val score = min(startDiff, endDiff) + durationDiff / 2L
+                    if (score < bestScore) {
+                        bestScore = score
                         val number = if (numIdx >= 0) c.getString(numIdx) else null
                         val name = if (nameIdx >= 0) c.getString(nameIdx) else null
+                        val type = if (typeIdx >= 0) c.getInt(typeIdx) else 0
                         best = CallerInfo(
                             number = number?.takeIf { it.isNotBlank() },
                             name = name?.takeIf { it.isNotBlank() },
+                            startedAtMillis = date,
+                            durationSeconds = callDurationSeconds.takeIf { it > 0 } ?: durationSeconds,
+                            direction = directionOf(type),
                         )
                     }
                 }
@@ -83,5 +113,11 @@ object CallLogHelper {
             SafeLog.w("CallLogHelper", "통화기록 조회 실패", e)
             null
         }
+    }
+
+    private fun directionOf(type: Int): String? = when (type) {
+        CallLog.Calls.INCOMING_TYPE -> "incoming"
+        CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+        else -> null
     }
 }

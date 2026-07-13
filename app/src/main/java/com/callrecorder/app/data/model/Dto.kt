@@ -121,6 +121,7 @@ data class Call(
 data class UpdateCallRequest(
     @SerialName("caller_number") val callerNumber: String? = null,
     @SerialName("caller_name") val callerName: String? = null,
+    @SerialName("direction") val direction: String? = null,
     val summary: String? = null,
     @SerialName("internal_keywords") val internalKeywords: JsonElement? = null,
 )

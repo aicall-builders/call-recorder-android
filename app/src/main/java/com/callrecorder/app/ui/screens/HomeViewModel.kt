@@ -36,6 +36,10 @@ data class UploadItem(
     val status: String,
     val errorMessage: String? = null,
     val canRetry: Boolean = false,
+    val fileSize: Long = 0L,
+    val durationSeconds: Int = 0,
+    val createdAtMillis: Long = 0L,
+    val isManualUpload: Boolean = false,
 )
 
 data class HomeUiState(
@@ -109,6 +113,10 @@ class HomeViewModel : ViewModel() {
                         status = it.status,
                         errorMessage = it.errorMessage,
                         canRetry = it.status == RecordingStatus.FAILED,
+                        fileSize = it.fileSize,
+                        durationSeconds = it.durationSeconds,
+                        createdAtMillis = it.callStartedAtMillis,
+                        isManualUpload = it.counterpartNumber.isNullOrBlank() && it.category == "UNCLASSIFIED",
                     )
                 }
                 val runningCount = list.count {
@@ -315,7 +323,7 @@ class HomeViewModel : ViewModel() {
                     pinnedCustomers = mergeManualPinnedCustomers(serverCustomers)
                         .filter { it.isPinned }
                         .sortedWith(compareByDescending<CustomerListItem> { it.callCount }.thenByDescending { it.lastCallAt ?: "" })
-                        .take(3),
+                        .take(20),
                 )
             }
 

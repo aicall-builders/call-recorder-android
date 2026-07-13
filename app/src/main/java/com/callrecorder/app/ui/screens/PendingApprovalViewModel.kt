@@ -55,6 +55,13 @@ class PendingApprovalViewModel : ViewModel() {
         }
     }
 
+    fun rejectAll() {
+        viewModelScope.launch {
+            recordingDao.deleteAwaitingApproval()
+            load()
+        }
+    }
+
     fun approveAll() {
         viewModelScope.launch {
             recordingDao.approveAll()

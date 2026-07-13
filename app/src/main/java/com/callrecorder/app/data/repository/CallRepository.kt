@@ -120,6 +120,9 @@ class CallRepository(
         rec: RecordingEntity,
         resolvedNumber: String? = null,
         resolvedName: String? = null,
+        resolvedStartedAtMillis: Long? = null,
+        resolvedDurationSeconds: Int? = null,
+        resolvedDirection: String? = null,
     ): Result<String> = runCatching {
         val file = File(rec.filePath)
         require(file.exists()) { "파일이 사라졌습니다: ${rec.filePath}" }
@@ -144,6 +147,9 @@ class CallRepository(
         val callerName = resolvedName?.takeIf { it.isNotBlank() }
             ?: rec.counterpartNumber?.takeIf { it.isNotBlank() && normalizedPhoneOrNull(it) == null }
             ?: ""
+        val callStartedAtMillis = resolvedStartedAtMillis?.takeIf { it > 0L } ?: rec.callStartedAtMillis
+        val durationSeconds = resolvedDurationSeconds?.takeIf { it > 0 } ?: rec.durationSeconds
+        val direction = resolvedDirection?.takeIf { it.isNotBlank() }
 
         val urlResp = api.requestUploadUrl(
             UploadUrlRequest(
@@ -151,8 +157,8 @@ class CallRepository(
                 fileName = safeFileName,                          // ← sanitize된 이름 전송
                 fileSize = rec.fileSize,
                 mimeType = mime,
-                callStartedAt = isoFormat(rec.callStartedAtMillis),
-                durationSeconds = rec.durationSeconds,
+                callStartedAt = isoFormat(callStartedAtMillis),
+                durationSeconds = durationSeconds,
                 counterpartNumber = phoneNumber,                  // ← 번호 형식만
                 callerCategory = rec.category,
             )
@@ -171,13 +177,14 @@ class CallRepository(
         dao.setServerCallId(rec.id, urlResp.callId, RecordingStatus.UPLOADED)
 
         // 2.5) 통화기록 기반 발신자 번호/이름 보강 → 서버 저장 (폰·웹 양쪽 반영)
-        if (phoneNumber.isNotBlank() || callerName.isNotBlank()) {
+        if (phoneNumber.isNotBlank() || callerName.isNotBlank() || direction != null) {
             runCatching {
                 api.updateCall(
                     urlResp.callId,
                     UpdateCallRequest(
                         callerNumber = phoneNumber,
                         callerName = callerName,
+                        direction = direction,
                     ),
                 )
             }.onFailure { SafeLog.w("CallRepo", "발신자 정보 보강 실패", it) }

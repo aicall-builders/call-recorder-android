@@ -76,10 +76,11 @@ fun Context.resetFeatureTour() {
 // 2) 투어 대상 키 (홈 화면 기준 - 필요하면 추가/수정)
 // ─────────────────────────────────────────────────────────────
 object TourKeys {
+    const val REFRESH_RECORDINGS = "refresh_recordings"
+    const val ANALYSIS_STATUS = "analysis_status"
     const val UPLOAD = "upload"
-    const val IMPORTANT_FILTER = "important_filter"
-    const val RECENT_CALLS = "recent_calls"
-    const val BOTTOM_NAV = "bottom_nav"
+    const val AUTO_SETTINGS = "auto_settings"
+    const val CALLS_NAV = "calls_nav"
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -93,24 +94,29 @@ data class TourStep(
 
 val HomeTourSteps: List<TourStep> = listOf(
     TourStep(
+        targetKey = TourKeys.AUTO_SETTINGS,
+        title = "자동 분석 설정",
+        description = "자동 요약과 자동 필터링을 켜거나 끄며 분석 방식을 조정할 수 있어요.",
+    ),
+    TourStep(
+        targetKey = TourKeys.REFRESH_RECORDINGS,
+        title = "녹음 파일 새로 감지",
+        description = "새로 생긴 통화 녹음이 있다면 이 버튼으로 다시 감지할 수 있어요.",
+    ),
+    TourStep(
         targetKey = TourKeys.UPLOAD,
-        title = "통화 파일 올리기",
-        description = "여기로 통화 녹음을 올리면 자동으로 텍스트 변환·요약·예약정보 추출까지 한 번에 끝나요.",
+        title = "통화 파일 직접 올리기",
+        description = "녹음 파일을 직접 선택해서 분석 대기 목록에 추가할 수 있어요.",
     ),
     TourStep(
-        targetKey = TourKeys.IMPORTANT_FILTER,
-        title = "중요 통화만 골라보기",
-        description = "이 토글을 켜면 예약·문의처럼 중요한 통화만 추려서 보여줘요.",
+        targetKey = TourKeys.ANALYSIS_STATUS,
+        title = "분석 승인과 진행 상태",
+        description = "분석 상태 버튼을 누르거나 카드를 내리면 분석 중인 파일 리스트를 확인할 수 있어요.",
     ),
     TourStep(
-        targetKey = TourKeys.RECENT_CALLS,
-        title = "분석된 통화 확인",
-        description = "최근 분석된 통화가 여기 카드로 떠요. 탭하면 전체 내용·요약·메모를 볼 수 있어요.",
-    ),
-    TourStep(
-        targetKey = TourKeys.BOTTOM_NAV,
-        title = "메뉴 이동",
-        description = "통화목록·캘린더·고객 관리는 아래 메뉴에서 바로 이동할 수 있어요.",
+        targetKey = TourKeys.CALLS_NAV,
+        title = "통화관리",
+        description = "분석이 완료된 파일은 통화관리에서 확인할 수 있습니다.",
     ),
 )
 
@@ -171,9 +177,9 @@ fun FeatureTourOverlay(
         Modifier
             .fillMaxSize()
             .zIndex(100f)
-            // 스포트라이트 밖 영역을 탭하면 다음 단계로
+            // 바깥 영역 터치는 앱 화면으로 새어나가지 않게 소비만 한다.
             .pointerInput(controller.currentIndex) {
-                detectTapGestures { controller.next(onFinish) }
+                detectTapGestures { }
             }
     ) {
         val density = LocalDensity.current
@@ -268,9 +274,10 @@ private fun TourTooltipCard(
                 Spacer(Modifier.size(8.dp))
                 Text(
                     text = step.description,
-                    fontSize = 14.sp,
-                    color = AppColors.TextSecondary,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = AppColors.FianoBlack900,
+                        fontWeight = FontWeight.Normal,
+                    ),
                 )
                 Spacer(Modifier.size(16.dp))
                 Row(

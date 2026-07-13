@@ -77,6 +77,7 @@ private enum class AnalysisTab { PENDING, DONE }
 @Composable
 fun CallSummaryListScreen(
     onCallClick: (String) -> Unit,
+    onCalendarNoticeClick: (String?) -> Unit = {},
     onNotificationClick: () -> Unit = {},
     hasNotification: Boolean = false,
     startOnPendingTab: Boolean = false,
@@ -93,6 +94,7 @@ fun CallSummaryListScreen(
         approvalState = approvalState,
         registeredCustomers = customerState.customers,
         onCallClick = onCallClick,
+        onCalendarNoticeClick = onCalendarNoticeClick,
         onDeleteCall = { vm.deleteCall(it) },
         onDeleteUpload = { vm.deleteUpload(it) },
         onRetryUpload = { vm.retryUpload(it) },
@@ -125,6 +127,7 @@ private fun CallSummaryListContent(
     approvalState: PendingApprovalUiState,
     registeredCustomers: List<CustomerUiItem>,
     onCallClick: (String) -> Unit,
+    onCalendarNoticeClick: (String?) -> Unit,
     onDeleteCall: (String) -> Unit,
     onDeleteUpload: (Long) -> Unit,
     onRetryUpload: (Long) -> Unit,
@@ -141,20 +144,14 @@ private fun CallSummaryListContent(
     val context = LocalContext.current
     var searchText by remember { mutableStateOf(TextFieldValue("")) }
     var filter by remember { mutableStateOf(CallFilter.ALL) }
-    var tab by remember { mutableStateOf(initialTab) }
+    val tab = AnalysisTab.DONE
     var completionBaselineIds by remember { mutableStateOf<Set<String>?>(null) }
     var pendingDeleteCallId by remember { mutableStateOf<String?>(null) }
     var titleEditCall by remember { mutableStateOf<Call?>(null) }
     var titleDraft by remember { mutableStateOf(TextFieldValue("")) }
 
     LaunchedEffect(startOnPendingTab, pendingTabRequestKey) {
-        if (startOnPendingTab) {
-            tab = AnalysisTab.PENDING
-            filter = CallFilter.ALL
-        } else {
-            tab = AnalysisTab.DONE
-            filter = CallFilter.ALL
-        }
+        filter = CallFilter.ALL
     }
 
     val uniqueCalls = remember(state.recentCalls) { state.recentCalls.distinctBy { it.id } }
@@ -162,30 +159,13 @@ private fun CallSummaryListContent(
         uniqueCalls.filter { it.isAnalyzed() }.map { it.id }.toSet()
     }
 
-    LaunchedEffect(tab, state.uploadingCount, doneCallIds) {
-        if (tab != AnalysisTab.PENDING) {
-            completionBaselineIds = null
-            return@LaunchedEffect
-        }
-        if (state.uploadingCount > 0 && completionBaselineIds == null) {
-            completionBaselineIds = doneCallIds
-        }
-        val baseline = completionBaselineIds
-        if (state.uploadingCount == 0 && baseline != null && doneCallIds.any { it !in baseline }) {
-            tab = AnalysisTab.DONE
-            filter = CallFilter.ALL
-            completionBaselineIds = null
-        }
+    LaunchedEffect(state.uploadingCount, doneCallIds) {
+        completionBaselineIds = null
     }
 
     // ① 분석 대기 / 완료 분리
-    val tabCalls = remember(uniqueCalls, tab) {
-        uniqueCalls.filter { call ->
-            when (tab) {
-                AnalysisTab.DONE -> call.isAnalyzed()
-                AnalysisTab.PENDING -> !call.isAnalyzed()
-            }
-        }
+    val tabCalls = remember(uniqueCalls) {
+        uniqueCalls.filter { call -> call.isAnalyzed() }
     }
 
     // 필터 + 검색
@@ -236,7 +216,7 @@ private fun CallSummaryListContent(
         }
     }
     // 카운트 (현재 탭 기준)
-    val totalCount = tabCalls.size + if (tab == AnalysisTab.PENDING) awaitingApprovals.size + activeUploads.size else 0
+    val totalCount = tabCalls.size
     val resCount = tabCalls.count { it.category == CallCategoryLabel.RESERVATION }
     val inqCount = tabCalls.count { it.category == CallCategoryLabel.INQUIRY }
     val otherCount = tabCalls.count {
@@ -246,6 +226,11 @@ private fun CallSummaryListContent(
     // 날짜별 그룹
     val grouped = remember(filtered) {
         filtered.groupBy { dateGroupLabel(it.createdAt) }
+    }
+    val calendarEventByCallId = remember(state.schedules) {
+        state.schedules
+            .mapNotNull { event -> event.callId?.takeIf { it.isNotBlank() }?.let { it to event } }
+            .toMap()
     }
 
     LaunchedEffect(tab) {
@@ -382,28 +367,11 @@ private fun CallSummaryListContent(
                 hasNotification = hasNotification,
             )
 
-            // ═══ 분석 대기 / 완료 탭 (시트 상단, 라운드) ═══
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
-            ) {
-                AnalysisTabButton(
-                    text = "분석 대기",
-                    selected = tab == AnalysisTab.PENDING,
-                    modifier = Modifier.weight(1f),
-                ) { tab = AnalysisTab.PENDING; filter = CallFilter.ALL }
-                AnalysisTabButton(
-                    text = "분석 완료",
-                    selected = tab == AnalysisTab.DONE,
-                    modifier = Modifier.weight(1f),
-                ) { tab = AnalysisTab.DONE; filter = CallFilter.ALL }
-            }
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(SheetBg),
                 contentPadding = PaddingValues(0.dp),
             ) {
@@ -451,7 +419,7 @@ private fun CallSummaryListContent(
                             Surface(color = SheetBg, modifier = Modifier.fillMaxWidth()) {
                                 Text(
                                     "업로드 승인 대기",
-                                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 4.dp),
                                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GroupGray),
                                 )
                             }
@@ -543,7 +511,9 @@ private fun CallSummaryListContent(
                                         } else {
                                             CallListCard(
                                                 call = call,
+                                                linkedCalendarEvent = calendarEventByCallId[call.id],
                                                 onClick = { onCallClick(call.id) },
+                                                onCalendarNoticeClick = { date -> onCalendarNoticeClick(date) },
                                                 onEditTitle = {
                                                     titleEditCall = call
                                                     titleDraft = TextFieldValue(call.displayTitle())
@@ -639,6 +609,7 @@ private fun CallSummaryPendingWithApprovalsPreview() {
         ),
         registeredCustomers = emptyList(),
         onCallClick = {},
+        onCalendarNoticeClick = {},
         onDeleteCall = {},
         onDeleteUpload = {},
         onRetryUpload = {},
@@ -1017,7 +988,9 @@ private fun String.toPendingPhase(): PendingPhase {
 @Composable
 private fun CallListCard(
     call: Call,
+    linkedCalendarEvent: com.callrecorder.app.data.model.CalendarEvent?,
     onClick: () -> Unit,
+    onCalendarNoticeClick: (String?) -> Unit,
     onEditTitle: () -> Unit,
 ) {
     val info = call.extractedInfoOrNull()
@@ -1035,7 +1008,13 @@ private fun CallListCard(
     val primary = name ?: number ?: "발신번호 없음"
 
     // ③ 캘린더 등록 안내 문구: 예약 + date·time 있을 때만
-    val calendarText = remember(call.id, info) { buildCalendarNotice(call, info) }
+    val calendarText = remember(call.id, linkedCalendarEvent, info) {
+        buildCalendarNotice(call, info, linkedCalendarEvent)
+    }
+    val calendarDate = remember(linkedCalendarEvent, info) {
+        linkedCalendarEvent?.startAt?.substringBefore("T")?.substringBefore(" ")
+            ?: info?.date?.takeIf { it.isNotBlank() }
+    }
 
     Surface(
         onClick = onClick,
@@ -1084,7 +1063,12 @@ private fun CallListCard(
             // ③ 캘린더 등록 안내 박스
             if (calendarText != null) {
                 Spacer(Modifier.height(8.dp))
-                Surface(color = CalBoxBg, shape = RoundedCornerShape(999.dp), modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    onClick = { onCalendarNoticeClick(calendarDate) },
+                    color = CalBoxBg,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Row(
                         Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1249,18 +1233,25 @@ private fun findContactUri(context: Context, number: String): Uri? {
 }
 
 /** ③ 캘린더 등록 안내 문구 합성. 예약 + 날짜·시간 있을 때만 반환, 아니면 null */
-private fun buildCalendarNotice(call: Call, info: com.callrecorder.app.data.model.ExtractedInfo?): String? {
-    if (call.category != CallCategoryLabel.RESERVATION) return null
-    if (info == null) return null
-    val d = info.date?.takeIf { it.isNotBlank() } ?: return null
-    val t = info.time?.takeIf { it.isNotBlank() } ?: return null
+private fun buildCalendarNotice(
+    call: Call,
+    info: com.callrecorder.app.data.model.ExtractedInfo?,
+    linkedCalendarEvent: com.callrecorder.app.data.model.CalendarEvent?,
+): String? {
+    if (linkedCalendarEvent == null && call.category != CallCategoryLabel.RESERVATION) return null
+    val d = linkedCalendarEvent?.startAt
+        ?.substringBefore("T")
+        ?.substringBefore(" ")
+        ?.takeIf { it.isNotBlank() }
+        ?: info?.date?.takeIf { it.isNotBlank() }
+        ?: return null
+    val t = linkedCalendarEvent?.time?.takeIf { it.isNotBlank() }
+        ?: info?.time?.takeIf { it.isNotBlank() }
+        ?: return null
 
     val dayPart = dayLabel(d)            // "18일"
     val timePart = timeLabel(t)          // "저녁 7시"
-    val what = info.specialNotes?.takeIf { it.isNotBlank() }
-        ?: info.menu.firstOrNull()
-        ?: "예약"
-    return "$dayPart $timePart, ${what}을(를) 캘린더에 등록했어요."
+    return "$dayPart $timePart, 일정등록 완료"
 }
 
 /** "2026-06-18" → "18일" */

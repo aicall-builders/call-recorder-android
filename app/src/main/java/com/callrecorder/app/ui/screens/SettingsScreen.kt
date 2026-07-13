@@ -209,6 +209,32 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item {
+                        val connectedProvider = calendarState.connections.firstOrNull()?.provider
+                        val connectedServiceName = connectedProvider?.calendarProviderLabel()
+                        SettingsMainSection {
+                            SettingsMainRow(
+                                title = "외부 캘린더 연동",
+                                subtitle = connectedServiceName,
+                                onClick = {
+                                    if (onExternalCalendarClick != null) {
+                                        onExternalCalendarClick()
+                                    } else {
+                                        showCalendarSheet = true
+                                    }
+                                },
+                                trailing = {
+                                    SettingsConnectionTag(
+                                        text = if (connectedProvider != null) "연결 해제" else "연동하기",
+                                        onClick = connectedProvider?.let { provider ->
+                                            { calendarVm.disconnect(provider) }
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    item {
                         SettingsMainSection {
                             SettingsMainRow(
                                 title = "통화 자동 분석",
@@ -238,32 +264,6 @@ fun SettingsScreen(
                                 title = "필터링 키워드 관리",
                                 onClick = { currentSubScreen = SettingsSubScreen.CALL_FILTER },
                                 trailing = { SettingsChevron() },
-                            )
-                        }
-                    }
-
-                    item {
-                        val connectedProvider = calendarState.connections.firstOrNull()?.provider
-                        val connectedServiceName = connectedProvider?.calendarProviderLabel()
-                        SettingsMainSection {
-                            SettingsMainRow(
-                                title = "외부 캘린더 연동",
-                                subtitle = connectedServiceName,
-                                onClick = {
-                                    if (onExternalCalendarClick != null) {
-                                        onExternalCalendarClick()
-                                    } else {
-                                        showCalendarSheet = true
-                                    }
-                                },
-                                trailing = {
-                                    SettingsConnectionTag(
-                                        text = if (connectedProvider != null) "연결 해제" else "연동하기",
-                                        onClick = connectedProvider?.let { provider ->
-                                            { calendarVm.disconnect(provider) }
-                                        },
-                                    )
-                                },
                             )
                         }
                     }

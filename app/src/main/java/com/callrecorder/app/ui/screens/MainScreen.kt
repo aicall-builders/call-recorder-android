@@ -264,9 +264,6 @@ fun MainScreen(
                             callDetailId = existing.serverCallId
                         } else {
                             Toast.makeText(context, "이미 분석 대기 중인 파일이에요.", Toast.LENGTH_SHORT).show()
-                            openCallsOnPendingTab = true
-                            openCallsPendingRequestKey += 1
-                            navigateTo(BottomTab.CALLS)
                         }
                         return@launch
                     } else {
@@ -292,11 +289,8 @@ fun MainScreen(
                     UploadWorker.enqueueOneShot(context)
                     homeVm.refresh()
                     approvalRefreshKey += 1
-                    openCallsPendingRequestKey += 1
                     delay(300)
                     callDetailId = null
-                    openCallsOnPendingTab = true
-                    navigateTo(BottomTab.CALLS)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -338,28 +332,23 @@ fun MainScreen(
                             vm = homeVm,
                             onCallClick = handleCallClick,
                             onSettings = { navigateTo(BottomTab.SETTINGS) },
-                            onApprovalClick = {
-                                callDetailId = null
-                                openCallsOnPendingTab = true
-                                openCallsPendingRequestKey += 1
-                                navigateTo(BottomTab.CALLS)
-                            },
+                            onApprovalClick = { },
                             onUploadClick = { uploadLauncher.launch("audio/*") },
                             onRefreshRecordings = {
                                 UploadWorker.enqueueOneShot(context)
                                 homeVm.refresh()
                             },
-                            onUploadingClick = {
-                                callDetailId = null
-                                openCallsOnPendingTab = true
-                                openCallsPendingRequestKey += 1
-                                navigateTo(BottomTab.CALLS)
-                            },
+                            onUploadingClick = { },
                             onSeeAllCalls = {
                                 openCallsOnPendingTab = false
                                 navigateTo(BottomTab.CALLS)
                             },
                             onSeeAllSchedules = { navigateTo(BottomTab.CALENDAR) },
+                            onScheduleClick = { date ->
+                                openCalendarDate = date
+                                openCalendarDateRequestKey += 1
+                                navigateTo(BottomTab.CALENDAR)
+                            },
                             onSeeAllCustomers = { navigateTo(BottomTab.CUSTOMERS) },
                             onNotificationClick = { openNotifications() },
                             hasNotification = hasNotification,
@@ -391,6 +380,11 @@ fun MainScreen(
                                     onCallClick = { callId ->
                                         callDetailId = callId
                                         callDetailInitial = homeVm.findLoadedCall(callId)
+                                    },
+                                    onCalendarNoticeClick = { date ->
+                                        openCalendarDate = date
+                                        openCalendarDateRequestKey += 1
+                                        navigateTo(BottomTab.CALENDAR)
                                     },
                                     onNotificationClick = { openNotifications() },
                                     hasNotification = hasNotification,
@@ -448,9 +442,8 @@ fun MainScreen(
                     navigateTo(tab)
                     if (tab != BottomTab.CALLS) callDetailId = null
                 },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .tourTarget(tourController, TourKeys.BOTTOM_NAV),
+                tourController = tourController,
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
 
@@ -555,6 +548,7 @@ private object IconPaths {
 private fun BottomTabBar(
     selected: BottomTab,
     onSelect: (BottomTab) -> Unit,
+    tourController: com.callrecorder.app.onboarding.FeatureTourController? = null,
     modifier: Modifier = Modifier,
 ) {
     // Figma navigation: bg deep-brown-900, selected notch 72x32, icon stroke deep-brown-950.
@@ -567,10 +561,16 @@ private fun BottomTabBar(
     ) {
         BottomTab.values().forEach { tab ->
             val isSelected = tab == selected
+            val tabModifier = if (tab == BottomTab.CALLS && tourController != null) {
+                Modifier.tourTarget(tourController, TourKeys.CALLS_NAV)
+            } else {
+                Modifier
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .then(tabModifier)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
