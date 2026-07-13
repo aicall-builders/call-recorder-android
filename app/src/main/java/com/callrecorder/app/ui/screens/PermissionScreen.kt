@@ -4,6 +4,8 @@ import android.Manifest
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,99 +129,110 @@ private fun PermissionContent(
     onGranted: () -> Unit,
 ) {
     Scaffold(containerColor = Color.White) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.White)
                 .padding(padding),
-            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp)
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.icon_header_back),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
-            }
-
-            Spacer(Modifier.height(37.dp))
-
             Column(
-                modifier = Modifier.width(325.dp),
-                verticalArrangement = Arrangement.spacedBy(33.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 96.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.icon_header_back),
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+
+                Spacer(Modifier.height(37.dp))
+
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(11.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 325.dp)
+                        .padding(horizontal = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(33.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
-                        text = "서비스 권한 설정",
-                        style = TextStyle(
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF1A1A21),
-                            lineHeight = 32.sp,
-                        ),
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(11.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "서비스 권한 설정",
+                            style = TextStyle(
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF1A1A21),
+                                lineHeight = 32.sp,
+                            ),
+                            textAlign = TextAlign.Center,
+                        )
 
-                    Text(
-                        text = "AI 통화 비서가 원활한 관리를 할 수 있도록\n권한을 허용해 주세요.",
-                        style = TextStyle(
-                            fontSize = 18.sp,
-                            color = Color(0xFF5A5F6C),
-                            lineHeight = 24.sp,
-                            letterSpacing = (-0.5).sp,
-                        ),
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                        Text(
+                            text = "AI 통화 비서가 원활한 관리를 할 수 있도록 권한을 허용해 주세요.",
+                            style = TextStyle(
+                                fontSize = 18.sp,
+                                color = Color(0xFF5A5F6C),
+                                lineHeight = 24.sp,
+                                letterSpacing = (-0.5).sp,
+                            ),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PermissionCard(
-                        iconRes = R.drawable.icon_access_file,
-                        title = "통화 녹음 분석 및 저장",
-                        desc = "통화 녹음 분석시 파일 접근 권한 허용,\n통화 내용 분석 및 정보 추출 허용",
-                        checked = audioGranted,
-                        onToggle = onAudioToggle,
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PermissionCard(
+                            iconRes = R.drawable.icon_access_file,
+                            title = "통화 녹음 분석 및 저장",
+                            desc = "통화 녹음 분석시 파일 접근 권한 허용, 통화 내용 분석 및 정보 추출 허용",
+                            checked = audioGranted,
+                            onToggle = onAudioToggle,
+                        )
 
-                    PermissionCard(
-                        iconRes = R.drawable.icon_access_num,
-                        title = "연락처 접근 권한",
-                        desc = "휴대폰 연락처 정보 접근 권한 허용,\n전화 수신 시 기본 고객 정보 표시 허용",
-                        checked = contactsGranted,
-                        onToggle = onContactsToggle,
-                    )
+                        PermissionCard(
+                            iconRes = R.drawable.icon_access_num,
+                            title = "연락처 접근 권한",
+                            desc = "휴대폰 연락처 정보 접근 권한 허용, 전화 수신 시 기본 고객 정보 표시 허용",
+                            checked = contactsGranted,
+                            onToggle = onContactsToggle,
+                        )
 
-                    PermissionCard(
-                        iconRes = R.drawable.icon_access_mach,
-                        title = "통화 기록 접근",
-                        desc = "녹음된 통화의 발신 번호와 연락처 이름 자동 매칭 허용",
-                        checked = callLogGranted,
-                        onToggle = onCallLogToggle,
-                        textStartGap = 16.dp,
-                    )
+                        PermissionCard(
+                            iconRes = R.drawable.icon_access_mach,
+                            title = "통화 기록 접근",
+                            desc = "녹음된 통화의 발신 번호와 연락처 이름 자동 매칭 허용",
+                            checked = callLogGranted,
+                            onToggle = onCallLogToggle,
+                            textStartGap = 16.dp,
+                        )
+                    }
                 }
             }
-
-            Spacer(Modifier.weight(1f))
 
             OnboardingPrimaryButton(
                 text = "통화비서 이용하기",
                 onClick = onGranted,
                 enabled = canContinue,
                 modifier = Modifier
-                    .width(328.dp)
-                    .padding(bottom = 65.dp),
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .widthIn(max = 328.dp)
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
             )
         }
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -64,19 +65,19 @@ private data class OnbPage(val pill: String, val title: String, val desc: String
 // 업종 선택은 별도 화면(BusinessTypeScreen)으로 분리 → 여기는 기능 소개 5장
 private val pages = listOf(
     OnbPage("메인 화면", "통화 업무관리 프로세스",
-        "통화를 분석하고 일정을 등록하고 고객을\n관리하는 자동 프로세스를 경험해보세요.",
+        "통화를 분석하고 일정을 등록하고 고객을 관리하는 자동 프로세스를 경험해보세요.",
         R.drawable.onboarding_home_preview),
     OnbPage("통화 관리 · 분석 완료", "통화 자동 분석",
-        "메모나 기억할 필요 없어요.\n모든 통화를 AI가 수집하고 정리해요.",
+        "메모나 기억할 필요 없어요. 모든 통화를 AI가 수집하고 정리해요.",
         R.drawable.onboarding_calls_preview),
     OnbPage("통화 상세 · AI 요약", "통화 핵심 요약카드",
-        "액션·고객 성향 희망 조건까지,\n카드 한 장으로 요약해요.",
+        "액션·고객 성향 희망 조건까지, 카드 한 장으로 요약해요.",
         R.drawable.onboarding_detail_preview),
     OnbPage("일정관리 · 월 캘린더", "일정 자동 등록",
-        "통화에서 잡힌 일정을 캘린더에\n자동 등록하고 알림까지 챙겨드려요.",
+        "통화에서 잡힌 일정을 캘린더에 자동 등록하고 알림까지 챙겨드려요.",
         R.drawable.onboarding_calendar_preview),
     OnbPage("고객 관리", "나만의 통화 DB",
-        "통화자와의 히스토리를 맥락에 맞게\n자동으로 분석하고 정리해줘요.",
+        "통화자와의 히스토리를 맥락에 맞게 자동으로 분석하고 정리해줘요.",
         R.drawable.onboarding_customer_preview),
 )
 
@@ -96,6 +97,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .padding(bottom = 152.dp)
         ) {
 
             Crossfade(
@@ -119,13 +121,15 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 }
             }
 
-            FooterSection(
-                step = step,
-                onDotClick = { step = it },
-                onNext = { next() },
-                onSkip = onFinish,
-            )
         }
+
+        FooterSection(
+            step = step,
+            onDotClick = { step = it },
+            onNext = { next() },
+            onSkip = onFinish,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 
@@ -183,11 +187,14 @@ private fun FooterSection(
     onDotClick: (Int) -> Unit,
     onNext: () -> Unit,
     onSkip: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 32.dp),
+            .background(Bg)
+            .navigationBarsPadding()
+            .padding(bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
