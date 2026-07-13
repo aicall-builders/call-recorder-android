@@ -78,11 +78,13 @@ class SettingsViewModel : ViewModel() {
             val tokenStore = container.tokenStore
             val storedProvider = tokenStore.getLoginProvider().orEmpty()
             val storedEmail = tokenStore.getAccountEmail().orEmpty()
+            val storedUserName = prefs.getString("user_name", "").orEmpty()
             val firebaseUser = FirebaseAuth.getInstance().currentUser
             val firebaseEmail = firebaseUser?.email.orEmpty()
             val inferredProvider = inferLoginProvider()
 
             _state.value = _state.value.copy(
+                userName = storedUserName,
                 loginProvider = storedProvider.ifBlank { inferredProvider },
                 accountEmail = storedEmail.ifBlank { firebaseEmail },
             )
@@ -130,6 +132,16 @@ class SettingsViewModel : ViewModel() {
 
     fun updateUserName(name: String) {
         _state.value = _state.value.copy(userName = name)
+    }
+
+    fun saveUserName(name: String, onSuccess: () -> Unit = {}) {
+        val trimmed = name.trim()
+        prefs.edit().putString("user_name", trimmed).apply()
+        _state.value = _state.value.copy(
+            userName = trimmed,
+            successMessage = "이름이 수정되었습니다.",
+        )
+        onSuccess()
     }
 
     fun updateUserPhone(phone: String) {

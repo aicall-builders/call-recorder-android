@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
@@ -126,20 +128,28 @@ fun SettingsScreen(
             SettingsSubScreen.USER_INFO -> UserInfoScreen(
                 vm = vm,
                 onBack = { currentSubScreen = null },
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
             )
             SettingsSubScreen.CALL_FILTER -> CallFilterScreen(
                 onBack = { currentSubScreen = null },
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
             )
             SettingsSubScreen.SUBSCRIPTION -> SimpleSubScreen(
                 title = "구독 및 결제",
                 message = "구독 상태와 결제 내역을 확인하는 화면입니다.\n준비 중이에요.",
                 onBack = { currentSubScreen = null },
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
             )
             SettingsSubScreen.CALENDAR -> ExternalCalendarScreen(
                 onBack = { currentSubScreen = null },
             )
             SettingsSubScreen.PERMISSION -> PermissionSettingsScreen(
                 onBack = { currentSubScreen = null },
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
             )
         }
         return
@@ -523,6 +533,8 @@ private fun ExternalCalendarSheetButton(
 @Composable
 fun CallFilterScreen(
     onBack: () -> Unit,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     keywordVm: KeywordViewModel = viewModel(),
 ) {
     val state by keywordVm.state.collectAsState()
@@ -540,7 +552,12 @@ fun CallFilterScreen(
             contentPadding = PaddingValues(0.dp),
         ) {
             item {
-                FianoSettingsSubHeader(title = "통화 필터링 관리", onBack = onBack)
+                FianoSettingsSubHeader(
+                    title = "통화 필터링 관리",
+                    onBack = onBack,
+                    onNotificationClick = onNotificationClick,
+                    hasNotification = hasNotification,
+                )
             }
 
             item {
@@ -848,7 +865,13 @@ private fun KeywordFlowRow(
  * ───────────────────────────────────────────────────── */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SimpleSubScreen(title: String, message: String, onBack: () -> Unit) {
+private fun SimpleSubScreen(
+    title: String,
+    message: String,
+    onBack: () -> Unit,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
+) {
     Scaffold(containerColor = FianoSettingsBg) { padding ->
         Column(
             modifier = Modifier
@@ -856,7 +879,12 @@ private fun SimpleSubScreen(title: String, message: String, onBack: () -> Unit) 
                 .padding(padding)
                 .background(FianoSettingsBg),
         ) {
-            FianoSettingsSubHeader(title = title, onBack = onBack)
+            FianoSettingsSubHeader(
+                title = title,
+                onBack = onBack,
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
             FianoSettingsSheet(modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -877,11 +905,21 @@ private fun SimpleSubScreen(title: String, message: String, onBack: () -> Unit) 
  * ───────────────────────────────────────────────────── */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UserInfoScreen(vm: SettingsViewModel, onBack: () -> Unit) {
+fun UserInfoScreen(
+    vm: SettingsViewModel,
+    onBack: () -> Unit,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
+) {
     val state by vm.state.collectAsState()
     var showWithdrawDialog by remember { mutableStateOf(false) }
     val loginProvider = loginProviderLabel(state.loginProvider)
     val accountEmail = state.accountEmail.ifBlank { "이메일 정보 없음" }
+    val fallbackUserName = state.accountEmail.substringBefore("@").takeIf { it.isNotBlank() }.orEmpty()
+    var userNameInput by remember(state.userName, fallbackUserName) {
+        mutableStateOf(state.userName.ifBlank { fallbackUserName })
+    }
+    var userNameSavedMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(containerColor = FianoSettingsBg) { padding ->
         Column(
@@ -890,7 +928,12 @@ fun UserInfoScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                 .padding(padding)
                 .background(FianoSettingsBg),
         ) {
-            FianoSettingsSubHeader(title = "계정 정보", onBack = onBack)
+            FianoSettingsSubHeader(
+                title = "계정 정보",
+                onBack = onBack,
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
             FianoSettingsSheet(modifier = Modifier.weight(1f)) {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -907,9 +950,39 @@ fun UserInfoScreen(vm: SettingsViewModel, onBack: () -> Unit) {
                     }
 
                     AccountInfoCard {
+                        AccountNameEditRow(
+                            value = userNameInput,
+                            onValueChange = {
+                                userNameInput = it
+                                vm.updateUserName(it)
+                            },
+                            onSave = {
+                                vm.saveUserName(userNameInput) {
+                                    userNameSavedMessage = "저장됐어요"
+                                }
+                            },
+                        )
+                        SettingsMainDivider()
                         AccountInfoRow(label = "로그인 방식", value = loginProvider)
                         SettingsMainDivider()
                         AccountInfoRow(label = "계정 이메일", value = accountEmail)
+                    }
+
+                    userNameSavedMessage?.let { message ->
+                        Text(
+                            message,
+                            modifier = Modifier.padding(start = 16.dp),
+                            style = TextStyle(
+                                fontSize = 13.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = AppColors.SignalRed700,
+                            ),
+                        )
+                        LaunchedEffect(message) {
+                            kotlinx.coroutines.delay(1600)
+                            userNameSavedMessage = null
+                        }
                     }
 
                     Text(
@@ -1002,6 +1075,47 @@ private fun AccountInfoRow(label: String, value: String) {
     }
 }
 
+@Composable
+private fun AccountNameEditRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSave: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "사용자명",
+            modifier = Modifier.width(88.dp),
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, color = AppColors.DeepBrown500),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(22.dp),
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+                cursorBrush = SolidColor(FianoSettingsText),
+            )
+        }
+        Text(
+            "저장",
+            modifier = Modifier.clickable { onSave() },
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = FianoSettingsText),
+        )
+    }
+}
+
 /* ─────────────────────────────────────────────────────
  * 권한 설정 화면 (설정 → 앱 권한)
  * 런치 경로와 달리 자동 통과하지 않고, 현재 권한 상태를 보여주고 변경하게 한다.
@@ -1028,7 +1142,11 @@ private fun currentPermissionStatuses(context: Context): List<PermStatus> =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PermissionSettingsScreen(onBack: () -> Unit) {
+private fun PermissionSettingsScreen(
+    onBack: () -> Unit,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
+) {
     val context = LocalContext.current
     var statuses by remember { mutableStateOf(currentPermissionStatuses(context)) }
 
@@ -1056,7 +1174,12 @@ private fun PermissionSettingsScreen(onBack: () -> Unit) {
                 .padding(padding)
                 .background(FianoSettingsBg),
         ) {
-            FianoSettingsSubHeader(title = "권한 설정", onBack = onBack)
+            FianoSettingsSubHeader(
+                title = "권한 설정",
+                onBack = onBack,
+                onNotificationClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
             FianoSettingsSheet(modifier = Modifier.weight(1f)) {
                 Text(
                     "통화 녹음과 고객 정보 정리를 위해 필요한 권한을 관리합니다.",
@@ -1164,6 +1287,8 @@ private fun FianoSettingsSubHeader(
     title: String,
     onBack: () -> Unit,
     showAlarm: Boolean = true,
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -1196,7 +1321,10 @@ private fun FianoSettingsSubHeader(
             )
         }
         if (showAlarm) {
-            FianoHeaderAlarmButton()
+            FianoHeaderAlarmButton(
+                onClick = onNotificationClick,
+                hasNotification = hasNotification,
+            )
         }
     }
 }
@@ -1385,7 +1513,7 @@ private fun SettingRow(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = TextStyle(fontSize = 14.sp, color = titleColor))
-                if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 11.sp, color = OnLightMuted))
+                if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = OnLightMuted))
             }
             Icon(Icons.Filled.ChevronRight, null, tint = Color(0xFFD1D5DB), modifier = Modifier.size(20.dp))
         }
@@ -1406,7 +1534,7 @@ private fun SettingRowToggle(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = TextStyle(fontSize = 14.sp, color = OnLightPrimary))
-            if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 11.sp, color = OnLightMuted))
+            if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = OnLightMuted))
         }
         Switch(
             checked = checked, onCheckedChange = onCheckedChange,
@@ -1438,7 +1566,7 @@ private fun SettingRowBadge(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = TextStyle(fontSize = 14.sp, color = OnLightPrimary))
-                if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 11.sp, color = OnLightMuted))
+                if (subtitle != null) Text(subtitle, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = OnLightMuted))
             }
             Surface(color = badgeBg, shape = RoundedCornerShape(20.dp)) {
                 Text(badgeText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),

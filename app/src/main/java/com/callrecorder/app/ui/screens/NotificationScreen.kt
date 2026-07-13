@@ -156,7 +156,7 @@ private fun AnalysisDoneNotification(call: Call, onClick: () -> Unit) {
             Text(
                 call.summary?.takeIf { it.isNotBlank() } ?: callDisplayName(call),
                 maxLines = 2,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown700),
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = AppColors.DeepBrown700),
             )
         }
     }
@@ -178,7 +178,7 @@ private fun ScheduleNotification(event: CalendarEvent) {
             Text(
                 "${event.time} · ${event.description.ifBlank { "오늘 예정된 일정입니다." }}",
                 maxLines = 2,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AppColors.DeepBrown700),
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = AppColors.DeepBrown700),
             )
         }
     }

@@ -84,6 +84,8 @@ fun CallSummaryDetailScreen(
     onManualScheduleRequest: () -> Unit = {},
     onCustomerClick: (String) -> Unit = {},
     onOpenRegisteredSchedule: (String?) -> Unit = {},
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     initialCall: Call? = null,
     vm: CallSummaryDetailViewModel = viewModel(),
 ) {
@@ -127,6 +129,8 @@ fun CallSummaryDetailScreen(
                     onSummaryEditStateReset = { vm.clearSummaryMessage() },
                     onCustomerClick = onCustomerClick,
                     onOpenRegisteredSchedule = { onOpenRegisteredSchedule(state.internalCalendarDate) },
+                    onNotificationClick = onNotificationClick,
+                    hasNotification = hasNotification,
                 )
             }
         }
@@ -167,6 +171,8 @@ private fun DetailBody(
     onSummaryEditStateReset: () -> Unit,
     onCustomerClick: (String) -> Unit,
     onOpenRegisteredSchedule: () -> Unit,
+    onNotificationClick: () -> Unit,
+    hasNotification: Boolean,
 ) {
     val info = call.extractedInfoOrNull()
     val transcriptText = transcript?.takeIf { it.isNotBlank() } ?: call.sttResult
@@ -175,7 +181,11 @@ private fun DetailBody(
 
     Column(Modifier.fillMaxSize()) {
         // ═══ 상단 다크 영역 (헤더 + 발신자 + 플레이어) — 고정 ═══
-        DetailTopBar(onBack = onBack)
+        DetailTopBar(
+            onBack = onBack,
+            onNotificationClick = onNotificationClick,
+            hasNotification = hasNotification,
+        )
         DetailHero(call = call, info = info, audioUrl = audioUrl, onCustomerClick = onCustomerClick)
 
         // ═══ 탭 (시트 상단 라운드) ═══
@@ -226,7 +236,11 @@ private fun DetailBody(
 
 /* ─────────────── 상단 바 ─────────────── */
 @Composable
-private fun DetailTopBar(onBack: () -> Unit) {
+private fun DetailTopBar(
+    onBack: () -> Unit,
+    onNotificationClick: () -> Unit,
+    hasNotification: Boolean,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -244,7 +258,10 @@ private fun DetailTopBar(onBack: () -> Unit) {
             Spacer(Modifier.width(8.dp))
             Text("통화 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
         }
-        FianoHeaderAlarmButton()
+        FianoHeaderAlarmButton(
+            onClick = onNotificationClick,
+            hasNotification = hasNotification,
+        )
     }
 }
 
@@ -679,7 +696,7 @@ private fun AnalysisTabContent(
                 Text(
                     it,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-                    style = TextStyle(fontSize = 11.sp, color = LabelGrayActive),
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = LabelGrayActive),
                 )
             }
 
@@ -707,7 +724,7 @@ private fun AnalysisTabContent(
                                                 it[index] = next.takeSummaryLabelChars(6) to it[index].second
                                             }
                                         },
-                                        textStyle = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
+                                        textStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = LabelGrayActive),
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                     Box(
@@ -761,7 +778,7 @@ private fun AnalysisTabContent(
                                 ) {
                                     Text(
                                         label,
-                                        style = TextStyle(fontSize = 12.sp, color = LabelGrayActive),
+                                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = LabelGrayActive),
                                     )
                                 }
                                 Box(
@@ -782,7 +799,7 @@ private fun AnalysisTabContent(
                 Text(
                     it,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-                    style = TextStyle(fontSize = 11.sp, color = LabelGrayActive),
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = LabelGrayActive),
                 )
             }
 
@@ -1018,7 +1035,7 @@ private fun MessageBubble(message: SttMessage) {
         Modifier.fillMaxWidth(),
         horizontalAlignment = if (isReceiver) Alignment.End else Alignment.Start,
     ) {
-        Text(label, style = TextStyle(fontSize = 11.sp, color = SpeakerLabel))
+        Text(label, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = SpeakerLabel))
         Spacer(Modifier.height(4.dp))
         Surface(
             color = if (isReceiver) BubbleBot else BubbleCustomer,

@@ -1034,7 +1034,7 @@ private fun CallRow(call: Call, onClick: () -> Unit) {
                 if (hasRealName(call)) {
                     phoneOf(call)?.let {
                         Spacer(Modifier.height(2.dp))
-                        Text(it, style = TextStyle(fontSize = 11.sp, color = SchedMeta), maxLines = 1)
+                        Text(it, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = SchedMeta), maxLines = 1)
                     }
                 }
                 Spacer(Modifier.height(2.dp))
@@ -1057,10 +1057,10 @@ private fun CustomerCard(call: Call, modifier: Modifier, onClick: () -> Unit) {
                 Text(name, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Navy), maxLines = 1)
                 if (hasRealName(call)) {
                     phoneOf(call)?.let {
-                        Text(it, style = TextStyle(fontSize = 10.sp, color = SchedMeta), maxLines = 1)
+                        Text(it, style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = SchedMeta), maxLines = 1)
                     }
                 }
-                Text(callSubtitle(call), style = TextStyle(fontSize = 11.sp, color = Navy), maxLines = 1)
+                Text(callSubtitle(call), style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = Navy), maxLines = 1)
             }
         }
     }
@@ -1097,7 +1097,7 @@ private fun PinnedCustomerCard(customer: CustomerListItem, modifier: Modifier = 
                 Text(name.take(1), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AvatarText))
             }
             Text(name, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Navy), maxLines = 1)
-            Text(customer.phone, style = TextStyle(fontSize = 10.sp, color = SchedMeta), maxLines = 1)
+            Text(customer.phone, style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = SchedMeta), maxLines = 1)
             Text("★ 주요관리", style = TextStyle(fontSize = 10.sp, color = AccentBlue), maxLines = 1)
         }
     }
@@ -1138,7 +1138,7 @@ private fun PinnedCustomerGridItem(
         )
         Text(
             customer.homePinnedSummary(),
-            style = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, color = Navy),
+            style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, color = Navy),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

@@ -277,12 +277,12 @@ private fun ApprovalCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = formatMillis(recording.callStartedAtMillis),
-                    style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = AppColors.TextSecondary),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = formatDuration(recording.durationSeconds),
-                    style = TextStyle(fontSize = 12.sp, color = AppColors.TextSecondary),
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = AppColors.TextSecondary),
                 )
             }
         }

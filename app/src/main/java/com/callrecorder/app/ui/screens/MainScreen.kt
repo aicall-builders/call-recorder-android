@@ -8,6 +8,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -44,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
@@ -374,6 +378,8 @@ fun MainScreen(
                                         openCalendarDateRequestKey += 1
                                         navigateTo(BottomTab.CALENDAR)
                                     },
+                                    onNotificationClick = { openNotifications() },
+                                    hasNotification = hasNotification,
                                 )
                             } else {
                                 CallSummaryListScreen(
@@ -561,6 +567,18 @@ private fun BottomTabBar(
     ) {
         BottomTab.values().forEach { tab ->
             val isSelected = tab == selected
+            val selectionProgress = remember { Animatable(if (isSelected) 1f else 0f) }
+            LaunchedEffect(isSelected) {
+                if (!isSelected) {
+                    selectionProgress.snapTo(0f)
+                } else {
+                    selectionProgress.snapTo(0f)
+                    selectionProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                    )
+                }
+            }
             val tabModifier = if (tab == BottomTab.CALLS && tourController != null) {
                 Modifier.tourTarget(tourController, TourKeys.CALLS_NAV)
             } else {
@@ -579,7 +597,7 @@ private fun BottomTabBar(
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                if (isSelected) {
+                if (selectionProgress.value > 0.01f) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -590,11 +608,27 @@ private fun BottomTabBar(
                         Box(
                             modifier = Modifier
                                 .width(72.dp)
-                                .height(32.dp),
+                                .height(32.dp)
+                                .graphicsLayer {
+                                    translationY = -12f * (1f - selectionProgress.value)
+                                },
                             contentAlignment = Alignment.Center,
                         ) {
-                            NotchShape(modifier = Modifier.matchParentSize())
-                            StrokeIcon(pathData = tab.pathData, color = AppColors.DeepBrown950, modifier = Modifier.size(20.dp))
+                            Box(
+                                modifier = Modifier.matchParentSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                NotchShape(modifier = Modifier.matchParentSize())
+                                StrokeIcon(
+                                    pathData = tab.pathData,
+                                    color = AppColors.DeepBrown950,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer {
+                                            alpha = selectionProgress.value
+                                        },
+                                )
+                            }
                         }
                         Box(
                             modifier = Modifier
@@ -604,13 +638,25 @@ private fun BottomTabBar(
                         ) {
                             Text(
                                 tab.label,
+                                modifier = Modifier
+                                    .graphicsLayer {
+                                        alpha = selectionProgress.value
+                                        translationY = 8f * (1f - selectionProgress.value)
+                                    },
                                 style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, color = Color.White, lineHeight = 16.sp),
                             )
                         }
                     }
-                } else {
-                    StrokeIcon(pathData = tab.pathData, color = Color.White, modifier = Modifier.size(20.dp))
                 }
+                StrokeIcon(
+                    pathData = tab.pathData,
+                    color = Color.White,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer {
+                            alpha = 1f - selectionProgress.value
+                        },
+                )
             }
         }
     }

@@ -9,6 +9,14 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.compose.foundation.BorderStroke
@@ -23,6 +31,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -39,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -495,7 +505,7 @@ private fun InternalCalendarTab(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("${month}월 ${selectedDay}일 일정", style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary, lineHeight = 20.sp))
+                Text("${month}월 ${selectedDay}일 일정", style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary, lineHeight = 20.sp))
                 Text(
                     "+ 일정 추가",
                     modifier = Modifier.clickable(onClick = onAddClick).padding(8.dp),
@@ -607,7 +617,7 @@ private fun EmptyScheduleTimeline(onAddClick: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 "새 일정을 직접 추가할 수 있어요.",
-                style = TextStyle(fontSize = 12.sp, color = OnLightSub, lineHeight = 16.sp),
+                style = TextStyle(fontSize = 13.sp, color = OnLightSub, lineHeight = 18.sp),
             )
             Spacer(Modifier.height(10.dp))
             Text(
@@ -720,14 +730,14 @@ private fun TimelineEvent(
                 }
                 Text(
                     "${event.dateLabel.ifBlank { eventDateLabel(event.date) }} ${event.time}",
-                    style = TextStyle(fontSize = 12.sp, color = OnLightSub, lineHeight = 16.sp),
+                    style = TextStyle(fontSize = 13.sp, color = OnLightSub, lineHeight = 18.sp),
                 )
             }
             Text(
                 event.description.ifBlank {
                     if (event.type == EventType.AUTO) "통화에서 추출된 일정입니다." else "직접 추가한 일정입니다."
                 },
-                style = TextStyle(fontSize = 12.sp, color = AppColors.DeepBrown700, lineHeight = 16.sp),
+                style = TextStyle(fontSize = 13.sp, color = AppColors.DeepBrown700, lineHeight = 18.sp),
             )
             if (event.hasAttachments || event.imageUris.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -964,8 +974,6 @@ private fun AddEventDialog(
     var reminderEnabled by remember(initialKey) { mutableStateOf(initialEvent?.reminderEnabled ?: true) }
     var imageError by remember(initialKey) { mutableStateOf<String?>(null) }
     var cameraImageUri by remember(initialKey) { mutableStateOf<Uri?>(null) }
-    var dateExpanded by remember(initialKey) { mutableStateOf(false) }
-    var timeExpanded by remember(initialKey) { mutableStateOf(false) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents(),
     ) { uris ->
@@ -1038,46 +1046,52 @@ private fun AddEventDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("일정 제목", fontSize = 13.sp) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+                val yearOptions = remember(currentYear) { (currentYear - 1..currentYear + 5).toList() }
+                val monthOptions = remember { (1..12).toList() }
+                val dayOptions = remember(selectedYear, selectedMonth) { (1..daysInMonth(selectedYear, selectedMonth)).toList() }
+                val (selectedHour, _) = time.toHourMinute()
+                fun updateDate(year: Int = selectedYear, month: Int = selectedMonth, day: Int = selectedDay) {
+                    val safeDay = day.coerceIn(1, daysInMonth(year, month))
+                    selectedYear = year
+                    selectedMonth = month
+                    selectedDay = safeDay
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    ScheduleSelectField(
-                        label = "날짜",
-                        value = "%04d년 %d월 %d일".format(selectedYear, selectedMonth, selectedDay),
-                        onClick = {
-                            dateExpanded = !dateExpanded
-                            if (dateExpanded) timeExpanded = false
-                        },
+                    ScheduleWheelField(
+                        label = "년",
+                        value = selectedYear,
+                        options = yearOptions,
+                        valueText = { "${it}년" },
+                        onSelect = { updateDate(year = it) },
                         modifier = Modifier.weight(1f),
                     )
-                    ScheduleSelectField(
-                        label = "시간",
-                        value = time,
-                        onClick = {
-                            timeExpanded = !timeExpanded
-                            if (timeExpanded) dateExpanded = false
-                        },
+                    ScheduleWheelField(
+                        label = "월",
+                        value = selectedMonth,
+                        options = monthOptions,
+                        valueText = { "${it}월" },
+                        onSelect = { updateDate(month = it) },
                         modifier = Modifier.weight(1f),
                     )
-                }
-                if (dateExpanded) {
-                    ScheduleDateAccordion(
-                        selectedYear = selectedYear,
-                        selectedMonth = selectedMonth,
-                        selectedDay = selectedDay,
-                        onSelect = { year, month, day ->
-                            selectedYear = year
-                            selectedMonth = month
-                            selectedDay = day
-                            dateExpanded = false
-                        },
+                    ScheduleWheelField(
+                        label = "일",
+                        value = selectedDay.coerceIn(1, dayOptions.lastOrNull() ?: 1),
+                        options = dayOptions,
+                        valueText = { "${it}일" },
+                        onSelect = { updateDate(day = it) },
+                        modifier = Modifier.weight(1f),
                     )
-                }
-                if (timeExpanded) {
-                    ScheduleTimeAccordion(
-                        time = time,
-                        onTimeChange = { time = it },
+                    ScheduleWheelField(
+                        label = "시",
+                        value = selectedHour,
+                        options = remember { (0..23).toList() },
+                        valueText = { "%02d시".format(it) },
+                        onSelect = { hour -> time = "%02d:00".format(hour) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 OutlinedTextField(
@@ -1181,7 +1195,7 @@ private fun AddEventDialog(
                         )
                         Text(
                             "오늘 일정 알림 페이지에 표시",
-                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = OnLightSub),
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = OnLightSub),
                         )
                     }
                     Switch(
@@ -1434,198 +1448,154 @@ private fun android.app.AlertDialog.setFianoDialogButtonColors() {
 }
 
 @Composable
-private fun ScheduleSelectField(
+private fun ScheduleWheelField(
     label: String,
-    value: String,
-    onClick: () -> Unit,
+    value: Int,
+    options: List<Int>,
+    valueText: (Int) -> String,
+    onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = 56.dp),
+        modifier = modifier
+            .heightIn(min = 84.dp),
         shape = RoundedCornerShape(12.dp),
         color = Color.White,
         border = BorderStroke(1.dp, AppColors.DeepBrown200),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.Center,
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 label,
                 style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = OnLightSub),
             )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                value,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium, color = OnLightPrimary),
+            ScheduleNumberWheel(
+                label = "",
+                value = value,
+                options = options,
+                valueText = valueText,
+                onSelect = onSelect,
+                showLabel = false,
             )
         }
     }
 }
 
 @Composable
-private fun ScheduleDateAccordion(
-    selectedYear: Int,
-    selectedMonth: Int,
-    selectedDay: Int,
-    onSelect: (year: Int, month: Int, day: Int) -> Unit,
+private fun ScheduleNumberWheel(
+    label: String,
+    value: Int,
+    options: List<Int>,
+    valueText: (Int) -> String,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    showLabel: Boolean = true,
 ) {
-    var visibleYear by remember(selectedYear, selectedMonth) { mutableStateOf(selectedYear) }
-    var visibleMonth by remember(selectedYear, selectedMonth) { mutableStateOf(selectedMonth) }
-    val today = remember { Calendar.getInstance() }
-    val weekdays = remember { listOf("일", "월", "화", "수", "목", "금", "토") }
+    val selectedIndex = options.indexOf(value).coerceAtLeast(0)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
+    val wheelItemHeightPx = with(LocalDensity.current) { 24.dp.roundToPx() }
+    val snapThresholdPx = wheelItemHeightPx / 2
 
-    fun moveMonth(delta: Int) {
-        val next = Calendar.getInstance().apply {
-            set(Calendar.YEAR, visibleYear)
-            set(Calendar.MONTH, visibleMonth - 1)
-            set(Calendar.DAY_OF_MONTH, 1)
-            add(Calendar.MONTH, delta)
+    LaunchedEffect(value, options) {
+        val index = options.indexOf(value)
+        if (index >= 0 && !listState.isScrollInProgress && listState.firstVisibleItemIndex != index) {
+            listState.scrollToItem(index)
         }
-        visibleYear = next.get(Calendar.YEAR)
-        visibleMonth = next.get(Calendar.MONTH) + 1
+    }
+
+    LaunchedEffect(listState, options, value, snapThresholdPx) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (firstIndex, offset) ->
+                val centeredIndex = (firstIndex + if (offset >= snapThresholdPx) 1 else 0)
+                    .coerceIn(0, options.lastIndex)
+                val centeredValue = options.getOrNull(centeredIndex)
+                if (centeredValue != null && centeredValue != value) {
+                    onSelect(centeredValue)
+                }
+            }
+    }
+
+    LaunchedEffect(listState, options, snapThresholdPx) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling) {
+                    val targetIndex = (listState.firstVisibleItemIndex +
+                        if (listState.firstVisibleItemScrollOffset >= snapThresholdPx) 1 else 0)
+                        .coerceIn(0, options.lastIndex)
+                    val targetValue = options.getOrNull(targetIndex)
+                    if (targetValue != null && targetValue != value) {
+                        onSelect(targetValue)
+                    }
+                    if (listState.firstVisibleItemIndex != targetIndex ||
+                        listState.firstVisibleItemScrollOffset != 0
+                    ) {
+                        listState.animateScrollToItem(targetIndex)
+                    }
+                }
+            }
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.DeepBrown50)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.White),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            IconButton(onClick = { moveMonth(-1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "이전 달", tint = AppColors.DeepBrown900)
-            }
+        if (showLabel) {
             Text(
-                "%04d년 %d월".format(visibleYear, visibleMonth),
-                textAlign = TextAlign.Center,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold, color = AppColors.DeepBrown950),
+                label,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                style = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, color = OnLightSub),
             )
-            IconButton(onClick = { moveMonth(1) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = "다음 달", tint = AppColors.DeepBrown900)
-            }
         }
-
-        Row(Modifier.fillMaxWidth()) {
-            weekdays.forEachIndexed { index, label ->
-                val color = when (index) {
-                    0 -> AppColors.SignalRed600
-                    6 -> AppColors.DeepBrown600
-                    else -> AppColors.DeepBrown500
-                }
-                Text(
-                    label,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, color = color),
-                )
-            }
-        }
-
-        val days = daysInMonth(visibleYear, visibleMonth)
-        val firstOffset = firstDayOfWeek(visibleYear, visibleMonth)
-        val cells = remember(visibleYear, visibleMonth) {
-            List(firstOffset) { 0 } + (1..days).toList()
-        }
-        cells.chunked(7).forEach { week ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .height(24.dp)
+                    .padding(horizontal = 2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.Transparent),
+            )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(vertical = 10.dp),
             ) {
-                (week + List(7 - week.size) { 0 }).forEach { day ->
-                    if (day == 0) {
-                        Spacer(Modifier.weight(1f).height(36.dp))
-                    } else {
-                        FianoDateCell(
-                            day = day,
-                            selected = visibleYear == selectedYear && visibleMonth == selectedMonth && day == selectedDay,
-                            today = visibleYear == today.get(Calendar.YEAR) &&
-                                visibleMonth == today.get(Calendar.MONTH) + 1 &&
-                                day == today.get(Calendar.DAY_OF_MONTH),
-                            onClick = { onSelect(visibleYear, visibleMonth, day) },
-                            modifier = Modifier.weight(1f),
+                items(options, key = { it }) { option ->
+                    val selected = option == value
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .clickable { onSelect(option) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            valueText(option),
+                            textAlign = TextAlign.Center,
+                            style = TextStyle(
+                                fontSize = if (selected) 13.sp else 12.sp,
+                                lineHeight = 14.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selected) AppColors.SignalRed600 else OnLightPrimary,
+                            ),
                         )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ScheduleTimeAccordion(
-    time: String,
-    onTimeChange: (String) -> Unit,
-) {
-    val (selectedHour, selectedMinute) = time.toHourMinute()
-    val minuteOptions = remember { listOf(0, 10, 20, 30, 40, 50) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.DeepBrown50)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            "시간 선택",
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = OnLightPrimary),
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items((0..23).toList()) { hour ->
-                ScheduleTimeChip(
-                    label = "%02d시".format(hour),
-                    selected = selectedHour == hour,
-                    onClick = { onTimeChange("%02d:%02d".format(hour, selectedMinute)) },
-                )
-            }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(minuteOptions) { minute ->
-                ScheduleTimeChip(
-                    label = "%02d분".format(minute),
-                    selected = selectedMinute == minute,
-                    onClick = { onTimeChange("%02d:%02d".format(selectedHour, minute)) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScheduleTimeChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) AppColors.DeepBrown900 else Color.White,
-        border = if (selected) null else BorderStroke(1.dp, AppColors.DeepBrown200),
-    ) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-            style = TextStyle(
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) Color.White else AppColors.DeepBrown900,
-            ),
-        )
     }
 }
 

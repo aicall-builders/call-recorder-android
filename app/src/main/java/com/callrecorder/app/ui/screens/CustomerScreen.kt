@@ -192,6 +192,8 @@ fun CustomerScreen(
             vm = vm,
             onBack = { selectedCustomer = null },
             onCallDetailClick = onCallDetailClick,
+            onNotificationClick = onNotificationClick,
+            hasNotification = hasNotification,
             onPinnedChanged = { updated -> selectedCustomer = updated },
             onPinnedSaved = onCustomerPinnedChanged,
         )
@@ -718,6 +720,8 @@ fun CustomerDetailScreen(
     vm: CustomerViewModel,
     onBack: () -> Unit,
     onCallDetailClick: (String) -> Unit = {},
+    onNotificationClick: () -> Unit = {},
+    hasNotification: Boolean = false,
     onPinnedChanged: (CustomerUiItem) -> Unit = {},
     onPinnedSaved: () -> Unit = {},
 ) {
@@ -765,7 +769,10 @@ fun CustomerDetailScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("고객 상세", style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, color = Color.White))
                 }
-                FianoHeaderAlarmButton()
+                FianoHeaderAlarmButton(
+                    onClick = onNotificationClick,
+                    hasNotification = hasNotification,
+                )
             }
 
             Column(
@@ -1841,14 +1848,14 @@ private fun HistoryRow(
                     )
                 }
                 if (timeStr.isNotBlank()) {
-                    Text(timeStr, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = PlaceholderGray))
+                    Text(timeStr, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = PlaceholderGray))
                 }
             }
 
             // 본문
             Text(
                 body ?: title,
-                style = TextStyle(fontSize = 12.sp, color = PhoneGray, lineHeight = 16.sp),
+                style = TextStyle(fontSize = 13.sp, color = PhoneGray, lineHeight = 18.sp),
                 maxLines = 2,
             )
 
@@ -1876,7 +1883,7 @@ private fun HistoryRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text("메모", style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = LinkBlue))
-                    Text(memo, style = TextStyle(fontSize = 11.sp, color = Ink, lineHeight = 16.sp))
+                    Text(memo, style = TextStyle(fontSize = 12.sp, color = Ink, lineHeight = 17.sp))
                 }
             }
 
@@ -2105,7 +2112,7 @@ private fun CustomerDetailFullPreview(tab: CustDetailTab) {
                 Text("✦ AI 고객 분석", style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White))
                 Text(
                     detail.analysis?.analysis ?: "김민준 고객님은 매물 확인과 일정 조율에 관심이 높습니다.",
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, color = AppColors.DeepBrown300),
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp, color = AppColors.DeepBrown300),
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
